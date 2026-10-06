@@ -1,0 +1,1044 @@
+{
+  "schema": 1,
+  "base_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+  "tested_source_commit": "40efa0461850af4bb672e433e2d667f1d3d0546a",
+  "workspace": {
+    "before": {
+      "nextest": {
+        "failed": 0,
+        "passed": 5263,
+        "skipped": 17
+      },
+      "doctests_passed": 38,
+      "host_tests_passed": 16,
+      "phase_exits": {
+        "docs": 0,
+        "host": 0,
+        "release": 0,
+        "workspace": 0
+      },
+      "raw": [
+        {
+          "bytes": 760745,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/workspace.log",
+          "sha256": "e3829005886a131f23ecbbff75f032798766dfc7ebcdb166ac2fab50e051d07c"
+        },
+        {
+          "bytes": 30773,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/docs.log",
+          "sha256": "8559795335be3136cf5506d7b4732e952ecb6fd7a3468b6e14804bafec3b94b0"
+        },
+        {
+          "bytes": 13905,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/host.log",
+          "sha256": "01b712fcd2309abd7beab8a829d536ac5384370863ef66c6c8a3ff45a287c6aa"
+        },
+        {
+          "bytes": 11968,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/release.log",
+          "sha256": "0fcc9daf915995239129c901b2cdac060684316295d06250e05897f265553c85"
+        }
+      ],
+      "storage": {
+        "actual_storage_exit": 0,
+        "artifact_manifest": {
+          "bytes": 256853,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/retained/manifests/qualification-5efe03ec-before.json",
+          "sha256": "9d0dd050c9a340dba416fef2d399420e7b71a3c28581fd41fddd3fcd391c7665"
+        },
+        "baseline": null,
+        "capacity": {
+          "admitted": true,
+          "filesystems": [
+            {
+              "available_bytes": 32363737088,
+              "device": 64769,
+              "path": "/tmp/amazing-native-associated-object-realm-build",
+              "required_bytes": 12884901888,
+              "total_bytes": 73635184640
+            },
+            {
+              "available_bytes": 32363737088,
+              "device": 64769,
+              "path": "/tmp/amazing-native-associated-object-realm-evidence",
+              "required_bytes": 8589934592,
+              "total_bytes": 73635184640
+            }
+          ],
+          "shared_device_requirements": [
+            {
+              "available_bytes": 32363737088,
+              "required_bytes": 23622320128
+            }
+          ]
+        },
+        "command_exit": 0,
+        "copied_unique_bytes": 0,
+        "free_after": [
+          {
+            "available_bytes": 26087686144,
+            "device": 64769,
+            "path": "/tmp/amazing-native-associated-object-realm-build",
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 26087686144,
+            "device": 64769,
+            "path": "/tmp/amazing-native-associated-object-realm-evidence",
+            "total_bytes": 73635184640
+          }
+        ],
+        "hardlink_capability": {
+          "failed_artifacts": 0,
+          "first_failures": [],
+          "probed_artifacts": 643,
+          "raw": {
+            "bytes": 269436,
+            "path": "/tmp/amazing-native-associated-object-realm-build/associated-object-realm-20261006/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/qualification-5efe03ec-before/hardlink.probes.json",
+            "sha256": "771cc0a4baefc536387c7d78f92af7b1ba53b5b898cf49c89380ca59471d512a"
+          },
+          "supported": true
+        },
+        "job": "qualification-5efe03ec-before",
+        "phase": "before",
+        "profile": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+          "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+        },
+        "recoverable_bytes": 1366989286,
+        "recoverable_files": 3781,
+        "retained_elf_files": 631,
+        "retained_files": 643,
+        "retained_logical_bytes": 6809731561,
+        "retention_capacity_required_bytes": 3013632,
+        "retire_after_retention": true,
+        "schema": 1,
+        "selected_retention_method": "hardlink",
+        "session_raw": {
+          "bytes": 2911,
+          "path": "/tmp/amazing-native-associated-object-realm-build/associated-object-realm-20261006/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/qualification-5efe03ec-before/session.json",
+          "sha256": "15fe9f0f222fe9f32804bb3c8d4e295761581adfad110228f73091f4b29e8f18"
+        },
+        "source": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+        "state": "TERMINAL",
+        "storage_exit": 0,
+        "target_retired": true
+      }
+    },
+    "after": {
+      "nextest": {
+        "failed": 0,
+        "passed": 5269,
+        "skipped": 17
+      },
+      "doctests_passed": 38,
+      "host_tests_passed": 16,
+      "phase_exits": {
+        "docs": 0,
+        "host": 0,
+        "release": 0,
+        "workspace": 0
+      },
+      "raw": [
+        {
+          "bytes": 753883,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/workspace.log",
+          "sha256": "7f2c19c192402f9611f688fe48eafb632eefb1619a92682157082941f592c702"
+        },
+        {
+          "bytes": 30773,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/docs.log",
+          "sha256": "7c60cbe52741e18965e38134e75d4d5f9e975cb92ae0039cc9fe2eb391c35030"
+        },
+        {
+          "bytes": 13904,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/host.log",
+          "sha256": "f33e84d2a91043afeb6a00ffdc94537af5de373b53376813c098c0f18ab329c6"
+        },
+        {
+          "bytes": 11968,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/release.log",
+          "sha256": "44f1c111a8e261428c18c35aef219c564bf46c4cce4aec2f6ac67aac44bbeb60"
+        }
+      ],
+      "storage": {
+        "actual_storage_exit": 0,
+        "artifact_manifest": {
+          "bytes": 258271,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/retained/manifests/qualification-40efa046-after.json",
+          "sha256": "2d14d9d71d5d289dae9d329851bfe57e6b197772fbeab3584363e001b5810e15"
+        },
+        "baseline": null,
+        "capacity": {
+          "admitted": true,
+          "filesystems": [
+            {
+              "available_bytes": 25791328256,
+              "device": 64769,
+              "path": "/tmp/amazing-native-associated-object-realm-build",
+              "required_bytes": 12884901888,
+              "total_bytes": 73635184640
+            },
+            {
+              "available_bytes": 25791328256,
+              "device": 64769,
+              "path": "/tmp/amazing-native-associated-object-realm-evidence",
+              "required_bytes": 8589934592,
+              "total_bytes": 73635184640
+            }
+          ],
+          "shared_device_requirements": [
+            {
+              "available_bytes": 25791328256,
+              "required_bytes": 23622320128
+            }
+          ]
+        },
+        "command_exit": 0,
+        "copied_unique_bytes": 0,
+        "free_after": [
+          {
+            "available_bytes": 19882528768,
+            "device": 64769,
+            "path": "/tmp/amazing-native-associated-object-realm-build",
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 19882528768,
+            "device": 64769,
+            "path": "/tmp/amazing-native-associated-object-realm-evidence",
+            "total_bytes": 73635184640
+          }
+        ],
+        "hardlink_capability": {
+          "failed_artifacts": 0,
+          "first_failures": [],
+          "probed_artifacts": 255,
+          "raw": {
+            "bytes": 100599,
+            "path": "/tmp/amazing-native-associated-object-realm-build/associated-object-realm-20261006/40efa0461850af4bb672e433e2d667f1d3d0546a/before/qualification-40efa046-after/hardlink.probes.json",
+            "sha256": "64ea259b8d2673594c6220ab0372afb2d31424a74c1c3c12c26f0266ac4bc16f"
+          },
+          "supported": true
+        },
+        "job": "qualification-40efa046-after",
+        "phase": "before",
+        "profile": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+          "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+        },
+        "recoverable_bytes": 1367006608,
+        "recoverable_files": 3781,
+        "retained_elf_files": 631,
+        "retained_files": 643,
+        "retained_logical_bytes": 6809807673,
+        "retention_capacity_required_bytes": 1559552,
+        "retire_after_retention": true,
+        "schema": 1,
+        "selected_retention_method": "hardlink",
+        "session_raw": {
+          "bytes": 2907,
+          "path": "/tmp/amazing-native-associated-object-realm-build/associated-object-realm-20261006/40efa0461850af4bb672e433e2d667f1d3d0546a/before/qualification-40efa046-after/session.json",
+          "sha256": "cefd36189f75a3ca04e1aca0a6b7341c501ff7f2e257d2d6c446458a9c7069e1"
+        },
+        "source": "40efa0461850af4bb672e433e2d667f1d3d0546a",
+        "state": "TERMINAL",
+        "storage_exit": 0,
+        "target_retired": true
+      }
+    }
+  },
+  "corpus": [
+    {
+      "mode": "default",
+      "selection": {
+        "filter": "language/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 24535,
+        "passing_variants": 45327,
+        "raw": {
+          "bytes": 14471949,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/default-00.report.json",
+          "sha256": "b194b80eb03c538dc050d62242dc879b81786acde5819bb623c6dedb0bc0ba51"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 24535,
+        "passing_variants": 45327,
+        "raw": {
+          "bytes": 14471949,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/default-00.report.json",
+          "sha256": "68703d93619306e0d09f57629eaa6e3a9b8b0504a3049a54596a258be9762a39"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selection": {
+        "filter": "built-ins/Function/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 515,
+        "passing_variants": 905,
+        "raw": {
+          "bytes": 7716265,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/default-01.report.json",
+          "sha256": "443a65d90544e4c34dd831093e05aa0c3f51ce37d1ba3f82af34c6bdfa464060"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 515,
+        "passing_variants": 905,
+        "raw": {
+          "bytes": 7716264,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/default-01.report.json",
+          "sha256": "45024605e1bece5086aa9ca471ff29b944cea178deee8396ba20eb30ad3dae7f"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selection": {
+        "filter": "built-ins/Proxy/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 311,
+        "passing_variants": 607,
+        "raw": {
+          "bytes": 7704570,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/default-02.report.json",
+          "sha256": "f724d48d999d8b5295f0450f7cb31b209069e333205cceb2dc37a6f410540445"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 311,
+        "passing_variants": 607,
+        "raw": {
+          "bytes": 7704570,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/default-02.report.json",
+          "sha256": "ea8552907513a128c64cdfa82a9d4d551514a84bd1c2a1dc2923deb041e8dad2"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selection": {
+        "filter": "built-ins/Reflect/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 154,
+        "passing_variants": 308,
+        "raw": {
+          "bytes": 7672376,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/default-03.report.json",
+          "sha256": "40ce0bc85f9d11c96fadf05f95fcb61d1d0d1269d5d6dbef6582fe6f0fb3b9c9"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 154,
+        "passing_variants": 308,
+        "raw": {
+          "bytes": 7672376,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/default-03.report.json",
+          "sha256": "f7220c5218bbc448ceafc27da6009743de084db5f83869abd4bddfdf9f777886"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selection": {
+        "filter": "built-ins/ShadowRealm/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 64,
+        "passing_variants": 124,
+        "raw": {
+          "bytes": 7658715,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/default-04.report.json",
+          "sha256": "be760fb75bdd419ce930b2da3c71f6ebafb1471a7d1bef8032c9c2a4d3b99297"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 64,
+        "passing_variants": 124,
+        "raw": {
+          "bytes": 7658714,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/default-04.report.json",
+          "sha256": "52cfb1a6499e802aa2d96a54a70f20c9a145239d79190628c01d32c36cec6d3f"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selection": {
+        "filter": "built-ins/Promise/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 732,
+        "passing_variants": 1458,
+        "raw": {
+          "bytes": 7779881,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/default-05.report.json",
+          "sha256": "99b00544fede405a255d6ed371d8b0cf3197382e100b138fb45c1c648e40d3d1"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 732,
+        "passing_variants": 1458,
+        "raw": {
+          "bytes": 7779881,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/default-05.report.json",
+          "sha256": "8c8e3015d06e0bd8146d742c98dd3768997b570d1463c613b80d8c4c28b5d246"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selection": {
+        "filter": "language/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 24535,
+        "passing_variants": 45327,
+        "raw": {
+          "bytes": 14471949,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/vm-00.report.json",
+          "sha256": "32ff24ec978ac86e6b25e7f9d2c027d8a8584dcea9f80387657f45466c68b71a"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 24535,
+        "passing_variants": 45327,
+        "raw": {
+          "bytes": 14471949,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/vm-00.report.json",
+          "sha256": "c6a3cf5d89edc3f053f8c04108392f242e214a432e0855e51294f391fdb5baba"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selection": {
+        "filter": "built-ins/Function/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 515,
+        "passing_variants": 905,
+        "raw": {
+          "bytes": 7716265,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/vm-01.report.json",
+          "sha256": "4b55a6bb3a966fd4ac4ea5d9e217a20ee3e9f95ce1b61fe2c864fca310d2bdf4"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 515,
+        "passing_variants": 905,
+        "raw": {
+          "bytes": 7716265,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/vm-01.report.json",
+          "sha256": "73a8b9c2f080c7df64f1c5932e690d1db74ca8836b1a867cf1dffb96f63965d4"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selection": {
+        "filter": "built-ins/Proxy/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 311,
+        "passing_variants": 607,
+        "raw": {
+          "bytes": 7704571,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/vm-02.report.json",
+          "sha256": "63673a7cdaba2af9e32ffa605ec2cff95dc374d40b085ac5e3266698d55505f6"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 311,
+        "passing_variants": 607,
+        "raw": {
+          "bytes": 7704571,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/vm-02.report.json",
+          "sha256": "074341f3b90dea7c90c0e029f03c13da7811cdc932770c773a8751da88e089b5"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selection": {
+        "filter": "built-ins/Reflect/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 154,
+        "passing_variants": 308,
+        "raw": {
+          "bytes": 7672376,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/vm-03.report.json",
+          "sha256": "191ffec02ba0e0d5ef9ce817ed6b48d3232ed6ae2b5776726d8c9f3871499dfa"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 154,
+        "passing_variants": 308,
+        "raw": {
+          "bytes": 7672376,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/vm-03.report.json",
+          "sha256": "d8932c2696dfd56f829c67c3c4138c8f62db1deedfae270131b76a620f5c721b"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selection": {
+        "filter": "built-ins/ShadowRealm/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 64,
+        "passing_variants": 124,
+        "raw": {
+          "bytes": 7658715,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/vm-04.report.json",
+          "sha256": "463871cd02c46073600bd8cae50d8d873e96901f1bfc4003ba1bcfde44cba2bb"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 64,
+        "passing_variants": 124,
+        "raw": {
+          "bytes": 7658715,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/vm-04.report.json",
+          "sha256": "0007c3c920b59ed189f0bbbd289108cfadec3308e120cf30f487578bf9016f1c"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selection": {
+        "filter": "built-ins/Promise/",
+        "jobs": 8,
+        "limit": 0
+      },
+      "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "shard": "0/1",
+      "timeout_seconds": 60,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "before": {
+        "passing_files": 732,
+        "passing_variants": 1458,
+        "raw": {
+          "bytes": 7779881,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/vm-05.report.json",
+          "sha256": "d1c5c6eb998a0c5f608cf8ad58a710cf401463674a2c149f80468b25b973d5c6"
+        },
+        "host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c"
+      },
+      "after": {
+        "passing_files": 732,
+        "passing_variants": 1458,
+        "raw": {
+          "bytes": 7779879,
+          "path": "/tmp/amazing-native-associated-object-realm-evidence/40efa0461850af4bb672e433e2d667f1d3d0546a/after/vm-05.report.json",
+          "sha256": "cea8eb41ef87236149bb52351b17288dc15d30f927bee3e472911dbb3ea1b174"
+        },
+        "host_sha256": "40706c662385b6755467cfa6c80f006f4e71858f2a55941c3b0b9c4f011147b5"
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": []
+    }
+  ],
+  "modes": {
+    "default": {
+      "passing_files_before": 26311,
+      "passing_files_after": 26311,
+      "passing_variants_before": 48729,
+      "passing_variants_after": 48729,
+      "unique_record_paths": 26642,
+      "lost_files": [],
+      "lost_variants": []
+    },
+    "vm": {
+      "passing_files_before": 26311,
+      "passing_files_after": 26311,
+      "passing_variants_before": 48729,
+      "passing_variants_after": 48729,
+      "unique_record_paths": 26642,
+      "lost_files": [],
+      "lost_variants": []
+    }
+  },
+  "lost_files": [],
+  "lost_variants": [],
+  "evidence": {
+    "before": [
+      {
+        "file": "core.manifest.json",
+        "bytes": 12113,
+        "sha256": "3d3cfce9d747e12b211f6ba9f9e57dcdf9c9b23d637a33a31d9c2e408ed62672"
+      },
+      {
+        "file": "corpus-default-00.phase.manifest.json",
+        "bytes": 1818,
+        "sha256": "1860f78377e7d50d288cc5989b52776c672c2ade49bfbf9c63133b4465234990"
+      },
+      {
+        "file": "corpus-default-01.phase.manifest.json",
+        "bytes": 1780,
+        "sha256": "10277e76c6c13e8c6753237fd823fea38193c1fd9934cb3a873d784bfe599d21"
+      },
+      {
+        "file": "corpus-default-02.phase.manifest.json",
+        "bytes": 1777,
+        "sha256": "e2864b8e9d5aa7b76e5fbd3f5fcc9107e6e944a4dcedf368dc1ad3f0e7b2011f"
+      },
+      {
+        "file": "corpus-default-03.phase.manifest.json",
+        "bytes": 1779,
+        "sha256": "fd0d06353579f08f1fb15fbda20b8c54b003480d3fad42a41e5816988ea89d36"
+      },
+      {
+        "file": "corpus-default-04.phase.manifest.json",
+        "bytes": 1783,
+        "sha256": "30d3a0354e67f8250c813d1658e8ca5b3027a7e769b5ef92b6437b0f0f106885"
+      },
+      {
+        "file": "corpus-default-05.phase.manifest.json",
+        "bytes": 1780,
+        "sha256": "afbcd235706a6ffeb7f082fa7fdd3b8c19586af514817eac6c0294c20a69f4c2"
+      },
+      {
+        "file": "corpus-vm-00.phase.manifest.json",
+        "bytes": 1795,
+        "sha256": "fa64d33f2829c8036f4b31fd930d40543f056303439342c3522b52fc354bca60"
+      },
+      {
+        "file": "corpus-vm-01.phase.manifest.json",
+        "bytes": 1757,
+        "sha256": "e465760ca317bed5444090bd11a1b52f07ebdbfa97454c5fd8c099542fbe05f8"
+      },
+      {
+        "file": "corpus-vm-02.phase.manifest.json",
+        "bytes": 1754,
+        "sha256": "58ec1b9da0ee6a9d0b4ea0ec91c1217bb8aac92674ab00752467473a2ecbc92f"
+      },
+      {
+        "file": "corpus-vm-03.phase.manifest.json",
+        "bytes": 1756,
+        "sha256": "abde595cd7e93bd9c26b9ce46a101901c135c114cb2c0e6c36ade569a7f9519b"
+      },
+      {
+        "file": "corpus-vm-04.phase.manifest.json",
+        "bytes": 1760,
+        "sha256": "1271e512575698b90a3c0b1da402249bfe385c5599c1e67bc6501b73f2873a2c"
+      },
+      {
+        "file": "corpus-vm-05.phase.manifest.json",
+        "bytes": 1757,
+        "sha256": "23a32bdf60af427ee87b08f084a02cf587bc8a4363c37ec8e5827ce967d08504"
+      },
+      {
+        "file": "default-00.compact.json",
+        "bytes": 177530,
+        "sha256": "1fb1bf34235c176b729bc82f1debd06c805660279accad9f46b0ce5dcc90253b"
+      },
+      {
+        "file": "default-01.compact.json",
+        "bytes": 7474,
+        "sha256": "ff635292601790c2ad1f5009445f22b05a9b6abeefd343924fa6e27957aa51b2"
+      },
+      {
+        "file": "default-02.compact.json",
+        "bytes": 6995,
+        "sha256": "33118a2903a53e831221cd2083972715561c79d8874fd0b5139f1473d2046ab3"
+      },
+      {
+        "file": "default-03.compact.json",
+        "bytes": 5669,
+        "sha256": "2438aeaa9c6d846a907209d2dbb809c51cd2efa3b1e17a8f58f1040dcfe7699c"
+      },
+      {
+        "file": "default-04.compact.json",
+        "bytes": 5012,
+        "sha256": "a581e8617b82f4446e29eecae2ddd7c6bf2cb1177c5bf473a200a477f46df24d"
+      },
+      {
+        "file": "default-05.compact.json",
+        "bytes": 9829,
+        "sha256": "0856f8f8e326c5be93651b70b557ce2e8c62beb433d56359ba776166287d5f70"
+      },
+      {
+        "file": "docs.phase.manifest.json",
+        "bytes": 1386,
+        "sha256": "7108b7572acb007350c2b42cb9f83506d1a8579f34ef4a533c220bd078f75cfe"
+      },
+      {
+        "file": "host.phase.manifest.json",
+        "bytes": 2115,
+        "sha256": "aaea7dfe4786021b6e437f18524363149991dfa5f737b5dfefcc408cd50ff3f8"
+      },
+      {
+        "file": "release.phase.manifest.json",
+        "bytes": 1714,
+        "sha256": "e6b94f3e6e18cdbf7327a23b7d3f4aeb25a5a260ec5a309cc10caed1f136e13b"
+      },
+      {
+        "file": "storage.summary.json",
+        "bytes": 2292,
+        "sha256": "792dc25681e9d7a8d7e4f9a0dcda5e4aba606e83ab9fdfd84045160f84cd7f87"
+      },
+      {
+        "file": "vm-00.compact.json",
+        "bytes": 177525,
+        "sha256": "edc8bee593e146fcb1c03cc87ce45a30132138a25dda57ccb756251827efc1c0"
+      },
+      {
+        "file": "vm-01.compact.json",
+        "bytes": 7469,
+        "sha256": "daddcf50ab66c33c6fef03039c263a028b4c8c61f92f3a1b684b4297f60818fa"
+      },
+      {
+        "file": "vm-02.compact.json",
+        "bytes": 6990,
+        "sha256": "23393d66a7efe3b27432685bf012899ef04bd19e98caed27becf2c5f838887c2"
+      },
+      {
+        "file": "vm-03.compact.json",
+        "bytes": 5664,
+        "sha256": "18d3495e7c725b157cb94ab23b92a2f1051ab643e635e58e5ad09f78d6089869"
+      },
+      {
+        "file": "vm-04.compact.json",
+        "bytes": 5007,
+        "sha256": "a21d9336f4e715f3ab24c3a63c1939ba38869f11495dd3a184850ae283839003"
+      },
+      {
+        "file": "vm-05.compact.json",
+        "bytes": 9824,
+        "sha256": "3f46a1410bc8d890641e0699347f0fef9a956d61df227e06274244bec71d604a"
+      },
+      {
+        "file": "workspace.phase.manifest.json",
+        "bytes": 2602,
+        "sha256": "65347f5971f1959f18c21046b70495232562c13acf66c1ba66ce0b14a7e079ef"
+      }
+    ],
+    "after": [
+      {
+        "file": "core.manifest.json",
+        "bytes": 12087,
+        "sha256": "1fb54647966d38d1ea4ca74a31d9b9fe90301e8d8b12057cd3b9daea556c6f9a"
+      },
+      {
+        "file": "corpus-default-00.phase.manifest.json",
+        "bytes": 1814,
+        "sha256": "fff5ec375a00cdeaa19432bcd9200c8fdfd5bf3338792f03f9157adf862b0a20"
+      },
+      {
+        "file": "corpus-default-01.phase.manifest.json",
+        "bytes": 1776,
+        "sha256": "d0ef47674e27a973597da102ad762cb3005960e4b03a57fa923ba2ee986c5b13"
+      },
+      {
+        "file": "corpus-default-02.phase.manifest.json",
+        "bytes": 1773,
+        "sha256": "4d04fd89d79c863ebe5b7d4a42831b79511b927ad22f7c46cf980e0577ad350f"
+      },
+      {
+        "file": "corpus-default-03.phase.manifest.json",
+        "bytes": 1775,
+        "sha256": "67daf8834d091bf957065c447663ef59c1f9d3efd6bd13fa73bbfe2b64ca049f"
+      },
+      {
+        "file": "corpus-default-04.phase.manifest.json",
+        "bytes": 1779,
+        "sha256": "9c723046c77aaec5977c3adaa91812ce5a1bdf84b2581131d1823f3b7312952f"
+      },
+      {
+        "file": "corpus-default-05.phase.manifest.json",
+        "bytes": 1776,
+        "sha256": "2a7a625265c8155d7e2a1cc58066d9625195fb5b75b7de552d2cc0c2a933c9a7"
+      },
+      {
+        "file": "corpus-vm-00.phase.manifest.json",
+        "bytes": 1791,
+        "sha256": "9825fcf4fe91f7a336e45af88cc829db178dc264691ad213433197c2737fcfef"
+      },
+      {
+        "file": "corpus-vm-01.phase.manifest.json",
+        "bytes": 1753,
+        "sha256": "2496ffd6a3e463ff1ed81b7b94a718e70dad6a29fc421580875223c00483829d"
+      },
+      {
+        "file": "corpus-vm-02.phase.manifest.json",
+        "bytes": 1750,
+        "sha256": "a485ebb67e2950532e8e577031917b8991cdf7611410d3a03233e4df946d2700"
+      },
+      {
+        "file": "corpus-vm-03.phase.manifest.json",
+        "bytes": 1752,
+        "sha256": "3aa0a05bacb93e04a65a5efec62e0395e9033efc3e3d734cfce3ea0c004db07c"
+      },
+      {
+        "file": "corpus-vm-04.phase.manifest.json",
+        "bytes": 1756,
+        "sha256": "123d9bf036796d290dee0d16f626e836e49b761053c49598c8ad50fb42b237a0"
+      },
+      {
+        "file": "corpus-vm-05.phase.manifest.json",
+        "bytes": 1753,
+        "sha256": "12dc38bf014302d7763ccccc6d324a5e4de97d0c63678ae330b904bc931c5171"
+      },
+      {
+        "file": "default-00.compact.json",
+        "bytes": 177529,
+        "sha256": "3e3ebe03f66fbd56bdb252e86ba095b70cf4e3b05bd03e64a12ee6386a667d7c"
+      },
+      {
+        "file": "default-01.compact.json",
+        "bytes": 7473,
+        "sha256": "6f1f0e01b966bf864a63ec672d4e8ef516f689379ee674d9682589b94594192d"
+      },
+      {
+        "file": "default-02.compact.json",
+        "bytes": 6994,
+        "sha256": "16a2d0b5d50a30e88274a4ce1e98c02bfc21678b9ef76debb633534a0f9c4ab5"
+      },
+      {
+        "file": "default-03.compact.json",
+        "bytes": 5668,
+        "sha256": "271b3ee53eef6a641c386e6aaf367d08087fa3dd80e8fac94b7e68e3e419a187"
+      },
+      {
+        "file": "default-04.compact.json",
+        "bytes": 5011,
+        "sha256": "4275ec753bad1e3244c797fe93ac76070a2bc514f0b85dcbbf15ce968014cdb7"
+      },
+      {
+        "file": "default-05.compact.json",
+        "bytes": 9828,
+        "sha256": "7c904c5fc0479231c7f46c6f52b46001b67071fbe5470582573de9a5e526f35e"
+      },
+      {
+        "file": "docs.phase.manifest.json",
+        "bytes": 1384,
+        "sha256": "19de21ba1084aad0121921fa8750d919794f7522a51680473bd76473d8f993af"
+      },
+      {
+        "file": "host.phase.manifest.json",
+        "bytes": 2113,
+        "sha256": "88219a2bcd289608036ed56afe92558a59327619ff80651c4e33b77d89e7ae3a"
+      },
+      {
+        "file": "release.phase.manifest.json",
+        "bytes": 1712,
+        "sha256": "4f98d01ea4d03e55f66d798a29e646cf628548030e90fc9048d2461bae13dd78"
+      },
+      {
+        "file": "storage.summary.json",
+        "bytes": 2288,
+        "sha256": "e0b56d2d3cdaa0afc2f743a2f3c8a8e76dc7a37a724e9b5e1aa2f3cfc2c0cf25"
+      },
+      {
+        "file": "vm-00.compact.json",
+        "bytes": 177524,
+        "sha256": "567f3bc398dfb19e77b7406d3ec823cecc52f5bd2f9b694822b19c8849d42742"
+      },
+      {
+        "file": "vm-01.compact.json",
+        "bytes": 7468,
+        "sha256": "ef2ecd1e6f929d6a2fd295c07469112adcd4138ec6bb70f68dbe82eb92927925"
+      },
+      {
+        "file": "vm-02.compact.json",
+        "bytes": 6989,
+        "sha256": "392ec98fe5826a73579d74cb3a7d8031a733d94637f010c460a377ad8c9c89b4"
+      },
+      {
+        "file": "vm-03.compact.json",
+        "bytes": 5663,
+        "sha256": "afb1b5ec0fe7d3e9be827d5393e71b42e8554a561991eae6390dffb93fc038db"
+      },
+      {
+        "file": "vm-04.compact.json",
+        "bytes": 5006,
+        "sha256": "f61a5aa9ad38aa177328001130e514a79b89c94fa419f991f4c13e72a285edea"
+      },
+      {
+        "file": "vm-05.compact.json",
+        "bytes": 9823,
+        "sha256": "0e45d77bf99bb6cdbf116e24fd5549fc63ac9aaa4370015941cddecf07d31309"
+      },
+      {
+        "file": "workspace.phase.manifest.json",
+        "bytes": 2586,
+        "sha256": "32412d461bc23489128e5399108611454af1131856e572b975922b665bdcb351"
+      }
+    ]
+  },
+  "notes": [
+    "Six public-API controls are after-only; no absent-API baseline adapter.",
+    "Core helper counts54 doctests include16 host tests; actual workspace doctests38, host16 recorded separately.",
+    "Raw and measured ELFs remain native/tmp and are unarchived. Corpus VM mode does not assert forced-AST parity."
+  ]
+}

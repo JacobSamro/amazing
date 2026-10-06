@@ -1,0 +1,13 @@
+# Associated constructor-object realm
+
+Recorded published base: 5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58. Independent of the eager iterator and module-source tickets.
+
+DOM's create-element failure branch reports the exception to the global of the registered constructor's corresponding JavaScript object's associated realm. This is not GetFunctionRealm: that operation follows bound/Proxy targets and rejects a revoked Proxy. The actual Proxy object still has its own creation realm after revocation.
+
+Primary: https://dom.spec.whatwg.org/#concept-create-element ; https://webidl.spec.whatwg.org/#js-associated-realm ; https://html.spec.whatwg.org/multipage/webappapis.html#concept-relevant-realm . These are normative references, not copied implementation code.
+
+The producer inventory is already complete for the actual registered callable boundary: JsObject::function captures its genuine environment realm for AST and VM FunctionCode allocations; class default constructor stamps the active realm; native_arity uses the actual current intrinsic prototype's creation stamp before any authored prototype replacement; binding_create_native_function stamps its actual active realm; Proxy creation stamps its actual current object prototype. Bound creation passes the current function prototype to native_arity before replacing [[Prototype]], so its own stamp already differs correctly from its target's invocation realm. No producer repair, value-field addition, target traversal, callable dispatch or constructor algorithm change is necessary.
+
+Additive public binding_object_creation_realm(&JsValue)->Result<RealmHandle,Throw> reads only the object's existing own stamp and validates that realm is registered in the actual interpreter/agent. It makes no authored property/prototype/Proxy calls. Primitives, missing native provenance and a foreign agent's objects fail explicitly; no current-realm substitution. This covers the registered constructor object. It does not pretend that an arbitrary externally assembled unstamped JsObject has known creation provenance.
+
+Six after-only API groups retain real AST/Bytecode allocation assertions and ordinary/class/default/native/host/async/generator/method factories, both directions of borrowed bind creation, target-vs-object identity, trapping/revoked Proxy objects in both realms, prototype/metadata poisoning, primitive/missing/foreign provenance. Existing GetFunctionRealm target behavior and all original realm/constructor controls remain unchanged. No new port, dependency or graph edge. Runtime confirmed the existing realm stamp is disjoint from its RAB818 constructibility correction.
