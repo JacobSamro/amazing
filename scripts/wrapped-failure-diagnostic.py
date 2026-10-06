@@ -18,14 +18,8 @@ def produce(terminal_path, terminal_sha, receipt_path, receipt_sha, source, job,
         raise ValueError('canonical native /tmp owner required')
     receipt_path = pathlib.Path(receipt_path)
     if not receipt_path.is_relative_to(owner): raise ValueError('phase receipt escapes declared owner')
-    terminal = json.loads(checked.checked_file(terminal_path, terminal_sha, 65536))
-    endpoint = terminal.get('job', {})
-    actual = terminal.get('actual_exit')
-    if (terminal.get('state') != 'TERMINAL' or type(actual) is not int or actual == 0
-            or type(terminal.get('runner_exit')) is not int or type(terminal.get('command_returncode')) is not int
-            or terminal.get('runner_exit') != actual or terminal.get('command_returncode') != actual
-            or endpoint.get('source_commit') != source or endpoint.get('job_id') != job):
-        raise ValueError('original authenticated terminal failure required')
+    terminal = json.loads(checked.checked_file(terminal_path, terminal_sha, checked.MAX_COMPLETION))
+    endpoint, actual, terminal_format = checked.completed_job.diagnostic_completion(terminal, source, job)
     receipt = json.loads(checked.checked_file(receipt_path, receipt_sha, 524288))
     code = receipt.get('command_exit')
     if (receipt.get('source_commit') != source or not isinstance(receipt.get('phase'), str)
@@ -48,7 +42,7 @@ def produce(terminal_path, terminal_sha, receipt_path, receipt_sha, source, job,
         if used+cost>48*1024: omitted += 1; continue
         snippets.append(row);used += cost
     result = {'schema':1,'diagnostic_only':True,'source_commit':source,'original_job':endpoint,
-              'original_actual_exit':actual,'phase':receipt['phase'],'phase_actual_exit':code,
+              'original_actual_exit':actual,'original_completion_format':terminal_format,'phase':receipt['phase'],'phase_actual_exit':code,
               'phase_receipt':{'path':str(receipt_path),'sha256':receipt_sha},'terminal_sha256':terminal_sha,
               'phase_command':receipt.get('command'),'raw':raw,'snippets':snippets,
               'omitted_context_lines':omitted,'tests_rerun':False,'counts_reconstructed':False}

@@ -244,6 +244,40 @@ def check_identity(row,record):
     if any(record.get(k)!=v for k,v in identity(row).items()):raise ValueError('completed job identity mismatch')
     if record.get('boot_id')!=boot_id():raise ValueError('endpoint has rebooted or resumed')
 
+def diagnostic_completion(record,source,job_id):
+    """Admit hash-bound original completion facts without rewriting a receipt.
+
+    Callers must authenticate the input bytes before this schema check. Native
+    markers carry flattened endpoint identity and completed=True; observations
+    carry nested job identity and state=TERMINAL. Never accept a hybrid, infer
+    an exit from output, or make a fresh observation of an old job here.
+    """
+    if not isinstance(record,dict):raise ValueError('completion must be an object')
+    if not re.fullmatch(r'[0-9a-f]{40}',str(source)) or not re.fullmatch(r'[0-9a-f]{32}',str(job_id)):
+        raise ValueError('exact diagnostic source/job required')
+    if 'completed' in record:
+        if record['completed'] is not True or 'job' in record or 'state' in record:
+            raise ValueError('original native completion marker required; no hybrid')
+        valid(record)
+        if not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}',str(record.get('boot_id',''))):
+            raise ValueError('native completion boot identity required')
+        if not isinstance(record.get('artifacts'),dict):raise ValueError('native completion catalog required')
+        endpoint=identity(record);form='native-completion-marker'
+    else:
+        if record.get('state')!='TERMINAL' or not isinstance(record.get('job'),dict):
+            raise ValueError('original terminal observation required')
+        endpoint=record['job'];form='public-observation-summary'
+        # Preserve the established legacy observation diagnostic contract; a
+        # versioned public endpoint must satisfy its complete identity schema.
+        if 'schema' in endpoint:valid(endpoint)
+    actual=record.get('actual_exit');runner=record.get('runner_exit');returned=record.get('command_returncode')
+    if (type(actual) is not int or actual==0 or type(runner) is not int
+            or type(returned) is not int or runner!=actual
+            or actual!=(returned if returned>=0 else 128-returned)
+            or endpoint.get('source_commit')!=source or endpoint.get('job_id')!=job_id):
+        raise ValueError('original authenticated native failure/exit/source/job required')
+    return endpoint,actual,form
+
 def observe(row):
     valid(row);result={'job':identity(row),'state':'UNKNOWN','actual_exit':None,'runner_exit':None,'boot_id':boot_id(),'reason':'no authenticated start or completion record'}
     try:

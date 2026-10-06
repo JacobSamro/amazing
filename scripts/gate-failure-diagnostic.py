@@ -13,11 +13,17 @@ import re
 import stat
 import shlex
 import base64
+import importlib.util
+
+_completion_spec = importlib.util.spec_from_file_location("completed_job", Path(__file__).with_name("completed-job.py"))
+completed_job = importlib.util.module_from_spec(_completion_spec)
+_completion_spec.loader.exec_module(completed_job)
 
 MAX_RAW = 16 * 1024 * 1024
 MAX_OUTPUT = 64 * 1024
+MAX_COMPLETION = 2 * 1024 * 1024
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
-FAIL = re.compile(r'(?:\bFAIL\b|\bFAILED\b|panicked at|assertion .*failed|assertion failed|^\s*(?:left|right):|^Traceback \(|\b(?:AssertionError|TimeoutExpired|[A-Za-z]+Error)(?::|$))')
+FAIL = re.compile(r'(?:^error(?:\[[^]]+\])?:|\bFAIL\b|\bFAILED\b|panicked at|assertion .*failed|assertion failed|^\s*(?:left|right):|^Traceback \(|\b(?:AssertionError|TimeoutExpired|[A-Za-z]+Error)(?::|$))')
 
 
 def digest(data):
@@ -45,16 +51,8 @@ def bind_failure(summary_path, summary_sha, terminal_path, terminal_sha, source,
     if not re.fullmatch(r'[a-f0-9]{40}', source) or not re.fullmatch(r'[a-f0-9]{32}', job):
         raise ValueError('full source and captured job identifiers required')
     summary = json.loads(checked_file(summary_path, summary_sha, 512 * 1024))
-    terminal = json.loads(checked_file(terminal_path, terminal_sha, 64 * 1024))
-    endpoint = terminal.get('job', {})
-    actual = terminal.get('actual_exit')
-    if (terminal.get('state') != 'TERMINAL' or type(actual) is not int or actual == 0
-            or type(terminal.get('runner_exit')) is not int
-            or type(terminal.get('command_returncode')) is not int
-            or terminal.get('runner_exit') != actual
-            or terminal.get('command_returncode') != actual
-            or endpoint.get('source_commit') != source or endpoint.get('job_id') != job):
-        raise ValueError('original authenticated terminal failure required')
+    terminal = json.loads(checked_file(terminal_path, terminal_sha, MAX_COMPLETION))
+    endpoint, actual, _ = completed_job.diagnostic_completion(terminal, source, job)
     if summary.get('source_commit') != source or summary.get('job_exit') != actual:
         raise ValueError('summary does not bind original source/native exit')
     matches = [row for row in summary.get('phases', []) if row.get('phase') == phase]
@@ -91,11 +89,11 @@ def extract(summary_path, summary_sha, terminal_path, terminal_sha, source, job,
     if not Path(raw['path']).is_relative_to('/tmp') or type(raw['bytes']) is not int:
         raise ValueError('retained native /tmp raw binding required')
     return extract_bound(summary_path, summary_sha, terminal_path, terminal_sha,
-                         source, endpoint, actual, phase, row, raw)
+                         source, endpoint, actual, phase, row, raw, terminal)
 
 
 def extract_bound(summary_path, summary_sha, terminal_path, terminal_sha,
-                  source, endpoint, actual, phase, row, raw):
+                  source, endpoint, actual, phase, row, raw, terminal):
     data = checked_file(raw['path'], raw['sha256'], MAX_RAW, raw['bytes'])
     lines = ANSI.sub('', data.decode('utf-8', errors='replace')).splitlines()
     hits = [i for i, line in enumerate(lines) if FAIL.search(line)]
@@ -120,7 +118,7 @@ def extract_bound(summary_path, summary_sha, terminal_path, terminal_sha,
         snippets.append(entry)
         used += cost
     result = {'schema': 1, 'kind': 'failed-phase-diagnostic', 'source_commit': source,
-              'original_job': endpoint, 'original_state': 'TERMINAL',
+              'original_job': endpoint, 'original_state': terminal.get('state'), 'original_completed': terminal.get('completed'), 'original_completion_format': completed_job.diagnostic_completion(terminal, source, endpoint['job_id'])[2],
               'original_actual_exit': actual, 'original_runner_exit': actual,
               'summary': {'path': str(summary_path), 'sha256': summary_sha},
               'terminal': {'path': str(terminal_path), 'sha256': terminal_sha},
@@ -143,13 +141,9 @@ def extract_phase_exits(summary_path, summary_sha, terminal_path, terminal_sha,
         raise ValueError('one original phase required')
     summary_data = checked_file(summary_path, summary_sha, 512 * 1024)
     summary = json.loads(summary_data)
-    terminal = json.loads(checked_file(terminal_path, terminal_sha, 64 * 1024))
-    endpoint, actual = terminal.get('job', {}), terminal.get('actual_exit')
-    if (terminal.get('state') != 'TERMINAL' or type(actual) is not int or actual == 0
-            or type(terminal.get('runner_exit')) is not int or terminal['runner_exit'] != actual
-            or type(terminal.get('command_returncode')) is not int or terminal['command_returncode'] != actual
-            or endpoint.get('source_commit') != source or endpoint.get('job_id') != job
-            or summary.get('source_commit') != source or summary.get('job_exit') != actual):
+    terminal = json.loads(checked_file(terminal_path, terminal_sha, MAX_COMPLETION))
+    endpoint, actual, _ = completed_job.diagnostic_completion(terminal, source, job)
+    if summary.get('source_commit') != source or summary.get('job_exit') != actual:
         raise ValueError('original terminal/source/job/summary mismatch')
     code = summary.get('phase_exits', {}).get(phase)
     if type(code) is not int or code == 0 or summary.get('phases'):
@@ -196,7 +190,7 @@ def extract_phase_exits(summary_path, summary_sha, terminal_path, terminal_sha,
         raise ValueError('original actual phase marker missing/ambiguous')
     row = {'actual_returncode': code, 'argv': None}
     payload = json.loads(extract_bound(summary_path, summary_sha, terminal_path, terminal_sha,
-                        source, endpoint, actual, phase, row, raw))
+                        source, endpoint, actual, phase, row, raw, terminal))
     payload.update(kind='original-phase-exits-diagnostic', phase_receipt_synthesized=False,
         original_raw_hashes={'path': str(hashes_path), 'sha256': hashes_sha},
         original_execution=execution)

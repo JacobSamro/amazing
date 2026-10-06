@@ -1,0 +1,1001 @@
+{
+  "schema": 1,
+  "ticket": "native-completion-diagnostic",
+  "base": "a077a0455f747eacdc651364fba3ff9fe11a244d",
+  "tested_source": "0f663f1a2a376cca86021d0eb1252d36d8a19cb8",
+  "scope": "Public native tooling controls only; no engine build, engine rerun, provider lifecycle or original HTML raw recovery",
+  "actual_exit": 0,
+  "native_runner_exit": 0,
+  "outer_exit": 0,
+  "fetch_exit": 0,
+  "counts": {
+    "controls": 176,
+    "passed": 176,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suite_counts": {
+    "completed-controls": 50,
+    "wrapped-controls": 17,
+    "gate-controls": 24,
+    "legacy-phase-controls": 29,
+    "render-controls": 24,
+    "test262-controls": 32
+  },
+  "controls": [
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_actual_native_marker_and_public_observation_both_preserve_distinct_exit_facts",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_all_marker_identity_fields_require_the_official_schema",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_compiler_marker_grammar_is_anchored_without_exit_inference",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_gate_diagnostic_uses_same_original_completion_contract",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_incomplete_native_markers_and_hybrids_fail_closed",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_large_original_marker_catalog_is_read_bounded_without_dumping_or_relabeling",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_missing_or_partial_native_identity_is_not_an_observation",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_native_cli_consumes_original_marker_without_observation_rewrite",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_original_marker_hash_and_phase_hash_still_authoritative",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_positive_and_signal_native_returncodes_must_match_real_normalization",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_real_schema_one_marker_and_observation_keep_legacy_identity",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_success_bool_unknown_runner_and_conflicting_exit_facts_rejected",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_terminal_input_remains_bounded",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-completion-admission-tests.Admission.test_unknown_and_running_observations_do_not_become_completed",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-diagnostic-tests.DiagnosticBoundary.test_HOME_log_disconnect_does_not_touch_native_sink_or_compact_custody",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-diagnostic-tests.DiagnosticBoundary.test_failed_child_keeps_actual_exit_after_stream_fault",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-diagnostic-tests.DiagnosticBoundary.test_long_native_child_survives_stream_fault_with_honest_tooling_failure",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-diagnostic-tests.DiagnosticBoundary.test_real_external_termination_remains_forwarded_and_distinguishable",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-large-command-tests.LargeCommands.test_capture_and_launch_files_preserve_exact_command_bytes",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-large-command-tests.LargeCommands.test_full16_shaped_large_success_and_nonzero_commands",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-large-command-tests.LargeCommands.test_large_changed_execution_is_rejected_before_start",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-large-command-tests.LargeCommands.test_multi_megabyte_payload_has_no_exec_argument_limit",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_actual_exit_survives_catalog_failure",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_closed_observation_pipe_keeps_real_command_exit",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_completion_with_wrong_boot_source_or_execution_never_reports_success",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_current_native_boot_and_pid_start_ticks_are_required",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_execution_changes_and_occupied_namespace_never_spawn",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_existing_output_file_does_not_mean_completion",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_genuine_success_and_every_nonzero_exit_are_fetchable",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_log_sync_failure_keeps_real_exit_without_fetch_permission",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_missing_final_catalog_keeps_durable_native_exit_without_guessed_runner_exit",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_missing_start_disconnected_observation_and_stale_identity_stay_unknown",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_real_hangup_is_forwarded_and_actual_exit_retained",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-lifecycle-tests.Lifecycle.test_wrong_child_start_identity_is_unknown",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-preflight-tests.Completion.test_authentic_exit_compact_hash_and_mutation_rejection",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-preflight-tests.Completion.test_command_or_preexisting_namespace_never_runs",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-preflight-tests.Paths.test_cli_rejects_without_allocating_receipt_or_output",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-preflight-tests.Paths.test_identical_receiver_and_preflight_contract_for_all_roots",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-preflight-tests.Paths.test_remaining_receipt_fields_remain_strict",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-preflight-tests.Paths.test_wrapper_rejects_before_lock_source_shipping_or_boat",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_all_endpoint_identity_fields_must_match",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_changed_artifact_rejects",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_completed_failed_engine_still_transfers_authentic_compact",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_expected_source_and_lane_are_required",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_fresh_job_runs_and_captures_real_exit",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_incomplete_job_rejects",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_raw_traversal_and_other_job_paths_reject",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_resumed_missing_or_different_boot_rejects",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_stale_output_never_executes_command",
+      "classification": "pass"
+    },
+    {
+      "suite": "completed-controls",
+      "id": "completed-job-tests.Completed.test_symlink_operand_rejects",
+      "classification": "pass"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "authentic-failure"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "terminal-running"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "terminal-unknown"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "native-zero"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "runner-mismatch"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "command-mismatch"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "native-bool"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "wrong-source"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "wrong-job"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "summary-source"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "summary-exit"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "phase-pass"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "phase-source"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "missing-phase"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "duplicate-phase"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "raw-size"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "raw-hash"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "summary-hash"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "terminal-hash"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "raw-outside-native"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "raw-symlink"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "missing-raw"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "no-marker"
+    },
+    {
+      "suite": "gate-controls",
+      "classification": "PASS",
+      "id": "bounded-large-assertion"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-phase",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-source",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-name",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-native-exit",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-engine-exit",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-exit-bool",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-wrapper-exit",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "wrapped-missing-raw",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "authentic-lost-case",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-not-lost",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-pass",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-wrong-id",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-duplicate-id",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-compact-hash",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-changed-classification",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-wrong-pin",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-wrong-viewport",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-report-symlink",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-outside-native",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-wrong-render-command",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-phase-subdirectory",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-ambiguous-output",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-long-detail-bounded",
+      "classification": "PASS"
+    },
+    {
+      "suite": "render-controls",
+      "id": "case-unicode-detail-bounded",
+      "classification": "PASS"
+    }
+  ],
+  "original_controls_byte_unchanged": [
+    {
+      "path": "scripts/completed-job-diagnostic-tests.py",
+      "sha256": "b7039e3102152a81dd25ced42d6a97b5e2c89513dededf18e09ce30b1188848c"
+    },
+    {
+      "path": "scripts/gate-failure-diagnostic-tests.py",
+      "sha256": "222e94e59872b8eaca98ee08119250c7f17f4a94ddbdbe5e2291167b1ecbb7e4"
+    },
+    {
+      "path": "scripts/gate-phase-exits-diagnostic-tests.py",
+      "sha256": "ce947f1c4b3de1204e82af7dbfab623dda59c7c223e13a5c64dded4c4c52da92"
+    },
+    {
+      "path": "scripts/gate-render-diagnostic-tests.py",
+      "sha256": "0fd5b0f55f20a3a16e4db26e659ab44f7589b36b796a835e3d3b1b95616fde94"
+    },
+    {
+      "path": "scripts/test262-failure-diagnostic-tests.py",
+      "sha256": "4f4cafc89aa6fc86f7f4f36d0daa383bd8187e9a1b706bf929bde40c264a5aa5"
+    },
+    {
+      "path": "scripts/wrapped-failure-diagnostic-tests.py",
+      "sha256": "798c3e66c34c2c4e446f183b0648487670e3c428ba8226498e06309a32dbc3fc"
+    }
+  ],
+  "lost_original_controls": [],
+  "box_profile": {
+    "box_id": "bx_a59cv9tg",
+    "boot_id": "444c300f-220f-4e56-9e68-73a9433f7b2b",
+    "vcpus": 16,
+    "memory_gib": 32,
+    "existing_box_only": true,
+    "native_cargo_invoked": false
+  },
+  "endpoint": {
+    "schema": 2,
+    "lane": "gate-native-diagnostic-reuse-20261006",
+    "source_commit": "0f663f1a2a376cca86021d0eb1252d36d8a19cb8",
+    "box_id": "bx_a59cv9tg",
+    "host": "user@51.255.76.140",
+    "port": 19034,
+    "job_id": "f2c19e55a65440e4b59b7379044a778e",
+    "output_root": "amazing/out/gate-native-diagnostic-reuse-20261006/original-marker-0f66/compact",
+    "command_sha256": "65927863ad5932aae0efa7d317dfbb52107036122e1452a2ea7f3ebf0352ba9a",
+    "execution_sha256": "fa8f315a994d278152f76bed851cc9340ecdc849ae7dd5ffe336a3654c5c3f3d",
+    "source_archive_sha256": "0f64ffc18ae99f47547cb7062b606f301d1cb9a05680ff0246bc1d09cafcc364",
+    "captured_proof_root": "/srv/amazing-proof"
+  },
+  "command_raw": {
+    "path": "/srv/amazing-proof/amazing-job-f2c19e55a65440e4b59b7379044a778e-y30lqwvr/command.log",
+    "bytes": 18705,
+    "sha256": "28c3472c8b9d929fa55bd2c0799600f729efc65e8cb02e18e65bdfc2f32fcaf9"
+  },
+  "phases": {
+    "gate-controls": {
+      "actual_exit": 0,
+      "wrapper_exit": 0,
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-_l2x2_gs/output.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "durable_raw": {
+        "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006/raw-0f66/gate-controls.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "test262-controls": {
+      "actual_exit": 0,
+      "wrapper_exit": 0,
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-zotnn8sa/output.log",
+        "bytes": 3321,
+        "sha256": "bc01b3321d7abdcf6f5cf7e75ab1c3e27e5e7a8e2b25b023e4b46d34a0bb16ea"
+      },
+      "durable_raw": {
+        "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006/raw-0f66/test262-controls.log",
+        "bytes": 3321,
+        "sha256": "bc01b3321d7abdcf6f5cf7e75ab1c3e27e5e7a8e2b25b023e4b46d34a0bb16ea"
+      }
+    },
+    "wrapped-controls": {
+      "actual_exit": 0,
+      "wrapper_exit": 0,
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-irt0oirv/output.log",
+        "bytes": 1752,
+        "sha256": "62f3ec1f25b1f12b0be2d7bbd2b213635cb325fc5ca111d7518a3ed0dd1b4b08"
+      },
+      "durable_raw": {
+        "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006/raw-0f66/wrapped-controls.log",
+        "bytes": 1752,
+        "sha256": "62f3ec1f25b1f12b0be2d7bbd2b213635cb325fc5ca111d7518a3ed0dd1b4b08"
+      }
+    },
+    "legacy-phase-controls": {
+      "actual_exit": 0,
+      "wrapper_exit": 0,
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-u8tsy0pj/output.log",
+        "bytes": 2736,
+        "sha256": "b4cc2663b7622f72f76a45404761726d180b3dc82bfce3f476dd353104f273f3"
+      },
+      "durable_raw": {
+        "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006/raw-0f66/legacy-phase-controls.log",
+        "bytes": 2736,
+        "sha256": "b4cc2663b7622f72f76a45404761726d180b3dc82bfce3f476dd353104f273f3"
+      }
+    },
+    "render-controls": {
+      "actual_exit": 0,
+      "wrapper_exit": 0,
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-n_1i3_as/output.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "durable_raw": {
+        "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006/raw-0f66/render-controls.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "completed-controls": {
+      "actual_exit": 0,
+      "wrapper_exit": 0,
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-vrzw_san/output.log",
+        "bytes": 9237,
+        "sha256": "231f7f6bc84e6a48d39a49ffc70ad47601c42521d50a768674caf27bb837ddb0"
+      },
+      "durable_raw": {
+        "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006/raw-0f66/completed-controls.log",
+        "bytes": 9237,
+        "sha256": "231f7f6bc84e6a48d39a49ffc70ad47601c42521d50a768674caf27bb837ddb0"
+      }
+    }
+  },
+  "compact_receipts": {
+    "gate-controls.phase.manifest.json": {
+      "bytes": 1136,
+      "sha256": "ad09a83986c7dba83183c925d9a7655da35f81b75706f9cb3d77de46a92c7acc"
+    },
+    "render-controls.compact.json": {
+      "bytes": 1402,
+      "sha256": "6bc7d5660eb59b954f3de61536f7dd6a6a3890513c2f0679fa5e375690cecc9d"
+    },
+    "test262-controls.phase.manifest.json": {
+      "bytes": 1850,
+      "sha256": "a2dc77a62a7304bb4dfe9e9d9a31b16f1c8a491e0fd768e8d0cd428f47cc798a"
+    },
+    "completed-controls.compact.json": {
+      "bytes": 22137,
+      "sha256": "3b97ea43dd2e54186da1f92781e9c64302234223897f8370232c4f55199ccc04"
+    },
+    "wrapped-controls.phase.manifest.json": {
+      "bytes": 1869,
+      "sha256": "ba67edd131a83b9611e2c652bc4e19a584cd0e1613048800c59d92c96e83dc38"
+    },
+    "legacy-phase-controls.phase.manifest.json": {
+      "bytes": 1908,
+      "sha256": "eb9030da2d80f07b0fcf07c1b1057b808bd306ee4177702859cffd8e9d3d14a9"
+    },
+    "render-controls.phase.manifest.json": {
+      "bytes": 1143,
+      "sha256": "51508601a80c40137eb68641ea951cfaccc21394d7d080297d5ee0d47b60f9f2"
+    },
+    "wrapped-controls.compact.json": {
+      "bytes": 176,
+      "sha256": "2a95ea4467587aed03c6272e9efa2730f45b8b46d78364ae97cd06b43f95f214"
+    },
+    "completed-controls.phase.manifest.json": {
+      "bytes": 2616,
+      "sha256": "a5a1f8b970332398e6e14c6e951faed63d3198be8b5b19cf035bcbe4c2ec1cab"
+    },
+    "storage.summary.json": {
+      "bytes": 1877,
+      "sha256": "f71d330f9e77f64a9ec99bf80cf712b3b0f1459d44b58ac49426175939582030"
+    },
+    "gate.manifest.json": {
+      "bytes": 11861,
+      "sha256": "53ee188b85d50e0073414ea0270cb65d9957ff784cbf86cb30a972753cdb0cea"
+    },
+    "legacy-phase-controls.compact.json": {
+      "bytes": 69,
+      "sha256": "cd1dbaa4e38555c5be577d4026dac6bbf17561cbbbca32980e40de3d411ce7f9"
+    },
+    "gate-controls.compact.json": {
+      "bytes": 1275,
+      "sha256": "362ff4a09b3dbcd0bd46421a1d26208b60b994e3c822ce72f9fed6ac7a5b5c7d"
+    }
+  },
+  "shipping_projection": {
+    "scripts/completed-job.py": {
+      "sha256": "1a1ef2a1cee1fe3b340e935d161291336e37664385a8142914297b0c3b94688b",
+      "bytes": 33800
+    },
+    "scripts/gate-failure-diagnostic.py": {
+      "sha256": "e830360cd205a5b3e84794029b198fd0eaed1dda3cf890f0fcbad55878eb9029",
+      "bytes": 16213
+    },
+    "scripts/wrapped-failure-diagnostic.py": {
+      "sha256": "5b8934e8fc05d66d4222e850aef2d576bc0818db5bd92e717f2608bd82aabece",
+      "bytes": 4306
+    },
+    "scripts/completed-job-completion-admission-tests.py": {
+      "sha256": "76091092df9869de758ca89aa8d0749dcafa8dc8d48438961feffad0428bc285",
+      "bytes": 14608
+    }
+  },
+  "public_caller": {
+    "commit": "ef6fbcbd1f134948881856f5446b4503dd5470a3",
+    "linux_run_sha256": "5466781d152de096be01857fd4729b9b70c5405c5054ce5ff2a57c3358e16631"
+  },
+  "source_transfer": {
+    "actual_exit": 0,
+    "archive_sha256": "0f64ffc18ae99f47547cb7062b606f301d1cb9a05680ff0246bc1d09cafcc364"
+  },
+  "storage": {
+    "actual_storage_exit": 0,
+    "artifact_manifest": {
+      "bytes": 540,
+      "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006/retained/manifests/native-0f66-original-marker.json",
+      "sha256": "d8f7923a82c2f1b03aa0f612aba90b0024325ee16aa32691eea447580c1ae44e"
+    },
+    "baseline": null,
+    "capacity": {
+      "admitted": true,
+      "filesystems": [
+        {
+          "available_bytes": 132136108032,
+          "device": 64769,
+          "path": "/tmp/amazing-native-completion-diagnostic-targets",
+          "required_bytes": 19327352832,
+          "total_bytes": 314676338688
+        },
+        {
+          "available_bytes": 132136108032,
+          "device": 64769,
+          "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006",
+          "required_bytes": 6442450944,
+          "total_bytes": 314676338688
+        }
+      ],
+      "shared_device_requirements": [
+        {
+          "available_bytes": 132136108032,
+          "required_bytes": 26306674688
+        }
+      ]
+    },
+    "command_exit": 0,
+    "copied_unique_bytes": 0,
+    "free_after": [
+      {
+        "available_bytes": 131909881856,
+        "device": 64769,
+        "path": "/tmp/amazing-native-completion-diagnostic-targets",
+        "total_bytes": 314676338688
+      },
+      {
+        "available_bytes": 131909881856,
+        "device": 64769,
+        "path": "/srv/amazing-proof/gate-native-diagnostic-reuse-20261006",
+        "total_bytes": 314676338688
+      }
+    ],
+    "job": "native-0f66-original-marker",
+    "phase": "before",
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    },
+    "recoverable_bytes": 0,
+    "recoverable_files": 0,
+    "retained_elf_files": 0,
+    "retained_files": 0,
+    "retained_logical_bytes": 0,
+    "retention_capacity_required_bytes": 8192,
+    "retire_after_retention": true,
+    "schema": 1,
+    "selected_retention_method": "hardlink",
+    "session_raw": {
+      "bytes": 2487,
+      "path": "/tmp/amazing-native-completion-diagnostic-targets/native-completion-diagnostic/0f663f1a2a376cca86021d0eb1252d36d8a19cb8/before/native-0f66-original-marker/session.json",
+      "sha256": "20cd104c121fd06ce9e289ada193da70452879a3efaeaff38b46e815d6383271"
+    },
+    "source": "0f663f1a2a376cca86021d0eb1252d36d8a19cb8",
+    "state": "TERMINAL",
+    "storage_exit": 0,
+    "target_retired": true
+  },
+  "preserved_failed_runs": [
+    {
+      "source": "4f84b3c56905f2dd4e8df83409b2df18ca4ef0cc",
+      "job": "dcdbc16aedc142999ddb513ed4c2a4bf",
+      "actual_exit": 1,
+      "fetch_exit": 0,
+      "scope": "Public native tooling controls; original failed source preserved",
+      "completed_counts": {
+        "tests": 49,
+        "passed": 36,
+        "failed": 13,
+        "errors": 0,
+        "skipped": 0
+      },
+      "phase_exits": {
+        "gate-controls.phase.manifest.json": 1,
+        "test262-controls.phase.manifest.json": 0,
+        "wrapped-controls.phase.manifest.json": 0,
+        "legacy-phase-controls.phase.manifest.json": 1,
+        "render-controls.phase.manifest.json": 1,
+        "completed-controls.phase.manifest.json": 1
+      },
+      "causes": [
+        "New completion controls setup compared gate-command receipt dict to integer101",
+        "Shared extract_bound accessed authenticated terminal metadata without receiving it"
+      ],
+      "raw": {
+        "gate-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-daq0ixkx/output.log",
+          "bytes": 1207,
+          "sha256": "4c653ca5ffaa2859ec0c041a96f5eaa58d6ecf79d5f6cfa1ad6b7c6244859cbc"
+        },
+        "test262-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-19d7u83e/output.log",
+          "bytes": 3321,
+          "sha256": "73f761a47d6093ac417c873325908a0c871ce9b26f76af66d086cdccc439ea28"
+        },
+        "wrapped-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-yu66nnwc/output.log",
+          "bytes": 1752,
+          "sha256": "83b93baa09355fa9f8e8a8d934ebd5d2ddc41080b49ab56e5d421cb889b1f2aa"
+        },
+        "legacy-phase-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-lhqwd_po/output.log",
+          "bytes": 11143,
+          "sha256": "1fe48c1df495ae4cf271be6cae21b338fb5842c876ce15f27b5fb2a8723482d6"
+        },
+        "render-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-310riwls/output.log",
+          "bytes": 1153,
+          "sha256": "dd3b6a3747443749d39b7c4aeef9a7245d721be92ce4b51787565155b6446fe8"
+        },
+        "completed-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-vjvregsn/output.log",
+          "bytes": 16579,
+          "sha256": "249f5345081f1856e58ef278efc3f9c6ca5cce8c121dd19087e170cd53bae7ce"
+        }
+      },
+      "compact": {
+        "gate-controls.phase.manifest.json": "5df5c2a742e0fa011c7b24bd0a227658393edd6c86745a26dd4b1d5aa0d98944",
+        "test262-controls.phase.manifest.json": "14bd3eedddd7be398dbf5295a797a77b092647f3dfb7407ebeb09e6bba6b1b32",
+        "completed-controls.compact.json": "29ac2b263d6ed7358b1e792985811819366edac6e182ea82ddd51135ac88f52c",
+        "wrapped-controls.phase.manifest.json": "83d7db7ddb60ecfc45d543e8b664dc53d6c74d3eb66420132345038990abbba0",
+        "legacy-phase-controls.phase.manifest.json": "3344d9b38740c8c696787432b9b2c315c6249a05967b7b4e461f34da4ed29872",
+        "render-controls.phase.manifest.json": "634ff03e13e7cabcb3b6b35efed3573c8c096f3bf8eb4378d92fb03aa9a8625b",
+        "wrapped-controls.compact.json": "2a95ea4467587aed03c6272e9efa2730f45b8b46d78364ae97cd06b43f95f214",
+        "completed-controls.phase.manifest.json": "59a06a523064e26e88940dd3f1c8b419e94196b7a3f6ce14410e0e0f5bc91019",
+        "storage.summary.json": "1ce7b5f13779e093570d7e9d1f0aed3e90bee9c101afc77d10016266b009c49a",
+        "gate.manifest.json": "81032e6b55fd028db75b26c9e94b594b63080de59b02868e6498dde96b8c44cd"
+      }
+    },
+    {
+      "source": "e88d9549925e5eb6db7e0ab2ca16e16d8c949143",
+      "job": "598c8961de8645139b48b4cf9dbe5e75",
+      "actual_exit": 1,
+      "fetch_exit": 0,
+      "counts": {
+        "tests": 49,
+        "passed": 47,
+        "failed": 1,
+        "errors": 1,
+        "skipped": 0
+      },
+      "phase_exits": {
+        "gate-controls.phase.manifest.json": 1,
+        "test262-controls.phase.manifest.json": 0,
+        "wrapped-controls.phase.manifest.json": 0,
+        "legacy-phase-controls.phase.manifest.json": 1,
+        "render-controls.phase.manifest.json": 1,
+        "completed-controls.phase.manifest.json": 1
+      },
+      "raw": {
+        "gate-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-ts43n9cn/output.log",
+          "bytes": 1207,
+          "sha256": "04b39fa0dbce6f9625fe53bc2858aa9cd85d81aaa034f60459fadbc5959a1394"
+        },
+        "test262-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-la5rn_9q/output.log",
+          "bytes": 3321,
+          "sha256": "5ccceb158ecd2650b896d91eb0e133d888fee3787f4f4c9c99dfa6078a6d5b98"
+        },
+        "wrapped-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-ieffyvpa/output.log",
+          "bytes": 1752,
+          "sha256": "155e25f1fca01803512f00054b6cc2f24505d75ed9687d447087beccf5658526"
+        },
+        "legacy-phase-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-w8_mxlwm/output.log",
+          "bytes": 11143,
+          "sha256": "27d99907ca1fd03ab90240a3780c2f7b38cfd0042c6d8f3583909b1a3c1e1e3f"
+        },
+        "render-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-gfqyb83w/output.log",
+          "bytes": 1153,
+          "sha256": "00ced9d8b49131633f3a58c4213e989271f6898e025ca74f992a509d119b7f9a"
+        },
+        "completed-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-lui5zz7r/output.log",
+          "bytes": 11395,
+          "sha256": "b27384ca45896dad46ae186130f4cd365281cbca4874e555a2fef2f413849edb"
+        }
+      },
+      "causes": [
+        "Authentic completion argument missing in shared extractor",
+        "Largecatalog copy lackeddestination parent; sizeassertion correctlyrejected1308B instead of >64KiB"
+      ]
+    },
+    {
+      "source": "f55fe83f0830811906930bc1e6db370b4cbdb485",
+      "job": "b9cce7a45e6143b6996cdf9d52184bb0",
+      "actual_exit": 1,
+      "fetch_exit": 0,
+      "counts": {
+        "tests": 49,
+        "passed": 48,
+        "failed": 0,
+        "errors": 1,
+        "skipped": 0
+      },
+      "phase_exits": {
+        "gate-controls.phase.manifest.json": 0,
+        "test262-controls.phase.manifest.json": 0,
+        "wrapped-controls.phase.manifest.json": 0,
+        "legacy-phase-controls.phase.manifest.json": 0,
+        "render-controls.phase.manifest.json": 0,
+        "completed-controls.phase.manifest.json": 1
+      },
+      "all_original_control_modules_passed": true,
+      "remaining_failure_id": "completed-job-completion-admission-tests.Admission.test_gate_diagnostic_uses_same_original_completion_contract",
+      "cause": "Shared ordinary extractor omitted anchored Rust compiler markers; real controlled compiler-error record rejected without changing native exit",
+      "raw": {
+        "gate-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-_immiya3/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "test262-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-qxwqo4bx/output.log",
+          "bytes": 3321,
+          "sha256": "0b57f7b662df28f158cdbd482e2bbdc0208d2ffccfa084d637af735b53b75d8e"
+        },
+        "wrapped-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-ikapyubp/output.log",
+          "bytes": 1752,
+          "sha256": "76b0b3dda5eb7d426ce54f33dfb931662adf1b66bb41a72e27c5e1e324426fc3"
+        },
+        "legacy-phase-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-kh2vbedl/output.log",
+          "bytes": 2736,
+          "sha256": "f2e0da91a7dcaf98254239793b13a7c447c8e5407b2165113be7ab79efdf34fc"
+        },
+        "render-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-mz0qhbnu/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "completed-controls.phase.manifest.json": {
+          "path": "/tmp/amazing-gate-command-8kekr9gd/output.log",
+          "bytes": 10488,
+          "sha256": "ee8ccda8ae0aaa8d1c86c47eb5c55cb637a628fb511f1ee141b0bc93f66bab3a"
+        }
+      }
+    }
+  ],
+  "original_html_marker_sha256": "01adb05900bdb230b685abc26c429ced7b6ce3cec60927adef928bd62dc41dd4",
+  "original_html_marker_not_rewritten_or_read": true,
+  "original_html_phase_sha256": "34273e4f34c3a3f4c5a3ff784e13dc83930ca481b193e817fccdd2f5d226c6fc"
+}
