@@ -1245,6 +1245,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         return if needs_deferred_expansion(value) || contains_attr_function(value) { vec![(property, value.into())] }
         else { crate::image_policy::canonical(&property,value).map(|value| vec![(property,value)]).unwrap_or_default() };
     }
+    if property == "aspect-ratio" {
+        return if needs_deferred_expansion(value) || contains_attr_function(value) { vec![(property, value.into())] }
+        else { crate::aspect_ratio::specified(value).map(|value| vec![(property, value)]).unwrap_or_default() };
+    }
     if property == "font-width" { return expand_declaration("font-stretch", value); }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
     if property == "border-image" { return border_image_policy::expand(value).unwrap_or_default(); }
@@ -2874,6 +2878,8 @@ fn compute_normal_value(
         crate::text_properties::canonical(property.name, &computed).unwrap_or(computed)
     } else if crate::image_policy::supported(property.name) {
         crate::image_policy::canonical(property.name,&computed).unwrap_or_else(|| property.initial.to_owned())
+    } else if property.name == "aspect-ratio" {
+        crate::aspect_ratio::computed(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {
