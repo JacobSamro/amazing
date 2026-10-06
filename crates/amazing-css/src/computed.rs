@@ -385,6 +385,16 @@ impl ComputedStyle {
         }
     }
 
+    fn refresh_flex_values(&mut self) {
+        let font = self.get("font-size").and_then(font_size_px).unwrap_or(16.0);
+        crate::flex_values::resolve(&mut self.props, f64::from(font), self.root_font_px);
+        for name in ["flex", "flex-grow", "flex-shrink", "flex-basis"] {
+            if let Some(css) = self.props.get(name) {
+                self.typed.insert(name.into(), values::parse(name, css).unwrap_or(ComputedValue::Unparsed));
+            }
+        }
+    }
+
     pub fn get(&self, property: &str) -> Option<&str> {
         self.props.get(property).map(String::as_str)
     }
@@ -443,6 +453,7 @@ impl ComputedStyle {
         let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
         self.effective_zoom *= next_zoom / prior_zoom;
         self.resolve_typed_units();
+        self.refresh_flex_values();
     }
 
     #[cfg(test)]
@@ -1755,26 +1766,12 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 expand_flex_flow(value).unwrap_or_default()
             }
         }
-        "flex" if !parts.is_empty() => {
+        "flex" => {
             if css_wide_keyword(value).is_some() {
-                vec![
-                    ("flex-grow".to_owned(), value.to_owned()),
-                    ("flex-shrink".to_owned(), value.to_owned()),
-                    ("flex-basis".to_owned(), value.to_owned()),
-                ]
-            } else {
-                match expand_flex_shorthand(&parts) {
-                    Some((grow, shrink, basis)) => vec![
-                        ("flex-grow".to_owned(), grow),
-                        ("flex-shrink".to_owned(), shrink),
-                        ("flex-basis".to_owned(), basis),
-                    ],
-                    // An invalid `flex` shorthand emits no cascade candidates,
-                    // so it cannot override earlier valid longhands (same rule
-                    // as flex-flow/grid-template).
-                    None => Vec::new(),
-                }
-            }
+                crate::flex_values::LONGHANDS.map(|name| (name.into(), value.into())).into()
+            } else if needs_deferred_expansion(value) || contains_attr_function(value) {
+                crate::flex_values::LONGHANDS.map(|name| (name.into(), deferred(&format!("amazing-internal-flex-{name}"), value))).into()
+            } else { crate::flex_values::expand(value).unwrap_or_default() }
         }
         _ => vec![(property, value.to_owned())],
     }
@@ -2303,27 +2300,6 @@ pub(crate) fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<
     }
 }
 
-/// Non-negative `<number>` (the `flex-grow`/`flex-shrink` grammar),
-/// including the special calc() forms the layout solver evaluates.
-fn valid_flex_number(value: &str) -> bool {
-    let trimmed = value.trim();
-    if trimmed.eq_ignore_ascii_case("calc(infinity)")
-        || trimmed.eq_ignore_ascii_case("calc(-infinity)")
-        || trimmed.eq_ignore_ascii_case("calc(nan)")
-    {
-        return true;
-    }
-    matches!(tokenize(trimmed).as_slice(), [Token::Number(n)] if n.is_finite() && *n >= 0.0)
-}
-
-/// `<'flex-basis'>` within the supported subset: `auto` or a fixed breadth.
-fn valid_flex_basis(value: &str) -> bool {
-    let owned = tokenize(value);
-    let tokens = trim_tokens(&owned);
-    matches!(tokens, [Token::Ident(name)] if name.eq_ignore_ascii_case("auto"))
-        || valid_fixed_breadth(tokens)
-}
-
 /// Legacy gap aliases accept one non-negative length-percentage per side
 /// (`row-gap`/`column-gap` also allow the `normal` keyword).
 fn valid_gap_value(value: &str) -> bool {
@@ -2332,43 +2308,6 @@ fn valid_gap_value(value: &str) -> bool {
     matches!(tokens, [Token::Ident(name)] if name.eq_ignore_ascii_case("normal"))
         || valid_fixed_breadth(tokens)
 }
-
-/// `flex` shorthand per §7.1.10: `none`, `auto`, or up to three components
-/// `<'flex-grow'> <'flex-shrink'>? <'flex-basis'>?`, where an omitted basis is
-/// `0%` after a second number and `auto` otherwise. Invalid combinations
-/// return `None` so the declaration emits no cascade candidates.
-fn expand_flex_shorthand(parts: &[&str]) -> Option<(String, String, String)> {
-    let text = |component: &str| component.to_owned();
-    let (grow, shrink, basis) = match parts {
-        ["none"] => ("0".to_owned(), "0".to_owned(), "auto".to_owned()),
-        ["auto"] => ("1".to_owned(), "1".to_owned(), "auto".to_owned()),
-        [grow] if valid_flex_number(grow) => (text(grow), "1".to_owned(), "0%".to_owned()),
-        [basis] if valid_flex_basis(basis) => ("1".to_owned(), "1".to_owned(), text(basis)),
-        [grow, shrink] if valid_flex_number(grow) && valid_flex_number(shrink) => {
-            (text(grow), text(shrink), "0%".to_owned())
-        }
-        [grow, basis] if valid_flex_number(grow) && valid_flex_basis(basis) => {
-            (text(grow), "1".to_owned(), text(basis))
-        }
-        [grow, shrink, basis]
-            if valid_flex_number(grow) && valid_flex_number(shrink) && valid_flex_basis(basis) =>
-        {
-            (text(grow), text(shrink), text(basis))
-        }
-        // §7.1.10's || combinator also permits the basis first.
-        [basis, grow] if valid_flex_basis(basis) && valid_flex_number(grow) => {
-            (text(grow), "1".to_owned(), text(basis))
-        }
-        [basis, grow, shrink]
-            if valid_flex_basis(basis) && valid_flex_number(grow) && valid_flex_number(shrink) =>
-        {
-            (text(grow), text(shrink), text(basis))
-        }
-        _ => return None,
-    };
-    Some((grow, shrink, basis))
-}
-
 
 /// Validate the two Fonts 4 feature grammars before a declaration enters the
 /// cascade, and serialize their computed values for public style consumers.
@@ -2715,6 +2654,7 @@ pub(crate) fn resolve_with_tree_environment(
         }
     }
     style.resolve_typed_units();
+    style.refresh_flex_values();
     style
 }
 
@@ -3082,6 +3022,12 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if crate::flex_values::LONGHANDS.contains(&property)
+        && let Some(inner) = deferred_inner(value, &format!("amazing-internal-flex-{property}")) {
+        if css_wide_keyword(inner).is_some() { return Ok(inner.to_owned()); }
+        return crate::flex_values::expand(inner).ok_or(())?.into_iter()
+            .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+    }
     if let Some(resolved) = border_image_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = font_variant_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = text_policy::resolve_deferred(property, value) { return resolved; }

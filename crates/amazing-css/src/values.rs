@@ -754,13 +754,12 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         // min()/max()/clamp() opacity to the initial value 1.
         "translate" | "rotate" | "scale" => return crate::computed::individual_transforms::valid(property, css).then_some(V::Unparsed),
         "opacity" | "fill-opacity" => return alpha_value(css).map(|n| V::Number(n.clamp(0.0, 1.0))),
+        "flex" => return crate::flex_values::parse(css).map(|_| V::Unparsed),
         "flex-grow" | "flex-shrink" => {
-            // The existing layout solver supports these math constants. Keep
-            // their policy there until calc() has a typed grammar here.
-            if matches!(s, "calc(infinity)" | "calc(-infinity)" | "calc(nan)") {
-                return Some(V::Unparsed);
-            }
-            return number(css).filter(|n| *n >= 0.0).map(V::Number);
+            if crate::flex_values::constant(css).is_some() { return Some(V::Unparsed); }
+            if !crate::flex_values::factor(css) { return None; }
+            return crate::math::computed_number(css).filter(|n| n.is_finite())
+                .map(|n| V::Number(n.max(0.0))).or(Some(V::Unparsed));
         }
         "order" => return integer(css).map(V::Integer),
         "orphans" | "widows" => return integer(css).filter(|n| *n > 0).map(V::Integer),
