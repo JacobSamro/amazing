@@ -6,6 +6,8 @@
 //! and supported shorthand expansion stay behind this seam.
 
 use crate::syntax::{Token, serialize, tokenize};
+#[path = "flow_tolerance.rs"]
+pub(crate) mod flow_tolerance;
 #[path = "attr_values.rs"]
 mod attr_values;
 #[path = "grid_values.rs"]
@@ -431,6 +433,12 @@ impl ComputedStyle {
                 if let Some(css) = self.props.get(shorthand) { self.typed.insert(shorthand.into(), values::parse(shorthand, css).unwrap_or(ComputedValue::Unparsed)); }
             }
         }
+        if property == "flow-tolerance" {
+            flow_tolerance::resolve(&mut self.props, self.root_font_px);
+            if let Some(css) = self.props.get(property) {
+                self.typed.insert(property.into(), values::parse(property, css).unwrap_or(ComputedValue::Unparsed));
+            }
+        }
         let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
         self.effective_zoom *= next_zoom / prior_zoom;
         self.resolve_typed_units();
@@ -725,6 +733,11 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata {
         name: "float",
         initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "flow-tolerance",
+        initial: "normal",
         inherited: false,
     },
     PropertyMetadata {
@@ -1235,6 +1248,11 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     } else {
         property.to_ascii_lowercase()
     };
+    if property == "flow-tolerance" {
+        return if css_wide_keyword(value).is_some() || needs_deferred_expansion(value) || contains_attr_function(value) || flow_tolerance::parse(value).is_some() {
+            vec![(property, value.to_owned())]
+        } else { Vec::new() };
+    }
     if crate::text_properties::axes(&property).is_some() {
         return text_policy::expand(&property, value).unwrap_or_default();
     }
@@ -2666,11 +2684,13 @@ pub(crate) fn resolve_with_tree_environment(
         url_contexts:parent.map(|parent|parent.url_contexts.clone()).unwrap_or_default(),
     };
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
+
     individual_transforms::resolve(&mut style.props, style.root_font_px);
     crate::transform_values::resolve(&mut style.props, style.root_font_px);
     font_synthesis::serialize(&mut style.props);
     crate::font_variant::serialize(&mut style.props);
     let border_image_root = if parent.is_none() { style.props.get("font-size").and_then(|css|css.strip_suffix("px")).and_then(|n|n.parse().ok()).unwrap_or(style.root_font_px) } else { style.root_font_px };
+    flow_tolerance::resolve(&mut style.props, border_image_root);
     crate::border_image::resolve_properties(&mut style.props, border_image_root);
     position_values::resolve(&mut style.props, border_image_root);
     border_radius::resolve(&mut style.props, border_image_root);

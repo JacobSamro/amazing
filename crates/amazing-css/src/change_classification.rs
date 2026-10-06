@@ -115,6 +115,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "flex-grow" |
         "flex-shrink" |
         "flex-wrap" |
+        "flow-tolerance" |
         "font-family" |
         "font-feature-settings" |
         "font-kerning" |
@@ -281,7 +282,9 @@ mod tests {
         // `background-position-x`/`-y`, all PaintOnly. CSS39 adds thirteen
         // registered text policy axes, all Layout. CSS42 adds six image-border
         // properties, all PaintOnly.
-        assert_eq!(counts, [19, 53, 142, 34]);
+        // The complete grid-template producer registers areas as one more Layout longhand.
+        // Flow tolerance adds one more Layout longhand to the ready grid producer.
+        assert_eq!(counts, [19, 53, 144, 34]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }
