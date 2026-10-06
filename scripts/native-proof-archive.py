@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,9 @@ import stat
 import sys
 import time
 import uuid
+
+spec = importlib.util.spec_from_file_location('native_pack', Path(__file__).with_name('native-proof-pack.py'))
+pack = importlib.util.module_from_spec(spec); spec.loader.exec_module(pack)
 
 ROOT = Path('/srv/amazing-proof')
 NATIVE_TYPES = {'ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'overlay'}
@@ -172,13 +176,15 @@ def terminal(path, source, job):
     return {'path': str(path), 'bytes': path.stat().st_size, 'sha256': digest(path), 'actual_exit': code}
 
 
-def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, capture_links=False, targets=None):
+def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, capture_links=False, targets=None, pack_targets=()):
     identifier(lane); identifier(job)
     if not re.fullmatch(r'[0-9a-f]{40}', source): raise ValueError('exact source commit required')
     if copy_budget < 0 or reserve < 0: raise ValueError('negative capacity budget')
     mount = root_admission()
     producer = terminal(terminal_path, source, job)
     targets=targets or {}
+    packed=set(pack_targets)
+    if not packed.issubset(targets):raise ValueError('only explicitly declared native target labels can be packed')
     if set(roots)&set(targets):raise ValueError('duplicate input/target labels')
     file_inputs=[label for label,path in targets.items() if canonical(path).is_file()]
     roots = {identifier(label): canonical(path) for label, path in {**roots,**targets}.items()}
@@ -189,7 +195,8 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
     destination = ROOT / lane / source / job
     if destination.exists() or destination.is_symlink(): raise ValueError('prior archive/partial preserved')
     rows, directories, links = inventory_details(roots,capture_links,file_inputs)
-    required = sum(row['bytes'] for row in rows) + 4096 * (len(rows) + len(directories)) + 65536
+    required = sum(row['bytes'] for row in rows if row['label'] not in packed) + 4096 * (len(rows) + len(directories)) + 65536
+    if any(row['elf'] and row['label'] in packed for row in rows):raise ValueError('native ELF target packing is not admitted')
     available = shutil.disk_usage(ROOT).free
     if required > copy_budget or available < required + reserve:
         raise OSError(28, 'explicit archive capacity unavailable; inputs untouched')
@@ -200,12 +207,25 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
               'destination': str(destination), 'inputs': {k: str(v) for k,v in roots.items()},
               'terminal_producer': producer, 'capture_links':capture_links,'file_inputs':file_inputs,'links':links,'mount': mount, 'required_bytes': required,
               'available_bytes': available, 'copy_budget_bytes': copy_budget,
-              'reserve_bytes': reserve, 'complete': False, 'source_retained': True}
+              'reserve_bytes': reserve, 'packed_targets':sorted(packed), 'packs':{}, 'complete': False, 'source_retained': True}
     save(destination / 'start.manifest.json', header)
     try:
+        packs={}
+        if packed:(destination/'packs').mkdir(mode=0o700)
+        for label in sorted(packed):
+            selected=[row for row in rows if row['label']==label]
+            selected_dirs=[row for row in directories if row['label']==label]
+            record=pack.write_pack(destination/'packs'/(label+'.tar.gz'),selected,selected_dirs,lambda row:original_path(header,row),fingerprint,ROOT,required,sum(p['bytes'] for p in packs.values()),copy_budget,reserve)
+            record['readback']=pack.readback(Path(record['path']),selected,selected_dirs)
+            packs[label]=record
+        required+=sum(record['bytes'] for record in packs.values())
+        if required>copy_budget or shutil.disk_usage(ROOT).free<required-sum(record['bytes'] for record in packs.values())+reserve:raise OSError(28,'explicit lossless archive capacity unavailable; original inputs untouched')
+        header.update(packs=packs,required_bytes=required)
         for directory in directories:
+            if directory['label'] in packed:continue
             (destination / 'payload' / directory['label'] / directory['path']).mkdir(parents=True, exist_ok=True, mode=0o700)
         for row in rows:
+            if row['label'] in packed:continue
             original = original_path(header,row)
             final = destination / 'payload' / row['label'] / row['path']
             if list(fingerprint(original.stat())) != row['source_identity']: raise ValueError('input changed before copy')
@@ -219,10 +239,14 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
         after, after_directories, after_links = inventory_details(roots,capture_links,file_inputs)
         if rows != after or directories != after_directories or links != after_links: raise ValueError('input tree changed during archive; no completed publication')
         if terminal(terminal_path, source, job) != producer: raise ValueError('terminal producer receipt changed')
-        copied, copied_directories = inventory({label:destination/'payload'/label for label in roots})
+        copied, copied_directories = inventory({label:destination/'payload'/label for label in roots if label not in packed})
         fields=('label','path','bytes','sha256','mode','elf')
-        if [{k:r[k] for k in fields} for r in copied] != [{k:r[k] for k in fields} for r in rows] or copied_directories != directories:
+        if [{k:r[k] for k in fields} for r in copied] != [{k:r[k] for k in fields} for r in rows if r['label'] not in packed] or copied_directories != [r for r in directories if r['label'] not in packed]:
             raise ValueError('final archived tree differs from declared original bytes')
+        for label,record in packs.items():
+            if digest(Path(record['path']))!=record['sha256']:raise ValueError('packed capture changed before sealing')
+            pack.readback(Path(record['path']),[r for r in rows if r['label']==label],[r for r in directories if r['label']==label])
+        if packs:fsync_directory(destination/'packs')
         if root_admission() != mount:raise ValueError('captured native root mount changed')
         # Seal every payload directory before the complete receipt.
         for directory, dirs, files in os.walk(destination / 'payload', topdown=False): fsync_directory(directory)
@@ -234,7 +258,7 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
         for parent in [destination, destination.parent, destination.parent.parent, ROOT]: fsync_directory(parent)
         return {'schema': 1, 'complete': True, 'source': source, 'lane': lane, 'job': job,
                 'destination': str(destination), 'files': len(rows), 'elf_files': manifest['elf_count'],
-                'logical_bytes': manifest['logical_bytes'],'links':len(links),'link_storage':'exact metadata; admitted target payloads copied independently, no escaping archive symlinks','mount': mount, 'source_retained': True,
+                'packed_targets':sorted(packed),'physical_required_bytes':required,'logical_bytes': manifest['logical_bytes'],'links':len(links),'link_storage':'exact metadata; admitted target payloads copied independently, no escaping archive symlinks','mount': mount, 'source_retained': True,
                 'archive_manifest': {'path': str(destination/'archive.manifest.json'),
                     'bytes': (destination/'archive.manifest.json').stat().st_size,
                     'sha256': digest(destination/'archive.manifest.json')},
@@ -256,13 +280,26 @@ def verify(manifest_path, expected_sha, archive_exit):
     if (destination/'failure.manifest.json').exists():raise ValueError('archive has a failed/partial producer')
     manifest=json.loads(manifest_path.read_text())
     if manifest.get('complete') is not True or manifest.get('destination')!=str(destination):raise ValueError('archive not complete')
-    roots={label:destination/'payload'/label for label in manifest['inputs']}
+    packed=set(manifest.get('packed_targets',[]))
+    if not packed.issubset(manifest['inputs']) or any(r['elf'] and r['label'] in packed for r in manifest['files']):raise ValueError('inadmissible packed target manifest')
+    if packed!=set(manifest.get('packs',{})):raise ValueError('packed target inventory mismatch')
+    roots={label:destination/'payload'/label for label in manifest['inputs'] if label not in packed}
     rows,directories=inventory(roots);fields=('label','path','bytes','sha256','mode','elf')
-    if [{k:r[k] for k in fields} for r in rows] != [{k:r[k] for k in fields} for r in manifest['files']] or directories!=manifest['directories']:
+    if [{k:r[k] for k in fields} for r in rows] != [{k:r[k] for k in fields} for r in manifest['files'] if r['label'] not in packed] or directories!=[r for r in manifest['directories'] if r['label'] not in packed]:
         raise ValueError('archived raw/ELF bytes or paths changed')
+    for label in sorted(packed):
+        identifier(label);record=manifest['packs'][label];path=destination/'packs'/(label+'.tar.gz')
+        canonical(path);native_mount(path)
+        if record['path']!=str(path) or path.stat().st_size!=record['bytes'] or digest(path)!=record['sha256']:raise ValueError('packed archive identity changed')
+        pack.readback(path,[r for r in manifest['files'] if r['label']==label],[r for r in manifest['directories'] if r['label']==label])
     for link in manifest.get('links',[]):
         label=identifier(link['target_label']);relative=Path(link['target_path'])
-        if label not in roots or relative.is_absolute() or '..' in relative.parts:raise ValueError('link metadata escapes captured target')
+        if label not in manifest['inputs'] or relative.is_absolute() or '..' in relative.parts:raise ValueError('link metadata escapes captured target')
+        if label in packed:
+            if link['target_kind']=='directory' and not any(r['label']==label and r['path']==str(relative) for r in manifest['directories']):raise ValueError('packed directory link target missing')
+            if link['target_kind']=='regular' and not any(r['label']==label and r['path']==str(relative) for r in manifest['files']):raise ValueError('packed regular link target missing')
+            if link['target_kind'] not in ('directory','regular'):raise ValueError('unsupported packed link target type')
+            continue
         target=roots[label]/relative
         if link['target_kind']=='directory':
             if not target.is_dir():raise ValueError('captured directory link target missing')
@@ -272,7 +309,26 @@ def verify(manifest_path, expected_sha, archive_exit):
         canonical(target);native_mount(target)
     return {'schema':1,'complete':True,'actual_archive_exit':archive_exit,'destination':str(destination),
             'source':manifest['source'],'lane':manifest['lane'],'job':manifest['job'],
-            'files':len(rows),'elf_files':sum(r['elf'] for r in rows),'links':len(manifest.get('links',[])),'archive_manifest_sha256':expected_sha}
+            'files':len(manifest['files']),'elf_files':sum(r['elf'] for r in manifest['files']),'links':len(manifest.get('links',[])),'archive_manifest_sha256':expected_sha}
+
+
+def restore_target(manifest_path, expected_sha, archive_exit, label, destination, budget, reserve):
+    verify(manifest_path,expected_sha,archive_exit)
+    manifest=json.loads(Path(manifest_path).read_text());identifier(label)
+    if label not in manifest.get('packed_targets',[]):raise ValueError('not an independently verified packed target')
+    destination=Path(destination)
+    if not destination.is_absolute() or destination.exists() or destination.is_symlink():raise ValueError('native restoration needs a fresh absolute namespace')
+    parent=canonical(destination.parent);native_mount(parent);exclusions(parent)
+    if destination!=parent/destination.name:raise ValueError('noncanonical restoration destination')
+    if any(root==destination or root in destination.parents or destination in root.parents for root in [ROOT,*[Path(x) for x in manifest['inputs'].values()]]):raise ValueError('restoration overlaps original or captured proof')
+    rows=[r for r in manifest['files'] if r['label']==label];directories=[r for r in manifest['directories'] if r['label']==label]
+    required=sum(r['bytes'] for r in rows)+4096*(len(rows)+len(directories))+65536
+    if budget<required or reserve<0 or shutil.disk_usage(parent).free<required+reserve:raise OSError(28,'full native restoration capacity unavailable; originals retained')
+    result=pack.readback(Path(manifest['packs'][label]['path']),rows,directories,destination)
+    for directory,dirs,files in os.walk(destination,topdown=False):fsync_directory(directory)
+    fsync_directory(parent)
+    return dict(result,destination=str(destination),source=manifest['source'],job=manifest['job'],label=label,archive_manifest_sha256=expected_sha,
+                link_metadata=[r for r in manifest.get('links',[]) if r['label']==label],link_restoration='exact manifest metadata retained; no escaping native symlinks materialized')
 
 
 @contextlib.contextmanager
@@ -286,6 +342,16 @@ def deadline(seconds):
 
 
 def main():
+    if len(sys.argv)>1 and sys.argv[1]=='restore-target':
+        p=argparse.ArgumentParser(description='Restore every losslessly captured target byte into fresh native storage')
+        p.add_argument('mode');p.add_argument('manifest');p.add_argument('--sha256',required=True);p.add_argument('--actual-archive-exit',required=True,type=int)
+        p.add_argument('--label',required=True);p.add_argument('--destination',required=True);p.add_argument('--copy-budget-bytes',required=True,type=int);p.add_argument('--reserve-bytes',required=True,type=int);p.add_argument('--seconds',type=int,default=600)
+        args=p.parse_args()
+        try:
+            with deadline(args.seconds):result=restore_target(args.manifest,args.sha256,args.actual_archive_exit,args.label,args.destination,args.copy_budget_bytes,args.reserve_bytes)
+            code=0
+        except Exception as error:result={'complete':False,'error':str(error)};code=124 if isinstance(error,TimeoutError) else 3
+        result['actual_exit']=code;print(json.dumps(result,separators=(',',':')));return code
     if len(sys.argv)>1 and sys.argv[1]=='verify':
         p=argparse.ArgumentParser(description='Verify root stop-safety inputs; not an engine merge gate')
         p.add_argument('mode');p.add_argument('manifest');p.add_argument('--sha256',required=True);p.add_argument('--actual-archive-exit',required=True,type=int)
@@ -302,13 +368,14 @@ def main():
     p.add_argument('--seconds',type=int,default=600)
     p.add_argument('--capture-links',action='store_true')
     p.add_argument('--target',action='append',default=[],help='label=explicit admitted native directory or regular file')
+    p.add_argument('--pack-target',action='append',default=[],help='losslessly capture every byte of this explicitly declared target label as native gzip tar')
     args=p.parse_args()
     try:
         pairs=[value.split('=',1) for value in args.input]
         if any(len(pair)!=2 for pair in pairs) or len({pair[0] for pair in pairs})!=len(pairs):raise ValueError('invalid or duplicate input labels')
         target_pairs=[value.split('=',1) for value in args.target]
         if any(len(pair)!=2 for pair in target_pairs) or len({pair[0] for pair in target_pairs})!=len(target_pairs):raise ValueError('invalid or duplicate target labels')
-        with deadline(args.seconds):result=archive(args.lane,args.source,args.job,dict(pairs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes,args.capture_links,dict(target_pairs))
+        with deadline(args.seconds):result=archive(args.lane,args.source,args.job,dict(pairs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes,args.capture_links,dict(target_pairs),args.pack_target)
         code=0
     except Exception as error:
         code=124 if isinstance(error,TimeoutError) else 3
