@@ -450,6 +450,7 @@ impl Interpreter {
         let buffer = binary_buffer(value)?;
         let mut buffer = buffer.borrow_mut();
         if buffer.shared { return Err(Throw::type_error("SharedArrayBuffer cannot be detached")); }
+        if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer cannot be detached")); }
         if buffer.detached { return Ok(()); }
         buffer.bytes.clear();
         buffer.detached = true;

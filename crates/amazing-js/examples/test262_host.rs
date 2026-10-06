@@ -464,3 +464,7 @@ mod protocol_tests {
         *UNSUPPORTED.lock().unwrap() = None;
     }
 }
+
+#[cfg(test)]
+#[path = "test262_host_support/data_module_tests.rs"]
+mod data_module_tests;

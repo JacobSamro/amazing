@@ -87,6 +87,14 @@ pub enum ModuleSource {
     JavaScript(String),
     /// Exact source code units supplied by a typed host, including lone surrogates.
     JavaScriptUtf16(Vec<u16>),
+    /// Validated data-only JSON; objects are allocated once in the module realm.
+    Json(crate::json_data::JsonDocument),
+    /// Unparsed exact JSON text; validation is cached at canonical record loading.
+    JsonText(crate::value::JsString),
+    /// Decoded exact text source, without JavaScript evaluation.
+    Text(crate::value::JsString),
+    /// Original bytes; a genuine realm Uint8Array is allocated at instantiation.
+    Bytes(Vec<u8>),
     /// Hosts parse JSON/text/bytes against their actual MIME/type policy, then
     /// supply the immutable synthetic default binding. No JavaScript parsing of JSON.
     Synthetic {
@@ -135,6 +143,26 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 ModuleSource::JavaScriptUtf16(source) => {
                     self.load_text_record(&id, &source, false)?;
                 }
+                ModuleSource::JsonText(source) => {
+                    let document = match crate::json_data::JsonDocument::parse_utf16(source.units()) {
+                        Ok(document) => document,
+                        Err(error) => {
+                            let failure = ModuleFailure::syntax(ModulePhase::Resolution, error.to_string());
+                            self.load_failures.insert(id, CachedLoadFailure { failure: failure.clone(), direct_parse: true });
+                            return Err(failure);
+                        }
+                    };
+                    self.insert_data_record(&id, ModuleData::Json(document));
+                }
+                ModuleSource::Json(document) => {
+                    self.insert_data_record(&id, ModuleData::Json(document));
+                }
+                ModuleSource::Text(text) => {
+                    self.insert_data_record(&id, ModuleData::Text(text));
+                }
+                ModuleSource::Bytes(bytes) => {
+                    self.insert_data_record(&id, ModuleData::Bytes(bytes));
+                }
                 ModuleSource::Synthetic {
                     default_export,
                     module_source,
@@ -169,23 +197,40 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 )
             })
     }
+    // Static and dynamic callers share normal-result identity and source-only
+    // expansion. A cycle can reuse the record before walking its dependencies.
+    fn load_host_request_record(&mut self, request: &ModuleRequest, referrer: &str) -> Result<String, ModuleFailure> {
+        let key = (referrer.to_owned(), request.edge_key());
+        let memoize = self.resolver.cache_loaded_requests();
+        let cached = if memoize { self.loaded_host_requests.get(&key) } else { None };
+        let id = if let Some(id) = cached {
+            id.clone()
+        } else {
+            let loaded = self.resolver.resolve_request(request, referrer)
+                .map_err(|message| ModuleFailure {
+                    thrown: self.resolver.resolve_request_error(request, referrer, &message),
+                    phase: ModulePhase::Resolution,
+                    message,
+                })?;
+            let id = loaded.id.clone();
+            // Validate and register first, without expanding. Publish normal
+            // request identity before recursion so cycles do not reload it.
+            self.load_host_record(loaded, true)?;
+            if memoize { self.loaded_host_requests.insert(key, id.clone()); }
+            id
+        };
+        if request.phase != ImportPhase::Source { self.expand_record(&id)?; }
+        Ok(id)
+    }
     /// Load a dynamic request, preserving phase-independent canonical identity.
     pub fn load_request(
         &mut self,
         request: &ModuleRequest,
         referrer: &str,
     ) -> Result<String, ModuleFailure> {
-        let loaded = self
-            .resolver
-            .resolve_request(request, referrer)
-            .map_err(|message| ModuleFailure {
-                thrown: self.resolver.resolve_request_error(request, referrer, &message),
-                phase: ModulePhase::Resolution,
-                message,
-            })?;
-        let id = loaded.id.clone();
-        self.load_host_record(loaded, request.phase == ImportPhase::Source)?;
+        let id = self.load_host_request_record(request, referrer)?;
         if request.phase != ImportPhase::Source {
+            self.expand_record(&id)?;
             self.first_graph_failure(&id, true, &mut HashSet::new())?;
             // Reuse the complete export validation and root error identity.
             self.link(&id, "")?;

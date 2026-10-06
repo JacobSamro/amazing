@@ -1,0 +1,6 @@
+# Explicit dependencies and authored controls
+
+- Shadow71109641 is actually published with root5164/docs36/full16zeroLoss. The tested pair composed exact qualified dcaf; this feature-only projection uses published source without old e131 ancestry.
+- The old realm host unsupported-request test uses type:json and asserts TypeError. Actual JSON support means JSON bytes are parsed; malformed JSON raises SyntaxError. Root approved replacement unsupported witness type:unsupported while preserving TypeError, plus the original json/value.js request as a malformed-JSON SyntaxError peer in each realm. The unchanged source bytes export default 1 are parsed as data, never rejected through extension-based MIME. Both sides use the same corrected fixture, explicitly different from the historical original; no official test change.
+- Whole native graph collector9c remains unqualified separately. Preserve existing public callback ABI; no empty capture trace or graph readiness claim. Future source-cache trace must include real synthetic JsValue slots, not pure-string identity surrogates.
+- Browser typed MIME/CSP/resource source transport remains its own genuine embedding consumer. This ticket qualifies actual filesystem host/API capabilities and active-realm values; it does not fabricate browser receiving contexts or claim installed WPT coverage before that consumer exists.

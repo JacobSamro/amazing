@@ -70,6 +70,10 @@ pub trait ModuleResolver {
         let (id, source) = self.resolve(&request.specifier.to_utf8_lossy(), referrer)?;
         Ok(LoadedModule { id, source: ModuleSource::JavaScript(source) })
     }
+    /// Opt into callback-result memoization for hosts with replayable requests.
+    /// Legacy callbacks retain their per-request invocation contract; canonical
+    /// records still keep their first source regardless of this capability.
+    fn cache_loaded_requests(&self) -> bool { false }
     /// Hosts distinguish specifier-resolution exceptions from fetch failure.
     /// A fetch failure has no module-script error value and remains `None`.
     fn resolve_request_error(&self, _request: &ModuleRequest, _referrer: &str, _message: &str) -> Option<Throw> { None }
@@ -85,6 +89,7 @@ where
 }
 
 include!("module_requests.rs");
+include!("module_data.rs");
 
 pub type ModuleNamespace = BTreeMap<String, JsValue>;
 
@@ -115,6 +120,8 @@ pub struct ModuleLinker<R: ModuleResolver> {
     request_metadata: HashMap<(String,String), ModuleRequest>,
     expanded: HashSet<String>,
     synthetic: HashMap<String, (JsValue, Option<JsValue>)>,
+    data_modules: HashMap<String, ModuleData>,
+    loaded_host_requests: HashMap<(String, String), String>,
 }
 
 #[derive(Clone)]
@@ -134,7 +141,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             request_failures: HashMap::new(),
             instances: HashMap::new(),
             realm_global: None, async_sequence: 0,
-            request_metadata: HashMap::new(), expanded: HashSet::new(), synthetic: HashMap::new(),
+            request_metadata: HashMap::new(), expanded: HashSet::new(), synthetic: HashMap::new(), data_modules: HashMap::new(), loaded_host_requests: HashMap::new(),
         }
     }
 
@@ -250,16 +257,12 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         for request in requests {
             let key = request.edge_key();
             self.request_metadata.insert((id.into(),key.clone()),request.clone());
-            match self.resolver.resolve_request(&request, id) {
-                Ok(loaded) => {
-                    let dep_id = loaded.id.clone();
-                    self.records.get_mut(id).unwrap().dependencies.insert(key,dep_id.clone());
-                    let result = self.load_host_record(loaded, request.phase == ImportPhase::Source);
-                    if let Err(failure) = result { self.request_failures.insert((id.into(),request.edge_key()),failure); }
+            match self.load_host_request_record(&request, id) {
+                Ok(dep_id) => {
+                    self.records.get_mut(id).unwrap().dependencies.insert(key, dep_id);
                 }
-                Err(message) => {
-                    let thrown = self.resolver.resolve_request_error(&request, id, &message);
-                    self.request_failures.insert((id.into(),key),ModuleFailure { phase: ModulePhase::Resolution, message, thrown });
+                Err(failure) => {
+                    self.request_failures.insert((id.into(),key),failure);
                 }
             }
         }
@@ -342,7 +345,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             let (mut program, default_binding) = {
                 let record = &self.records[record_id];
                 let (program, default) = module_program(record);
-                (program, if self.synthetic.contains_key(record_id) { Some("\0module.default".into()) } else { default })
+                (program, if self.is_synthetic_record(record_id) { Some("\0module.default".into()) } else { default })
             };
             let engine = &mut *root_interpreter;
             let module_env = EnvHandle::new(EnvKind::Module, Some(realm_global.clone()));
@@ -363,7 +366,10 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 .declare_lexical("\0module.id", JsValue::str(record_id.as_str()), false)
                 .map_err(ModuleFailure::runtime)?;
             predeclare_lexical(&module_env, &program).map_err(ModuleFailure::runtime)?;
-            if let Some((value,_)) = self.synthetic.get(record_id) {
+            if let Some(data) = self.data_modules.get(record_id) {
+                let value = data.materialize(engine).map_err(ModuleFailure::runtime)?;
+                module_env.declare_lexical("\0module.default",value,false).map_err(ModuleFailure::runtime)?;
+            } else if let Some((value,_)) = self.synthetic.get(record_id) {
                 module_env.declare_lexical("\0module.default",value.clone(),false).map_err(ModuleFailure::runtime)?;
             }
             let previous = std::mem::replace(&mut engine.global_env, module_env.clone());
@@ -510,7 +516,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         }
         let record = &self.records[id];
         let mut names = HashSet::new();
-        if self.synthetic.contains_key(id) { names.insert("default".into()); }
+        if self.is_synthetic_record(id) { names.insert("default".into()); }
         for item in &record.module.items {
             match item {
                 ModuleItem::ExportNamed {
@@ -552,7 +558,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         name: &str,
         visiting: &mut HashSet<(String, String)>,
     ) -> Result<Option<BindingCell>, ModuleFailure> {
-        if self.synthetic.contains_key(id) && name == "default" {
+        if self.is_synthetic_record(id) && name == "default" {
             return Ok(self.instances[id].env.local_cell("\0module.default"));
         }
         if matches!(self.resolve_export(id, name, &mut HashSet::new()), ExportResolution::Missing | ExportResolution::Ambiguous) {
@@ -1162,3 +1168,7 @@ mod utf16_request_tests;
 #[cfg(test)]
 #[path = "module_utf16_source_tests.rs"]
 mod utf16_source_tests;
+
+#[cfg(test)]
+#[path = "module_data_tests.rs"]
+mod data_tests;

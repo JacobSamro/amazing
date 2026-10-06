@@ -72,7 +72,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         name: &str,
         resolve_set: &mut HashSet<(String, String)>,
     ) -> ExportResolution {
-        if self.synthetic.contains_key(id) {
+        if self.is_synthetic_record(id) {
             return if name == "default" { ExportResolution::Binding(id.into(),"\0module.default".into()) }
                 else { ExportResolution::Missing };
         }

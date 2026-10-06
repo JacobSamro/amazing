@@ -1945,3 +1945,5 @@ mod tail_call_tests;
 mod viewport_metrics_tests;
 
 include!("interp_shadow_realm.rs");
+
+include!("interp_module_bytes.rs");

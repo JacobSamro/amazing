@@ -106,10 +106,10 @@ use amazing_js::module::{ModuleLinker, ModuleResolver};
         let mut i=Interpreter::new();let parent=i.binding_current_realm();let other=child(&mut i);
         let (_,root)=files.install(&mut i);
         for realm in [parent,other] {
-            eval(&mut i,realm,"var missing,attrs,source,escape;import('./missing.js').catch(e=>missing=e);import('../').catch(e=>escape=e);import('./value.js',{with:{type:'json'}}).catch(e=>attrs=e);import.source('./value.js').catch(e=>source=e)",&root);
+            eval(&mut i,realm,"var missing,attrs,source,escape,malformed;import('./missing.js').catch(e=>missing=e);import('../').catch(e=>escape=e);import('./value.js',{with:{type:'unsupported'}}).catch(e=>attrs=e);import('./value.js',{with:{type:'json'}}).catch(e=>malformed=e);import.source('./value.js').catch(e=>source=e)",&root);
         }
         i.drain_microtasks().unwrap();
-        for realm in [parent,other] { assert_eq!(get(&mut i,realm,"missing instanceof TypeError&&escape instanceof TypeError&&attrs instanceof TypeError&&source instanceof SyntaxError"),JsValue::Bool(true)); }
+        for realm in [parent,other] { assert_eq!(get(&mut i,realm,"missing instanceof TypeError&&escape instanceof TypeError&&attrs instanceof TypeError&&source instanceof SyntaxError&&malformed instanceof SyntaxError"),JsValue::Bool(true)); }
     }
 
     #[test]
