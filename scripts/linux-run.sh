@@ -42,7 +42,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE="" CAPTURED_PROOF_ROOT=""
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE="" CAPTURED_PROOF_ROOT="" CAPTURED_PROOF_ROOT_SET=0
 STORAGE_PLAN=""
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
@@ -55,7 +55,7 @@ while [ $# -gt 0 ]; do
     --setup-summary) SETUP_SUMMARY="$2"; shift 2 ;;
     --endpoint-receipt) ENDPOINT_RECEIPT="$2"; shift 2 ;;
     --compact-root) COMPACT_ROOT="$2"; shift 2 ;;
-    --captured-proof-root) CAPTURED_PROOF_ROOT="$2"; shift 2 ;;
+    --captured-proof-root) [ $# -ge 2 ] || { echo 'linux-run: captured proof root needs a value' >&2; exit 2; }; CAPTURED_PROOF_ROOT_SET=1; CAPTURED_PROOF_ROOT="$2"; shift 2 ;;
     --storage-plan) STORAGE_PLAN="$2"; shift 2 ;;
     --command-file) COMMAND_FILE="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
@@ -64,6 +64,20 @@ while [ $# -gt 0 ]; do
     *) echo "linux-run: unknown option $1" >&2; exit 2 ;;
   esac
 done
+# Opt-in captured diagnostics are admitted before locks, source creation,
+# endpoint allocation and upload. No ignored/malformed UI path can reach Boat.
+if [ "$CAPTURED_PROOF_ROOT_SET" = 1 ] && [ "$CAPTURED_PROOF_ROOT" != /srv/amazing-proof ]; then
+  echo 'linux-run: unsupported captured proof root; expected /srv/amazing-proof' >&2; exit 2;
+fi
+case "$CAPTURED_PROOF_ROOT" in
+  ""|/srv/amazing-proof) ;;
+  *) echo 'linux-run: unsupported captured proof root; expected /srv/amazing-proof' >&2; exit 2 ;;
+esac
+if [ -n "$CAPTURED_PROOF_ROOT" ]; then
+  [ "$HOST" = boat ] && [ -n "$REF" ] && [ -n "$ENDPOINT_RECEIPT" ] && [ -n "$COMPACT_ROOT" ] || {
+    echo 'linux-run: captured proof root requires exact-ref Boat endpoint capture' >&2; exit 2;
+  }
+fi
 if [ -e "$MAIN/.agents/.boat-only" ] && [ "$HOST" != boat ]; then
   echo "linux-run: this fleet is configured for Boat only; use --host boat" >&2
   exit 2
@@ -258,6 +272,19 @@ if [ "$HOST" = boat ]; then
     # Drop the lease if we exit before the remote command's own trap takes
     # over (failed or interrupted sync); a stale lease keeps the sandbox billed.
     trap 'if [ "${JOB_CAPTURED:-0}" = 0 ] || [ "${JOB_TERMINAL:-0}" = 1 ]; then $BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; fi; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"; rm -f "${SOURCE_ARCHIVE:-}"' EXIT
+    if [ -n "$CAPTURED_PROOF_ROOT" ]; then
+      setup_phase=captured-native-root
+      ROOT_PREFLIGHT_RECEIPT="$ENDPOINT_RECEIPT.proof-root.summary.json"
+      python3 "$REPO/scripts/native-proof-root.py" preflight --source "$COMMIT" --host "$BOAT_HOST" --port "$BOAT_PORT" --box "$BOAT_ID" --root "$CAPTURED_PROOF_ROOT" --receipt "$ROOT_PREFLIGHT_RECEIPT"
+      setup_rc=$?
+      if [ "$setup_rc" != 0 ]; then
+        echo "linux-run[$LANE]: captured-root setup exited $setup_rc; no source upload or supervisor started; original proof untouched" >&2
+        if [ -n "$SETUP_SUMMARY" ]; then
+          mkdir -p "$(dirname "$SETUP_SUMMARY")" && python3 "$REPO/scripts/gate-summary.py" failure --source-commit "$COMMIT" --shard "$LANE" --wrapper-exit 3 --phase-receipt "$ROOT_PREFLIGHT_RECEIPT" "$SETUP_SUMMARY" "$setup_phase" "$setup_rc"
+        fi
+        break
+      fi
+    fi
     # Seed only from the canonical local source below. Snapshot-backed template
     # directories can change metadata during tar reads and fail fresh shard
     # setup; a partial template seed must never become build input.
