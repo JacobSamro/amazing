@@ -1,0 +1,97 @@
+{
+  "state": "ONE_CLEAN_METADATA_CORRECTION_ADMITTED",
+  "source": "1192f45a1aa0873302c5a3fcf0905b886073cf76",
+  "recorded_base": "e1ce61fa8d7ce04c85258661aaff43164ab56724",
+  "worktree": "/Users/jMac/Projects/OpenSource/amazing-wt/css-public-failure-diagnostic-20261006",
+  "public_helper": {
+    "gate-failure-diagnostic.py": {
+      "bytes": 10892,
+      "sha256": "04e2fcf377efec416c05aacd226c118d478baedcec7cdb40fa879d7b8a566884"
+    },
+    "gate-failure-diagnostic-tests.py": {
+      "bytes": 5787,
+      "sha256": "222e94e59872b8eaca98ee08119250c7f17f4a94ddbdbe5e2291167b1ecbb7e4"
+    },
+    "gate-render-diagnostic-tests.py": {
+      "bytes": 6896,
+      "sha256": "0fd5b0f55f20a3a16e4db26e659ab44f7589b36b796a835e3d3b1b95616fde94"
+    }
+  },
+  "original_inputs": {
+    "original.gate.summary.json": {
+      "bytes": 47557,
+      "sha256": "da3ca45328352c601983af67fad8896c7b6025c805106026f3036aedf50b2af9"
+    },
+    "original.terminal.json": {
+      "bytes": 1380,
+      "sha256": "31135a7949d0fc4defe1e5653e2a0e408655d7f68fe09bcb5b157fab7a546545"
+    },
+    "plan.json": {
+      "bytes": 897,
+      "sha256": "b6de4b838fc45dd9c2a467856ba2aa4a6b84b24362f431c5633704fbe22a1e4b"
+    }
+  },
+  "original_endpoint": {
+    "schema": 2,
+    "lane": "css-grid-track-components-20261006",
+    "source_commit": "654358e6ddf5b4c33adfa8256709297d18239776",
+    "box_id": "bx_u5k4sfjy",
+    "host": "user@178.33.123.88",
+    "port": 19036,
+    "job_id": "8b88bc3a0fd34033bd0acf7389f41db0",
+    "output_root": "amazing/out/css-grid-track-components-20261006/grid-components-654358e6-initial/compact",
+    "command_sha256": "3304d54f6728880bb799d075a589331ac803079d5826d47e354b1bc3819abaf9",
+    "execution_sha256": "dbe0e67ac8fea44b3ab7b335690713e4502e8625cee231f27346a11e8256ad7c",
+    "source_archive_sha256": "9c72ef144a7ec412c6bf162e5ed148348f3862ddd40a29c0633d11e80650627b"
+  },
+  "original_terminal_actual_exit": 1,
+  "original_boot_id": "b5939151-e733-4c46-a5a8-76918d34bf8c",
+  "command": {
+    "bytes": 2673,
+    "sha256": "2e1bc0dc2aafa474c891c671930b16e3428a08e09753df3f8a542dce64ecede7"
+  },
+  "mission": {
+    "bytes": 14604,
+    "sha256": "cca549d17fbb8c121a1ed76019073d9a159b2af82fb6420e3f0def434e0eb4fd"
+  },
+  "public_caller_source": "e1ce61fa8d7ce04c85258661aaff43164ab56724",
+  "argv": [
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-track-components/published-caller/scripts/linux-run.sh",
+    "css-grid-track-components-20261006",
+    "--ref",
+    "1192f45a1aa0873302c5a3fcf0905b886073cf76",
+    "--existing-box",
+    "--mission-package",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-failure-diagnostic/mission.tar.gz",
+    "--mission-sha256",
+    "cca549d17fbb8c121a1ed76019073d9a159b2af82fb6420e3f0def434e0eb4fd",
+    "--endpoint-receipt",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-failure-diagnostic/endpoint.manifest.json",
+    "--compact-root",
+    "amazing/out/css-grid-track-components-20261006/grid-original-failure-diagnostic/compact",
+    "--command-file",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-failure-diagnostic/command.sh"
+  ],
+  "scope": {
+    "diagnostic_source": "1192f45a1aa0873302c5a3fcf0905b886073cf76",
+    "original_source": "654358e6ddf5b4c33adfa8256709297d18239776",
+    "original_job": "8b88bc3a0fd34033bd0acf7389f41db0",
+    "original_boot_id": "b5939151-e733-4c46-a5a8-76918d34bf8c",
+    "original_actual_exit": 1,
+    "original_case": "css__css-contain__contain-html-dir-003.html",
+    "original_case_classification": "crash",
+    "original_nextest_raw": {
+      "bytes": 720799,
+      "path": "/tmp/amazing-gate-command-y8nue0gg/output.log",
+      "sha256": "89859432062c80605771457926ab7424326867f4134aa3bf8b8d9ea632e59560"
+    },
+    "scope": "original24+new24 public controls + original nextest assertion + one lost render case; no build/test/corpus rerun/lifecycle/raw pull",
+    "maximum_diagnostic_bytes": 65536,
+    "report_sha_recorded_at_native_diagnostic_read_time": true
+  },
+  "no_allocation_until_root_public_source_review": true,
+  "initial_preallocation_exit": 2,
+  "initial_error": "mission plan does not contain the exact ref",
+  "initial_no_native_job_or_allocation": true,
+  "tooling_clean_rerun_used": true
+}

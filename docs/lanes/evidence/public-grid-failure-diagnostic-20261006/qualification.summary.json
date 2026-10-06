@@ -1,0 +1,49 @@
+{
+  "state": "QUALIFIED",
+  "source": "1192f45a1aa0873302c5a3fcf0905b886073cf76",
+  "controller": 64059,
+  "compact_fetch": 56479,
+  "actual_native_exit": 0,
+  "actual_fetch_exit": 0,
+  "controls": {
+    "original": 24,
+    "new": 24,
+    "pass": 48,
+    "fail": 0
+  },
+  "initial_preallocation_exit": 2,
+  "one_clean_tooling_metadata_retry_used": true,
+  "original_source": "654358e6ddf5b4c33adfa8256709297d18239776",
+  "original_actual_exit_preserved": 1,
+  "actual_failed_assertion": "css6_grid_values.rs:179 assert left!=right string template computed Some(none)",
+  "actual_lost_case_detail": {
+    "classification": "crash",
+    "detail": "renderer exit code 1: amazing render-wpt: TypeError: storage open: Io(\"Transport endpoint is not connected (os error 107)\")",
+    "detail_truncated": false,
+    "id": "css__css-contain__contain-html-dir-003.html"
+  },
+  "raw_report_sha_at_diagnostic_read": {
+    "bytes": 368781,
+    "path": "/tmp/amazing-render-gate-4qa3zlx8/css-css-contain/report.json",
+    "sha256": "832692cb1de7f4768375a286a6a824727d477126070fa6715f6346593c01f764"
+  },
+  "no_engine_rerun_rawpull_lifecycle": true,
+  "files": {
+    "original-controls.compact.json": {
+      "bytes": 1275,
+      "sha256": "362ff4a09b3dbcd0bd46421a1d26208b60b994e3c822ce72f9fed6ac7a5b5c7d"
+    },
+    "nextest-failure.compact.json": {
+      "bytes": 5667,
+      "sha256": "bf394bf6095e2ec2c57a42505c8d16b680ba36ba6f9ed65c8860ba505b27ffe3"
+    },
+    "lost-render-case.compact.json": {
+      "bytes": 1976,
+      "sha256": "84ab78ee1d79354a068090ea3c2c5062c2cda400588ce297bb6268f7f653c694"
+    },
+    "wrapped-case-controls.compact.json": {
+      "bytes": 1402,
+      "sha256": "6bc7d5660eb59b954f3de61536f7dd6a6a3890513c2f0679fa5e375690cecc9d"
+    }
+  }
+}
