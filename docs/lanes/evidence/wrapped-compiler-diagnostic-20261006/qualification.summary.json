@@ -1,0 +1,24 @@
+{
+  "state": "QUALIFIED_NATIVE0_COMPACT_FETCH0",
+  "qualified_source": "4f851aa42bd3620948587ae5dc6e03a308f5905d",
+  "recorded_origin_dev_base": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+  "controls": {
+    "passed": 17,
+    "failed": 0
+  },
+  "mission_controller": 18638,
+  "actual_exit": 0,
+  "fetch_controller": 84629,
+  "fetch_actual_exit": 0,
+  "real_original_failure_source": "782228bcbe354890096f68206674977fb406ac66",
+  "original_actual_exit": 1,
+  "original_failed_phase_exits": {
+    "nextest": 101,
+    "doctests": 101,
+    "build": 101,
+    "parsing": 101
+  },
+  "diagnostic": "ActualoneE0308componentarrayreferencecluster; noenginequalification/countsorreceiptsreconstructed",
+  "helper_sha256": "0891c3d38d9ba15ed3290c4d4c9ccf36c2fc30a4cd070a510576d9303c20892b",
+  "new_box_engine_build_raw_transfer_lifecycle": false
+}
