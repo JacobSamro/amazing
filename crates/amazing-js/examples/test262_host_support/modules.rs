@@ -32,6 +32,18 @@ impl ModuleResolver for Test262Resolver {
         // Host filesystem paths are Unicode scalar strings. Reject unrepresentable
         // requests; never coalesce lone-surrogate specifiers through replacement.
         let specifier = String::from_utf16(request.specifier.units()).map_err(|_| "module path has unpaired UTF16 units")?;
+        if specifier == "<module source>" {
+            if kind != "javascript" { return Err("unsupported module-source resource attribute".into()); }
+            let id = "\0test262:compiled-module-source".to_owned();
+            // The standard host resource is a genuinely compiled native module,
+            // not an ordinary source-text module with fabricated source metadata.
+            let source = "export const nativeSource = true;".encode_utf16().collect::<Vec<_>>();
+            let record = amazing_js::module::CompiledModuleSource::compile(id.clone(), &source)
+                .map_err(|error| error.to_string())?;
+            let loaded = LoadedModule { id, source: ModuleSource::CompiledSource(Rc::new(record)) };
+            self.normal_requests.borrow_mut().insert(key, loaded.clone());
+            return Ok(loaded);
+        }
         let canonical = self.canonical_path(&specifier, referrer)?;
         let bytes = std::fs::read(&canonical).map_err(|error| error.to_string())?;
         let path = Self::path_id(&canonical)?;

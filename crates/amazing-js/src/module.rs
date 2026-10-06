@@ -90,6 +90,7 @@ where
 
 include!("module_requests.rs");
 include!("module_data.rs");
+include!("module_native_source.rs");
 
 pub type ModuleNamespace = BTreeMap<String, JsValue>;
 
@@ -121,6 +122,8 @@ pub struct ModuleLinker<R: ModuleResolver> {
     expanded: HashSet<String>,
     synthetic: HashMap<String, (JsValue, Option<JsValue>)>,
     data_modules: HashMap<String, ModuleData>,
+    compiled_sources: HashMap<String, Rc<CompiledModuleSource>>,
+    source_objects: HashMap<String, JsValue>,
     loaded_host_requests: HashMap<(String, String), String>,
 }
 
@@ -141,7 +144,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             request_failures: HashMap::new(),
             instances: HashMap::new(),
             realm_global: None, async_sequence: 0,
-            request_metadata: HashMap::new(), expanded: HashSet::new(), synthetic: HashMap::new(), data_modules: HashMap::new(), loaded_host_requests: HashMap::new(),
+            request_metadata: HashMap::new(), expanded: HashSet::new(), synthetic: HashMap::new(), data_modules: HashMap::new(), loaded_host_requests: HashMap::new(), compiled_sources: HashMap::new(), source_objects: HashMap::new(),
         }
     }
 
@@ -169,7 +172,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             let record = &self.records[&record_id];
             for item in &record.module.items {
                 if let ModuleItem::Import(import) = item {
-                    if import.phase.as_deref() == Some("source") { self.module_source(&record.dependencies[&import_key(import)])?; continue; }
+                    if import.phase.as_deref() == Some("source") { self.require_module_source(&record.dependencies[&import_key(import)])?; continue; }
                     for binding in &import.bindings {
                         if binding.imported != "*"
                             && !self.has_export(
@@ -272,7 +275,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
     fn has_export(
         &self, id: &str, name: &str,
     ) -> Result<bool, ModuleFailure> {
-        Ok(matches!(self.resolve_export(id, name, &mut HashSet::new()), ExportResolution::Binding(..) | ExportResolution::Namespace(..)))
+        Ok(matches!(self.resolve_export(id, name, &mut HashSet::new()), ExportResolution::Binding(..) | ExportResolution::Namespace(..) | ExportResolution::Source(..)))
     }
 
     pub fn evaluate(
@@ -327,6 +330,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
     /// every record on every call would re-execute already-evaluated top-level code and, for a
     /// widely shared or cyclic graph reached through repeated dynamic imports, never terminate.
     fn instantiate_pending(&mut self, id: &str, root_interpreter: &mut Interpreter) -> Result<(), ModuleFailure> {
+        self.prepare_source_objects(root_interpreter);
         // A dynamic import may run with its importer's module environment
         // installed, but new modules belong to the original realm global.
         let realm_global = self.realm_global.get_or_insert_with(|| root_interpreter.global_env.clone()).clone();
@@ -561,8 +565,16 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         if self.is_synthetic_record(id) && name == "default" {
             return Ok(self.instances[id].env.local_cell("\0module.default"));
         }
-        if matches!(self.resolve_export(id, name, &mut HashSet::new()), ExportResolution::Missing | ExportResolution::Ambiguous) {
-            return Ok(None);
+        match self.resolve_export(id, name, &mut HashSet::new()) {
+            ExportResolution::Missing | ExportResolution::Ambiguous => return Ok(None),
+            // Source records deliberately have no evaluated ModuleInstance.
+            // Follow their terminal source value directly, including through
+            // cyclic/star forwarding, rather than a forwarding local cell
+            // that may not have been initialized yet in this graph walk.
+            ExportResolution::Source(target) => {
+                return Ok(Some(BindingCell::new_value(self.module_source(&target)?)));
+            }
+            _ => {}
         }
         if !visiting.insert((id.to_owned(), name.to_owned())) {
             return Ok(None);
@@ -1172,3 +1184,7 @@ mod utf16_source_tests;
 #[cfg(test)]
 #[path = "module_data_tests.rs"]
 mod data_tests;
+
+#[cfg(test)]
+#[path = "module_source_record_tests.rs"]
+mod source_record_tests;

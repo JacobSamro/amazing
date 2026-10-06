@@ -2546,6 +2546,12 @@ impl Interpreter {
                 || std::ptr::fn_addr_eq(*native, std_set_constructor as crate::value::NativeFn)) {
             return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
         }
+        // %AbstractModuleSource% always rejects construction in its own realm;
+        // its algorithm never allocates or reads NewTarget.prototype.
+        if matches!(&fun.body, FunctionBody::Native(native)
+            if std::ptr::fn_addr_eq(*native, native_abstract_module_source as crate::value::NativeFn)) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
+        }
         // CreateDynamicFunction owns coercion and all three parse goals before
         // NewTarget.prototype. Generic allocation would reverse that order.
         if matches!(&fun.body, FunctionBody::Native(native)

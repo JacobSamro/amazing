@@ -92,9 +92,6 @@ fn gc(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw
 fn agent(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     unsupported("host.agent")
 }
-fn abstract_module(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    unsupported("host.AbstractModuleSource")
-}
 fn coerce(i: &mut Interpreter, v: JsValue) -> Result<String, Throw> {
     let string = i.global_env.resolve(CAPTURED_STRING)
         .ok_or_else(|| Throw::type_error("Test262 String intrinsic was not installed"))?;
@@ -134,10 +131,10 @@ fn install(i: &mut Interpreter) {
         ("createRealm", realm),
         ("detachArrayBuffer", detach),
         ("gc", gc),
-        ("AbstractModuleSource", abstract_module),
     ] {
         put(&mut host, name, native(i, name, call));
     }
+    put(&mut host, "AbstractModuleSource", i.binding_abstract_module_source_constructor());
     let mut agents = JsObject::ordinary();
     agents.proto = Some(i.object_proto.clone());
     for name in [
@@ -373,7 +370,7 @@ const CAPABILITIES: Capabilities = Capabilities {
     gc: false,
     agent: false,
     is_html_dda: false,
-    abstract_module_source: false,
+    abstract_module_source: true,
     eval_script: true,
     global: true,
     print: true,

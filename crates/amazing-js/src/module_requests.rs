@@ -84,6 +84,8 @@ pub struct LoadedModule {
 }
 #[derive(Debug, Clone)]
 pub enum ModuleSource {
+    /// A genuine host-defined parsed source record; ordinary JavaScript stays source-less.
+    CompiledSource(Rc<CompiledModuleSource>),
     JavaScript(String),
     /// Exact source code units supplied by a typed host, including lone surrogates.
     JavaScriptUtf16(Vec<u16>),
@@ -137,6 +139,15 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         if let Some(failure) = self.cached_load_failure(&id, false) { return Err(failure); }
         if !self.records.contains_key(&id) {
             match loaded.source {
+                ModuleSource::CompiledSource(source) => {
+                    if source.id() != id {
+                        return Err(ModuleFailure::syntax(ModulePhase::Resolution, "compiled module canonical identity mismatch"));
+                    }
+                    self.records.insert(id.clone(), ModuleRecord {
+                        id: id.clone(), module: source.module.clone(), dependencies: BTreeMap::new(),
+                    });
+                    self.compiled_sources.insert(id.clone(), source);
+                }
                 ModuleSource::JavaScript(source) => {
                     self.load_text_record(&id, &source.encode_utf16().collect::<Vec<_>>(), false)?;
                 }
@@ -187,6 +198,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         Ok(())
     }
     fn module_source(&self, id: &str) -> Result<JsValue, ModuleFailure> {
+        if let Some(source) = self.source_objects.get(id) { return Ok(source.clone()); }
         self.synthetic
             .get(id)
             .and_then(|(_, source)| source.clone())

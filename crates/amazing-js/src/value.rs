@@ -242,6 +242,7 @@ impl fmt::Debug for Obj {
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
             (Exotic::ThreadGenerator(_), _) => write!(f, "[generator]"),
             (Exotic::ModuleNamespace(_) | Exotic::DeferredModuleNamespace(_), _) => write!(f, "[module namespace]"),
+            (Exotic::ModuleSource(_), _) => write!(f, "[module source]"),
             (Exotic::ModuleCallback(_), _) => write!(f, "[module continuation]"),
             (Exotic::ShadowRealm(_), _) => write!(f, "[ShadowRealm]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
@@ -827,6 +828,8 @@ pub enum Exotic {
     /// default (tree-walking) execution path, as opposed to `Generator`'s bytecode-VM frame
     /// (JSVM-8; see `crates/amazing-js/src/interp_coroutine.rs`).
     ThreadGenerator(Rc<RefCell<crate::interp::ThreadGeneratorState>>),
+    /// Object-owned genuine compiled source; its record contains only source/AST data.
+    ModuleSource(Rc<crate::module::CompiledModuleSource>),
     ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
     DeferredModuleNamespace(Rc<DeferredNamespaceState>),
     ModuleCallback(Rc<ModuleCallbackState>),

@@ -292,6 +292,12 @@ impl Interpreter {
             self.generator_proto.clone(), self.async_generator_proto.clone(),
             self.legacy_iterator_proto.clone(), self.pair_iterator_proto.clone(),
             self.regexp_string_iterator_proto.clone()];
+        // Private host intrinsics are not reachable from globalThis. Their real
+        // constructor/prototype graph must still receive this realm's identity.
+        for (constructor, prototype) in self.intrinsic_constructors.values() {
+            pending.push(constructor.clone());
+            pending.push(prototype.clone());
+        }
         let mut seen = std::collections::HashSet::new();
         while let Some(object) = pending.pop() {
             if !seen.insert(Rc::as_ptr(&object.0) as usize) { continue; }

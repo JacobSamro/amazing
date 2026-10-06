@@ -43,6 +43,7 @@ impl<R: ModuleResolver + 'static> ModuleLinker<R> {
     ) -> Result<JsValue, ModuleFailure> {
         let id = linker.borrow_mut().load_request(request, referrer)?;
         if request.phase == ImportPhase::Source {
+            linker.borrow_mut().prepare_source_objects(i);
             return linker.borrow().module_source(&id);
         }
         linker.borrow_mut().instantiate_pending(&id, i)?;

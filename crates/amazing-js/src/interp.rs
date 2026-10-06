@@ -654,6 +654,7 @@ impl Interpreter {
         i.stamp_realm_objects();
         i.install_builtins();
         i.install_shadow_realm();
+        i.install_abstract_module_source();
         i.install_regexp();
         i.install_location();
         i.install_history();
@@ -1949,3 +1950,6 @@ mod viewport_metrics_tests;
 include!("interp_shadow_realm.rs");
 
 include!("interp_module_bytes.rs");
+
+include!("interp_module_source.rs");
+include!("interp_module_source_tests.rs");

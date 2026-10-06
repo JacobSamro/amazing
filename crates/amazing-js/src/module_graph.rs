@@ -7,6 +7,7 @@
 enum ExportResolution {
     Binding(String, String),
     Namespace(String),
+    Source(String),
     Missing,
     Ambiguous,
 }
@@ -119,10 +120,15 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                                     .iter()
                                     .find(|binding| binding.local.name == entry.local)
                                 {
-                                    if import.phase.as_deref()==Some("source") || import.phase.as_deref()==Some("defer") {
+                                    let dependency = &record.dependencies[&import_key(import)];
+                                    if import.phase.as_deref()==Some("source") {
+                                        // A source re-export resolves to the underlying record,
+                                        // independent of the forwarding module/local spelling.
+                                        return ExportResolution::Source(dependency.clone());
+                                    }
+                                    if import.phase.as_deref()==Some("defer") {
                                         return ExportResolution::Binding(id.into(),entry.local.clone());
                                     }
-                                    let dependency = &record.dependencies[&import_key(import)];
                                     return if binding.imported == "*" {
                                         ExportResolution::Namespace(dependency.clone())
                                     } else {

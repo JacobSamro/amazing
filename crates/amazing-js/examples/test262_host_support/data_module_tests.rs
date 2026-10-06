@@ -105,3 +105,32 @@ fn shadow_import_value_uses_typed_child_records_and_primitive_wrapping() {
         truth(&mut i, "(()=>{try{read();return false}catch(e){return e instanceof TypeError}})()");
     }
 }
+
+
+#[test]
+fn installed_module_source_resource_is_compiled_cached_and_reexported_across_diamonds() {
+    let files=DataFiles::new();files.put("entry.js",b"");
+    files.put("a.js",b"import source a from '<module source>';export {a as value};");
+    files.put("b.js",b"import source b from '<module source>';export {b as value};");
+    files.put("diamond.js",b"export * from './a.js';export * from './b.js';");
+    let mut i=Interpreter::new();install(&mut i);let(linker,root)=files.install(&mut i);
+    linker.borrow_mut().link(&root,"import {value} from './diamond.js';import * as ns from './diamond.js';import source direct from '<module source>';export {value,ns,direct};").unwrap();
+    let output=ModuleLinker::evaluate_shared(&linker,&root,&mut i).unwrap();
+    assert!(i.binding_same_value(&output["value"],&output["direct"]));
+    let ns=i.binding_get_property(&output["ns"],"value").unwrap();assert!(i.binding_same_value(&ns,&output["direct"]));
+    i.global_env.declare_var("actualSource",output["direct"].clone()).unwrap();
+    truth(&mut i,"actualSource instanceof $262.AbstractModuleSource&&Object.prototype.toString.call(actualSource)==='[object CompiledModuleSource]'");
+    run(&mut i,"var sourceAgain,evaluated;import.source('<module source>').then(v=>sourceAgain=v);import('<module source>').then(v=>evaluated=v)",&root);
+    truth(&mut i,"sourceAgain===actualSource&&evaluated.nativeSource===true");
+}
+
+#[test]
+fn installed_module_source_resource_respects_child_realms_attributes_and_real_file_absence() {
+    let files=DataFiles::new();files.put("entry.js",b"");files.put("plain.js",b"export const value=1");
+    let mut i=Interpreter::new();install(&mut i);let(_,root)=files.install(&mut i);
+    run(&mut i,r#"var original,childSource,childConstructor;var child=$262.createRealm();childConstructor=child.AbstractModuleSource;import.source('<module source>').then(v=>original=v);child.evalScript("import.source('<module source>').then(v=>globalThis.moduleSource=v)")"#,&root);
+    // Public cross-realm global access preserves the actual child's native brand.
+    truth(&mut i,"original instanceof $262.AbstractModuleSource&&child.global.moduleSource instanceof childConstructor&&!(child.global.moduleSource instanceof $262.AbstractModuleSource)&&child.global.moduleSource!==original");
+    run(&mut i,"var attrs,plain;import.source('<module source>',{with:{type:'text'}}).catch(e=>attrs=e);import.source('./plain.js').catch(e=>plain=e)",&root);
+    truth(&mut i,"attrs instanceof TypeError&&plain instanceof SyntaxError");
+}

@@ -1,0 +1,13 @@
+# Native module sources and source binding exports
+
+Recorded ready base ba82c97259f84c89dd1ce8a6906a3ee0a9ee38bd. The tested JS code is byte-identical to candidate7d4ee942 on publishedae5; these published bases have no amazing-js drift.
+
+A validated native record retains original UTF16 and the genuine Module parse. A per-realm factory allocates its native-branded object once, with the private AbstractModuleSource intrinsic and correct creation realm/prototype chain. The installed Test262 `<module source>` resource compiles a real nonempty module; ordinary SourceTextModules retain absent source and SyntaxError. Source re-exports resolve to their terminal canonical record, so named imports, namespace getters and star diamonds no longer depend on forwarding local-cell initialization.
+
+Linux BEFORE468f: workspace5180PASS/0FAIL/17skip, docs36PASS, installed host16PASS/2new semanticFAIL. AFTER7d4e: workspace5192PASS/0FAIL/17skip, docs36PASS, host18PASS/0FAIL; release0, native job0/fetch0 both sides. Eight complete directory pairs in both modes preserve all passing files/variants, with +9files/+10variants each mode. All three module-code source-binding cases, all eight AbstractModuleSource cases and both staged source-phase cases pass. Original module14/finalURL/host8/typed7+7/Shadow controls remain.
+
+The initial shared host fixture failed Rust parsing at one nested string (three compiler diagnostics), while its original workspace/docs/official corpus were genuine. Its source and receipts remain; the exact same raw-string delimiting correction was made on both measurement sources. Official corpus bytes/expectations were never changed. All629ELFs plus generated/raw manifests were retained/hash-read before each fresh owned target retired. Raw native/tmp outputs are UNARCHIVED: terminal/compact fetch alone is not stop-safe; root owns custody and lifecycle.
+
+Compact evidence retains exact source/input/binary/runner hashes, raw paths, original failure provenance and all gain/loss identities. Root merged workspace+16-shard gate remains final publication authority; this lane proof does not claim that merge gate has run.
+
+Root combined integration source76f7446bfdd074fd5879302f9e6ed4be29436dd5:5351 workspace passes/17skip/39doctests; full16 Test26252879files/101538variants (+10/+12 zeroLost against immediately preceding published engineffaf/11a8). Combined source also includes native SetPrototypeOf, report-uri sibling admission and captured eager iterator tickets. Shared authenticated compact proof: docs/lanes/evidence/modules-prototype-report-uri-iterator-integration/root-integration. Intermediate packaging commits were not individually executed; final engine must remain byteexact tested source.
