@@ -1,0 +1,2413 @@
+{
+  "schema": 1,
+  "state": "complete-paired-compact-comparison",
+  "base": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+  "before": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+  "after": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+  "pairs": [
+    {
+      "mode": "default",
+      "selector": "language/",
+      "before_compact_sha256": "bf9739fad443a5b77a1bb451d720d188fcba26799c5f250c643fa89ca632b447",
+      "after_compact_sha256": "0afeaea0967a037d4fe63f8d766118ebeb2bce17bf58199059ac76caf22d868d",
+      "before_raw": {
+        "bytes": 14471949,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-00.report.json",
+        "sha256": "172641c1e0462335c597e950c12b655fb3f2025ae2905c6ebd81ac9a70b9135c"
+      },
+      "after_raw": {
+        "bytes": 14471949,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-00.report.json",
+        "sha256": "00ccd21abe844fd947f9528ae9315106f320ee9d56d8d4fc9e7bf2ba8060ecec"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "b5b2f12e05a6138f23c6dbbd9d7485fc8bae514927af68b3aa8987a7da20b721",
+      "classification_after": "b5b2f12e05a6138f23c6dbbd9d7485fc8bae514927af68b3aa8987a7da20b721",
+      "record_inventory": 24866,
+      "before_summary": {
+        "files": {
+          "fail": 11,
+          "pass": 24535,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 11,
+          "pass": 24535,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "before_pass_files": 24535,
+      "after_pass_files": 24535,
+      "before_pass_variants": 45327,
+      "after_pass_variants": 45327,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "staging/sm/Function/",
+      "before_compact_sha256": "e7e2b140c58dda7606d7a996a88ac2399cd77d61ed08c08e30ab89ae60af8466",
+      "after_compact_sha256": "0240d7e0d07eafd7ad34f1b51b49ee9b2863124ec62ef305f25e5b5ea2f785d0",
+      "before_raw": {
+        "bytes": 7655011,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-01.report.json",
+        "sha256": "5d1cf6909a4b3a4bc994a3548346f6113c034012ac12b00f332186377e9301cc"
+      },
+      "after_raw": {
+        "bytes": 7654541,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-01.report.json",
+        "sha256": "f9ecaff7a59a2f64cffbeec7049f10dcda167fd44f5878f07912a3367f77ed95"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "1ee1d408863ccc62c5cf5040d45fd6d734328d62f3298846317bb999b5cf8f98",
+      "classification_after": "c46ecb241bc188c304c64ec3592540ac3cc2bbedd05a46ec890b3980c388168a",
+      "record_inventory": 347,
+      "before_summary": {
+        "files": {
+          "fail": 5,
+          "pass": 48,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 4,
+          "pass": 49,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 48,
+      "after_pass_files": 49,
+      "before_pass_variants": 78,
+      "after_pass_variants": 80,
+      "lost_files": [],
+      "gained_files": [
+        "staging/sm/Function/spread-iterator-primitive.js"
+      ],
+      "lost_variants": [],
+      "gained_variants": [
+        [
+          "staging/sm/Function/spread-iterator-primitive.js",
+          "non-strict"
+        ],
+        [
+          "staging/sm/Function/spread-iterator-primitive.js",
+          "strict"
+        ]
+      ]
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Array/",
+      "before_compact_sha256": "316c1fa04c9d580290bad1c20d6a602291ceb2435e7418edacb48fe6a62ef1db",
+      "after_compact_sha256": "4068fb63da333bcbd1f40e7478ef8b862cbee46a9cdd05b8917d7589059ab8d8",
+      "before_raw": {
+        "bytes": 8167885,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-02.report.json",
+        "sha256": "caae06dc0c66de3ce4598d592b61b9ada49986a9f9fd934104fda52bce92ad66"
+      },
+      "after_raw": {
+        "bytes": 8167885,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-02.report.json",
+        "sha256": "7411a132fa5b7a2ef96e28663f790fd096666168701daf457a4a32256f8819c2"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "5baa91fec8790ee701659bf371d433d1258cea3167b109e7d4df8353af084a63",
+      "classification_after": "5baa91fec8790ee701659bf371d433d1258cea3167b109e7d4df8353af084a63",
+      "record_inventory": 3378,
+      "before_summary": {
+        "files": {
+          "pass": 3083,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 3083,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "before_pass_files": 3083,
+      "after_pass_files": 3083,
+      "before_pass_variants": 6119,
+      "after_pass_variants": 6119,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/String/",
+      "before_compact_sha256": "5072ee45ba994ed05a83420fc826001a8342527342fa78c3c7603f6d6a8025e5",
+      "after_compact_sha256": "060ee41f5c252d1d679e56dcb3abb52c049d981179d4cd2e499574da904b33eb",
+      "before_raw": {
+        "bytes": 7844775,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-03.report.json",
+        "sha256": "be9eb201a9982b3ab91f9f338e299b540398b9b498d2972109cee7bb72cffce7"
+      },
+      "after_raw": {
+        "bytes": 7844775,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-03.report.json",
+        "sha256": "b661003aac832e3490a37ffc1c87349408f7dddebadf068f64fa590d3fe43f76"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "506fd103355fa21d840187ccfb27f1c702d0ffbf6e660654073f583ecfe8177c",
+      "classification_after": "506fd103355fa21d840187ccfb27f1c702d0ffbf6e660654073f583ecfe8177c",
+      "record_inventory": 1628,
+      "before_summary": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "before_pass_files": 1328,
+      "after_pass_files": 1328,
+      "before_pass_variants": 2653,
+      "after_pass_variants": 2653,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Iterator/",
+      "before_compact_sha256": "41de8e83dddce23ef86f2efbc9fba3a2ea021e024b4fc34a306d97dffc19931f",
+      "after_compact_sha256": "df2c4ef4c61be027ff90d53dfb42f9de923ccd2a636367ae5ebcf135d2ae7ee2",
+      "before_raw": {
+        "bytes": 7778563,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-04.report.json",
+        "sha256": "957094011fa8d73cd474691a13c56cda64ac7d1eefac81fa258252574c7c51f5"
+      },
+      "after_raw": {
+        "bytes": 7778563,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-04.report.json",
+        "sha256": "1ed2328efb24e377bf621685b0e1253cae3a875e6dd91ee51b1d3bbc840d0235"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "91d20504f390cdf5f2ad37cb361a6e7dca95dda7b6b94f499768b66cf11931ed",
+      "classification_after": "91d20504f390cdf5f2ad37cb361a6e7dca95dda7b6b94f499768b66cf11931ed",
+      "record_inventory": 948,
+      "before_summary": {
+        "files": {
+          "pass": 654,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 654,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 654,
+      "after_pass_files": 654,
+      "before_pass_variants": 1308,
+      "after_pass_variants": 1308,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Set/",
+      "before_compact_sha256": "82d5f8f2de4aa2c9429fbc521cca5ee9b92d5e95524387471723f1df6c7d19ec",
+      "after_compact_sha256": "43ca7aa5c3c8c053599ce192db3ddc3cf58b52801f1bc7f37276146a09b87b1a",
+      "before_raw": {
+        "bytes": 7716451,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-05.report.json",
+        "sha256": "a3579635508e2723807a4fe36a3781fc6c98bf34428caceae61900920c9bfa0e"
+      },
+      "after_raw": {
+        "bytes": 7716451,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-05.report.json",
+        "sha256": "13708bcca65beaea5d29f33b4a9deec19f28f874dbf773b9777efbf385638df6"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "d2be2c281d377746360adbca28082f1c18c60c5772ff0cfb922081a857aa2044",
+      "classification_after": "d2be2c281d377746360adbca28082f1c18c60c5772ff0cfb922081a857aa2044",
+      "record_inventory": 677,
+      "before_summary": {
+        "files": {
+          "pass": 383,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 383,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 383,
+      "after_pass_files": 383,
+      "before_pass_variants": 764,
+      "after_pass_variants": 764,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Map/",
+      "before_compact_sha256": "56f2b076e046c3a03422100309aeb679a4a8960c65d55eef7ca8e2c1a64bdc88",
+      "after_compact_sha256": "5d2411b878f8dd9a4a017ce0a4621a33eeab78b9555ae6f916590db65e0f0c4c",
+      "before_raw": {
+        "bytes": 7682736,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-06.report.json",
+        "sha256": "7545a08cad604ba79be499972a5338c76c4f33b85ff2af07d8db0ea67ea7b63f"
+      },
+      "after_raw": {
+        "bytes": 7682736,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-06.report.json",
+        "sha256": "fb4f839cc1333574cc698651263ef9f535dff5fab0b0027b46d4523c7349d691"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "f01597e1189bc4e586816a6d2d87a45325e8b790b5941bed1c3402969e8d6d46",
+      "classification_after": "f01597e1189bc4e586816a6d2d87a45325e8b790b5941bed1c3402969e8d6d46",
+      "record_inventory": 498,
+      "before_summary": {
+        "files": {
+          "pass": 204,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 204,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 204,
+      "after_pass_files": 204,
+      "before_pass_variants": 405,
+      "after_pass_variants": 405,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/TypedArray/",
+      "before_compact_sha256": "a302dab148c942585ae6615e07ea35630c1386dea3488ea496ab1981a3841fa7",
+      "after_compact_sha256": "46406028b6ede8dd945173233c964a907896596cb24b9a2c82a4cb428c2b3533",
+      "before_raw": {
+        "bytes": 8025177,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-07.report.json",
+        "sha256": "048d89443cf4d8f4511d9ee91ea0b03b9eb076fa0f21e3a74536c62e011525be"
+      },
+      "after_raw": {
+        "bytes": 8025177,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-07.report.json",
+        "sha256": "89a89463fbf49fd210fd39bc7b068f7c1fc9b3d809510003e2dbb51241aa3ccb"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "ec4e4c7b9a746c224ea5eb541744097b4744458eb88307faaeee6a0634979daa",
+      "classification_after": "ec4e4c7b9a746c224ea5eb541744097b4744458eb88307faaeee6a0634979daa",
+      "record_inventory": 1740,
+      "before_summary": {
+        "files": {
+          "fail": 51,
+          "pass": 1395,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 51,
+          "pass": 1395,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 1395,
+      "after_pass_files": 1395,
+      "before_pass_variants": 2774,
+      "after_pass_variants": 2774,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/JSON/",
+      "before_compact_sha256": "e8757d732092559d062248c34fb2b7b337ed3b8eca0cd069494bd1aca62fbcbc",
+      "after_compact_sha256": "885695fd37b826c57b8e9fae45c0ae50a000a9030a9102e98a52fd6e010ffe23",
+      "before_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-08.report.json",
+        "sha256": "e9600ac47214ecae67610d36dc8beec49f75222f3a22e5ea6d7ae1eb98cf8a16"
+      },
+      "after_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-08.report.json",
+        "sha256": "69743b8a50015ea7ad33dd5a1d806b2089d98531aa75696c71567496a83ec25c"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "classification_after": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "record_inventory": 459,
+      "before_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 165,
+      "after_pass_files": 165,
+      "before_pass_variants": 330,
+      "after_pass_variants": 330,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/ShadowRealm/",
+      "before_compact_sha256": "1365f563799fe2dfddea53a17c51d279e22818d00d86babce6556033ebd84a4a",
+      "after_compact_sha256": "458c11a71d4cdf658449991d4d902f1ebf0a7f472748036922645cb8481da887",
+      "before_raw": {
+        "bytes": 7658715,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-09.report.json",
+        "sha256": "1df896e125695395694927036a9ba7ff657048e781c61980c2beb6dc78dc8f1e"
+      },
+      "after_raw": {
+        "bytes": 7658714,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-09.report.json",
+        "sha256": "6cfb6b4cd1d08cef40e08924cbe8b9bd3ffcf272c5be1f157f4c4a465e7f0912"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "7320246beb5292fd5223ed2a0e7064b337ea867480431ba7816eecebc6a19715",
+      "classification_after": "7320246beb5292fd5223ed2a0e7064b337ea867480431ba7816eecebc6a19715",
+      "record_inventory": 358,
+      "before_summary": {
+        "files": {
+          "pass": 64,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 64,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 64,
+      "after_pass_files": 64,
+      "before_pass_variants": 124,
+      "after_pass_variants": 124,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Promise/",
+      "before_compact_sha256": "6ec24c6e963fd2231e4087b3d9e71e624d47137473add361cfc0379ad21fc1c2",
+      "after_compact_sha256": "ec94e28bdc273fc59365d87caff42c999592e19a473a946c7b176e798d9db424",
+      "before_raw": {
+        "bytes": 7779881,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/default-10.report.json",
+        "sha256": "4f914aeee2ad6b9246c739bfa951b81a8349d8b3fce5fe155a6db4cde5ddf4cc"
+      },
+      "after_raw": {
+        "bytes": 7779881,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/default-10.report.json",
+        "sha256": "027364b59b6bb151839f8a07d9d622b3bf79ffcc6c9c95aacc190672e467d819"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "classification_after": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "record_inventory": 1026,
+      "before_summary": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 732,
+      "after_pass_files": 732,
+      "before_pass_variants": 1458,
+      "after_pass_variants": 1458,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "language/",
+      "before_compact_sha256": "bd1ab90c0348a9c50185e63333367396413068bcdaa2e2ddb1a2c2f73df57d52",
+      "after_compact_sha256": "21453022de94507d6baef161ef4ff5666e6de7f20fbaae2f0dbb47a44278a154",
+      "before_raw": {
+        "bytes": 14471949,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-00.report.json",
+        "sha256": "12806c4cc4c91f2d963b941cbc749373142fba927d28b763d8b51a163b9b7848"
+      },
+      "after_raw": {
+        "bytes": 14471949,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-00.report.json",
+        "sha256": "b247c0f2d4bfdf8d40ed100dc064adb896d0d7ddfdbfce6867264cd47d10094c"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "b5b2f12e05a6138f23c6dbbd9d7485fc8bae514927af68b3aa8987a7da20b721",
+      "classification_after": "b5b2f12e05a6138f23c6dbbd9d7485fc8bae514927af68b3aa8987a7da20b721",
+      "record_inventory": 24866,
+      "before_summary": {
+        "files": {
+          "fail": 11,
+          "pass": 24535,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 11,
+          "pass": 24535,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "before_pass_files": 24535,
+      "after_pass_files": 24535,
+      "before_pass_variants": 45327,
+      "after_pass_variants": 45327,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "staging/sm/Function/",
+      "before_compact_sha256": "70761e5f9340bf8aa2c15c19c7125e2b167cf28ba9c6be60f8b5bda03fb1bdd4",
+      "after_compact_sha256": "4464425080cd4032a6ddcc6bd62e49e7e660bfc5a0be59d676b88849a2335385",
+      "before_raw": {
+        "bytes": 7655012,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-01.report.json",
+        "sha256": "b7e7a0bb661be4773b3dc6da30fa99d68d5b911610bef6b8d16d05dfe5b3b953"
+      },
+      "after_raw": {
+        "bytes": 7654541,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-01.report.json",
+        "sha256": "875880ec719359d40bede09fb817061364668473793c32038fb1d165463a2cdb"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "1ee1d408863ccc62c5cf5040d45fd6d734328d62f3298846317bb999b5cf8f98",
+      "classification_after": "c46ecb241bc188c304c64ec3592540ac3cc2bbedd05a46ec890b3980c388168a",
+      "record_inventory": 347,
+      "before_summary": {
+        "files": {
+          "fail": 5,
+          "pass": 48,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 4,
+          "pass": 49,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 48,
+      "after_pass_files": 49,
+      "before_pass_variants": 78,
+      "after_pass_variants": 80,
+      "lost_files": [],
+      "gained_files": [
+        "staging/sm/Function/spread-iterator-primitive.js"
+      ],
+      "lost_variants": [],
+      "gained_variants": [
+        [
+          "staging/sm/Function/spread-iterator-primitive.js",
+          "non-strict"
+        ],
+        [
+          "staging/sm/Function/spread-iterator-primitive.js",
+          "strict"
+        ]
+      ]
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Array/",
+      "before_compact_sha256": "a89e8911144a49a6eaff8d71b0a39264c794c0c135fae00ad838790bc76ee825",
+      "after_compact_sha256": "d9fd91d31eedcc09174d8dcc92c7faf1d4f978b769444a228bf4ca72e08de235",
+      "before_raw": {
+        "bytes": 8167884,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-02.report.json",
+        "sha256": "0e87498c79d185a48afe49af9c2947e4bad404c1edd0800d198d90dced3479fe"
+      },
+      "after_raw": {
+        "bytes": 8167885,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-02.report.json",
+        "sha256": "15a2687a8b33e74026b20df1dcb9e77ba7358568bcc2b7d07423935f51b5b427"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "5baa91fec8790ee701659bf371d433d1258cea3167b109e7d4df8353af084a63",
+      "classification_after": "5baa91fec8790ee701659bf371d433d1258cea3167b109e7d4df8353af084a63",
+      "record_inventory": 3378,
+      "before_summary": {
+        "files": {
+          "pass": 3083,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 3083,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "before_pass_files": 3083,
+      "after_pass_files": 3083,
+      "before_pass_variants": 6119,
+      "after_pass_variants": 6119,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/String/",
+      "before_compact_sha256": "e363bf57c4637a0ab22c148b94aa735f19aa7d55d64701cb31ef95b0032ec31f",
+      "after_compact_sha256": "2076764e87e33f4b50d4b68dd1ab0d9f7824daf4b3bbe3540b46b7b6d8bc86ce",
+      "before_raw": {
+        "bytes": 7844775,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-03.report.json",
+        "sha256": "5bf16a30c8338759bae45569f7786c83652d2d1647ea76f7193d09f15a9cd5a8"
+      },
+      "after_raw": {
+        "bytes": 7844775,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-03.report.json",
+        "sha256": "639e909c9eb0a20901532780f8e867a866e8197cba12f65616d6c9b2ae9e7215"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "506fd103355fa21d840187ccfb27f1c702d0ffbf6e660654073f583ecfe8177c",
+      "classification_after": "506fd103355fa21d840187ccfb27f1c702d0ffbf6e660654073f583ecfe8177c",
+      "record_inventory": 1628,
+      "before_summary": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "before_pass_files": 1328,
+      "after_pass_files": 1328,
+      "before_pass_variants": 2653,
+      "after_pass_variants": 2653,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Iterator/",
+      "before_compact_sha256": "75ffdecfb0866743ceac117b59ec98fb4659f045bb59882202f6da0b2e935fdf",
+      "after_compact_sha256": "9ff83abbe589f37bb3861b6e63d48ae217e583c0cf505c32b6bfcd6f7a7400be",
+      "before_raw": {
+        "bytes": 7778563,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-04.report.json",
+        "sha256": "b0a85fa936ac4effdc605be063bb650ec4023230db39e885983a297b670d05df"
+      },
+      "after_raw": {
+        "bytes": 7778563,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-04.report.json",
+        "sha256": "c8123d77573a46249b9afa39d70ee60aa2596e95926c1e099b1a82918a7da527"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "91d20504f390cdf5f2ad37cb361a6e7dca95dda7b6b94f499768b66cf11931ed",
+      "classification_after": "91d20504f390cdf5f2ad37cb361a6e7dca95dda7b6b94f499768b66cf11931ed",
+      "record_inventory": 948,
+      "before_summary": {
+        "files": {
+          "pass": 654,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 654,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 654,
+      "after_pass_files": 654,
+      "before_pass_variants": 1308,
+      "after_pass_variants": 1308,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Set/",
+      "before_compact_sha256": "0c1dae695deb6674247813788b545846c38c42338514d4d97d796e79bf6c4bd8",
+      "after_compact_sha256": "64c571e6814ac09796bb6433e5de96d98ca6581cc117eaca69d3a5695fe40013",
+      "before_raw": {
+        "bytes": 7716451,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-05.report.json",
+        "sha256": "260a6cf9fdcd7eba50bd28b3c2af52a9e60c2b662885a5c5d19f91c46200cb12"
+      },
+      "after_raw": {
+        "bytes": 7716451,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-05.report.json",
+        "sha256": "04cdccfdc2070973c3d7be6cabc40ccf02205a7c08ac823d057aec30547ec356"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "d2be2c281d377746360adbca28082f1c18c60c5772ff0cfb922081a857aa2044",
+      "classification_after": "d2be2c281d377746360adbca28082f1c18c60c5772ff0cfb922081a857aa2044",
+      "record_inventory": 677,
+      "before_summary": {
+        "files": {
+          "pass": 383,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 383,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 383,
+      "after_pass_files": 383,
+      "before_pass_variants": 764,
+      "after_pass_variants": 764,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Map/",
+      "before_compact_sha256": "a9f6b966d368fc0f56511100208bddae51102967908e3fb1be059d6a2b23ec6d",
+      "after_compact_sha256": "4b86675a6f5333ef5932bb986027acb3a2766a05ca8e7e1eded66e1ed22e5807",
+      "before_raw": {
+        "bytes": 7682736,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-06.report.json",
+        "sha256": "7ae4bb073272978923bcd9a8dd59591fada46329dbaeebf8bbff03a50dd99dd4"
+      },
+      "after_raw": {
+        "bytes": 7682736,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-06.report.json",
+        "sha256": "e152c83292e6deb0c7443182e122379c28d2a8049ba0ed1b0870d62f515e35b4"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "f01597e1189bc4e586816a6d2d87a45325e8b790b5941bed1c3402969e8d6d46",
+      "classification_after": "f01597e1189bc4e586816a6d2d87a45325e8b790b5941bed1c3402969e8d6d46",
+      "record_inventory": 498,
+      "before_summary": {
+        "files": {
+          "pass": 204,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 204,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 204,
+      "after_pass_files": 204,
+      "before_pass_variants": 405,
+      "after_pass_variants": 405,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/TypedArray/",
+      "before_compact_sha256": "d5b049cde4035286b576e99ef52c0c752d7595bf59859fbfea97bb3daa6b8160",
+      "after_compact_sha256": "dedb1ddd5e6394949c6d3409de48cce41542cb68c448113bbe6d1d2d4129c3ce",
+      "before_raw": {
+        "bytes": 8025177,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-07.report.json",
+        "sha256": "d4b74095e8f43d8f9c1dd0752fc3c2f57f579d2241ba86a84e8698fac5e7dcfd"
+      },
+      "after_raw": {
+        "bytes": 8025177,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-07.report.json",
+        "sha256": "0df8495960a1c9f42be1e9688bef7aa63664e394aacfdb4bc3e0a0483583ab0a"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "ec4e4c7b9a746c224ea5eb541744097b4744458eb88307faaeee6a0634979daa",
+      "classification_after": "ec4e4c7b9a746c224ea5eb541744097b4744458eb88307faaeee6a0634979daa",
+      "record_inventory": 1740,
+      "before_summary": {
+        "files": {
+          "fail": 51,
+          "pass": 1395,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 51,
+          "pass": 1395,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 1395,
+      "after_pass_files": 1395,
+      "before_pass_variants": 2774,
+      "after_pass_variants": 2774,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/JSON/",
+      "before_compact_sha256": "1044931ef3a0374c20b6d96c01833539df2c45fa801597a8ddc1756ddae46ffb",
+      "after_compact_sha256": "63128fec1b9058f35c4e15808070466bc7b86ed2ad5c133dc8509a327fc04552",
+      "before_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-08.report.json",
+        "sha256": "695ac9ceb1b86ccda560ad38d0a5b483151db0f169bc2d7d0850362120032c9b"
+      },
+      "after_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-08.report.json",
+        "sha256": "e9365502df423f858b0dab7b0b902431e60b79584f5c2de6111d0a4063afea03"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "classification_after": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "record_inventory": 459,
+      "before_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 165,
+      "after_pass_files": 165,
+      "before_pass_variants": 330,
+      "after_pass_variants": 330,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/ShadowRealm/",
+      "before_compact_sha256": "5acf6d7b1e97875220ac515e91948136ad270d70875bfbdbb54a53c30a3be2a4",
+      "after_compact_sha256": "1fb684359db1944629aefd55002330186fa515de7cac68c2a11a536397a52fef",
+      "before_raw": {
+        "bytes": 7658715,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-09.report.json",
+        "sha256": "b20b6b308b7f5768c6a66324f8a421e993ea65d4fe3c611f56194c6abc3ea47d"
+      },
+      "after_raw": {
+        "bytes": 7658715,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-09.report.json",
+        "sha256": "4df67b436c3f0a9e5bc5c8429cd99002d5a654272db6e8e0a1a2d4f6d972fb50"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "7320246beb5292fd5223ed2a0e7064b337ea867480431ba7816eecebc6a19715",
+      "classification_after": "7320246beb5292fd5223ed2a0e7064b337ea867480431ba7816eecebc6a19715",
+      "record_inventory": 358,
+      "before_summary": {
+        "files": {
+          "pass": 64,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 64,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 64,
+      "after_pass_files": 64,
+      "before_pass_variants": 124,
+      "after_pass_variants": 124,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Promise/",
+      "before_compact_sha256": "e9e77d1136f55ada79c61800c3f95e55b33738118fa7f55bea4f444bb0207a15",
+      "after_compact_sha256": "e894135ebc3a8e14f70ae9a4b3f037be5878ee30d06a48e511d7cca799be4ba5",
+      "before_raw": {
+        "bytes": 7779881,
+        "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/vm-10.report.json",
+        "sha256": "e0479b494a2a0114e6b5afa065ef9ecbaf10a3928c38b7f07cd8f87e16f8373c"
+      },
+      "after_raw": {
+        "bytes": 7779881,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/vm-10.report.json",
+        "sha256": "e593e3a2dd2628c3097e7ff7de5a41add21c5211c95b0dc0054aa7f1f01ff92d"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "847133a6fb453e6ed7c9447377679f28eea608790454cc7a57f25ae3d731bed2",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "classification_before": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "classification_after": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "record_inventory": 1026,
+      "before_summary": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "before_pass_files": 732,
+      "after_pass_files": 732,
+      "before_pass_variants": 1458,
+      "after_pass_variants": 1458,
+      "lost_files": [],
+      "gained_files": [],
+      "lost_variants": [],
+      "gained_variants": []
+    }
+  ],
+  "lost_files": [],
+  "lost_variants": [],
+  "gained_files": [
+    {
+      "mode": "default",
+      "selector": "staging/sm/Function/",
+      "id": "staging/sm/Function/spread-iterator-primitive.js"
+    },
+    {
+      "mode": "vm",
+      "selector": "staging/sm/Function/",
+      "id": "staging/sm/Function/spread-iterator-primitive.js"
+    }
+  ],
+  "gained_variants": [
+    {
+      "mode": "default",
+      "selector": "staging/sm/Function/",
+      "id": [
+        "staging/sm/Function/spread-iterator-primitive.js",
+        "non-strict"
+      ]
+    },
+    {
+      "mode": "default",
+      "selector": "staging/sm/Function/",
+      "id": [
+        "staging/sm/Function/spread-iterator-primitive.js",
+        "strict"
+      ]
+    },
+    {
+      "mode": "vm",
+      "selector": "staging/sm/Function/",
+      "id": [
+        "staging/sm/Function/spread-iterator-primitive.js",
+        "non-strict"
+      ]
+    },
+    {
+      "mode": "vm",
+      "selector": "staging/sm/Function/",
+      "id": [
+        "staging/sm/Function/spread-iterator-primitive.js",
+        "strict"
+      ]
+    }
+  ],
+  "modes": {
+    "default": {
+      "before_pass_files": 32591,
+      "after_pass_files": 32592,
+      "before_pass_variants": 61340,
+      "after_pass_variants": 61342,
+      "gained_files": 1,
+      "gained_variants": 2,
+      "lost_files": 0,
+      "lost_variants": 0,
+      "sum_directory_records_including_shared_fixtures": 35925,
+      "unique_record_paths_including_shared_fixtures": 32985
+    },
+    "vm": {
+      "before_pass_files": 32591,
+      "after_pass_files": 32592,
+      "before_pass_variants": 61340,
+      "after_pass_variants": 61342,
+      "gained_files": 1,
+      "gained_variants": 2,
+      "lost_files": 0,
+      "lost_variants": 0,
+      "sum_directory_records_including_shared_fixtures": 35925,
+      "unique_record_paths_including_shared_fixtures": 32985
+    }
+  },
+  "native": {
+    "before": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 54
+        },
+        "nextest": {
+          "failed": 6,
+          "passed": 5266,
+          "skipped": 17
+        }
+      },
+      "job_exit": 1,
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 100,
+          "diagnostic_tail": [
+            "        PASS [  22.791s] (5271/5272) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "        SLOW [>180.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+            "        PASS [ 190.087s] (5272/5272) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 247.591s] 5272 tests run: 5266 passed (2 slow), 6 failed, 17 skipped",
+            "        FAIL [   0.014s] (2924/5272) amazing-js interp::iterable_list_tests::eager_iterator_captures_next_without_reentering_iterator_method",
+            "        FAIL [   0.014s] (2926/5272) amazing-js interp::iterable_list_tests::eager_iterator_collections_and_typed_source_capture_original_method_once",
+            "        FAIL [   0.014s] (2928/5272) amazing-js interp::iterable_list_tests::eager_iterator_honors_primitive_prototype_overrides_and_utf16_default",
+            "        FAIL [   0.013s] (2929/5272) amazing-js interp::iterable_list_tests::eager_iterator_observes_array_iterator_next_and_live_length_mutations",
+            "        FAIL [   0.015s] (2930/5272) amazing-js interp::iterable_list_tests::eager_iterator_propagates_step_abrupt_without_closing_or_later_arguments",
+            "        FAIL [   0.016s] (2931/5272) amazing-js interp::iterable_list_tests::eager_iterator_requires_object_results_and_an_actual_iterator_method",
+            "error: test run failed"
+          ],
+          "engine_exit": 100,
+          "native_receipt": "/tmp/amazing-gate-command-jb63at2z/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/workspace.log",
+              "durable": {
+                "bytes": 767548,
+                "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/workspace.log",
+                "sha256": "2fd3e4d0c761abef62c166c8a48dbc43de3085b67b9659522ec03036f298a633"
+              },
+              "native": {
+                "bytes": 767548,
+                "path": "/tmp/amazing-gate-command-jb63at2z/output.log",
+                "sha256": "2fd3e4d0c761abef62c166c8a48dbc43de3085b67b9659522ec03036f298a633"
+              },
+              "source": "/tmp/amazing-gate-command-jb63at2z/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "workspace",
+          "raw_native": {
+            "bytes": 767548,
+            "path": "/tmp/amazing-gate-command-jb63at2z/output.log",
+            "sha256": "2fd3e4d0c761abef62c166c8a48dbc43de3085b67b9659522ec03036f298a633"
+          },
+          "schema": 1,
+          "source_commit": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+          "wrapper_exit": 100
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-b_ds54qa/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/docs.log",
+              "durable": {
+                "bytes": 30773,
+                "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/docs.log",
+                "sha256": "6efcd75380681a3baa4f3e9eee53b60c6c37e992e5f7b2387e88c4f5462c47c4"
+              },
+              "native": {
+                "bytes": 30773,
+                "path": "/tmp/amazing-gate-command-b_ds54qa/output.log",
+                "sha256": "6efcd75380681a3baa4f3e9eee53b60c6c37e992e5f7b2387e88c4f5462c47c4"
+              },
+              "source": "/tmp/amazing-gate-command-b_ds54qa/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "docs",
+          "raw_native": {
+            "bytes": 30773,
+            "path": "/tmp/amazing-gate-command-b_ds54qa/output.log",
+            "sha256": "6efcd75380681a3baa4f3e9eee53b60c6c37e992e5f7b2387e88c4f5462c47c4"
+          },
+          "schema": 1,
+          "source_commit": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "-p",
+            "amazing-js",
+            "--locked",
+            "--example",
+            "test262_host"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "test protocol_tests::captured_intrinsics_and_worker_protocol_share_the_test_lifetime ... ok",
+            "test realm_module_tests::absent_referrer_uses_the_real_entry_directory_without_eval_source_guessing ... ok",
+            "test realm_module_tests::arbitrary_thrown_values_and_intrinsic_error_brand_are_preserved ... ok",
+            "test realm_module_tests::cycles_and_cached_parse_and_evaluation_errors_are_realm_local ... ok",
+            "test realm_module_tests::filesystem_boundary_and_unsupported_typed_requests_reject_in_requesting_realm ... ok",
+            "test realm_module_tests::first_canonical_record_and_retained_loader_lifetime_are_per_realm ... ok",
+            "test realm_module_tests::shadow_import_value_uses_real_child_registries_and_pending_module_completion ... ok",
+            "test realm_module_tests::static_root_and_dynamic_import_share_only_the_same_realm_instance ... ok",
+            "test realm_module_tests::top_level_await_capabilities_and_completion_stay_with_their_registry ... ok",
+            "",
+            "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-p0_0apjw/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/host.log",
+              "durable": {
+                "bytes": 13885,
+                "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/host.log",
+                "sha256": "93c868ca1e0c99787a5d291cb6587c96b6d7efce656ea5595fecd915dbe6c0c7"
+              },
+              "native": {
+                "bytes": 13885,
+                "path": "/tmp/amazing-gate-command-p0_0apjw/output.log",
+                "sha256": "93c868ca1e0c99787a5d291cb6587c96b6d7efce656ea5595fecd915dbe6c0c7"
+              },
+              "source": "/tmp/amazing-gate-command-p0_0apjw/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "host",
+          "raw_native": {
+            "bytes": 13885,
+            "path": "/tmp/amazing-gate-command-p0_0apjw/output.log",
+            "sha256": "93c868ca1e0c99787a5d291cb6587c96b6d7efce656ea5595fecd915dbe6c0c7"
+          },
+          "schema": 1,
+          "source_commit": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "-p",
+            "amazing-js",
+            "--example",
+            "test262_host",
+            "--release",
+            "--locked"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "warning: field `parent` is never read",
+            "   --> crates/amazing-js/src/value.rs:648:9",
+            "    |",
+            "647 | pub(crate) struct DerivedConstructor {",
+            "    |                   ------------------ field in this struct",
+            "648 |     pub parent: JsValue,",
+            "    |         ^^^^^^",
+            "    |",
+            "    = note: `DerivedConstructor` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis",
+            "",
+            "warning: `amazing-js` (lib) generated 37 warnings (run `cargo fix --lib -p amazing-js` to apply 8 suggestions)",
+            "    Finished `release` profile [optimized] target(s) in 41.13s"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-mrvjg6fp/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/release.log",
+              "durable": {
+                "bytes": 11968,
+                "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/release.log",
+                "sha256": "4b82d8f106872ab62bf357d048649816d4425b98268f933277891fe5a52fbceb"
+              },
+              "native": {
+                "bytes": 11968,
+                "path": "/tmp/amazing-gate-command-mrvjg6fp/output.log",
+                "sha256": "4b82d8f106872ab62bf357d048649816d4425b98268f933277891fe5a52fbceb"
+              },
+              "source": "/tmp/amazing-gate-command-mrvjg6fp/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "release",
+          "raw_native": {
+            "bytes": 11968,
+            "path": "/tmp/amazing-gate-command-mrvjg6fp/output.log",
+            "sha256": "4b82d8f106872ab62bf357d048649816d4425b98268f933277891fe5a52fbceb"
+          },
+          "schema": 1,
+          "source_commit": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+          "wrapper_exit": 0
+        }
+      ],
+      "phase_exits": {
+        "docs": 0,
+        "host": 0,
+        "release": 0,
+        "workspace": 100
+      },
+      "raw": [
+        {
+          "bytes": 767548,
+          "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/workspace.log",
+          "sha256": "2fd3e4d0c761abef62c166c8a48dbc43de3085b67b9659522ec03036f298a633"
+        },
+        {
+          "bytes": 30773,
+          "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/docs.log",
+          "sha256": "6efcd75380681a3baa4f3e9eee53b60c6c37e992e5f7b2387e88c4f5462c47c4"
+        },
+        {
+          "bytes": 13885,
+          "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/host.log",
+          "sha256": "93c868ca1e0c99787a5d291cb6587c96b6d7efce656ea5595fecd915dbe6c0c7"
+        },
+        {
+          "bytes": 11968,
+          "path": "/tmp/amazing-native-iterable-list-evidence/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/release.log",
+          "sha256": "4b82d8f106872ab62bf357d048649816d4425b98268f933277891fe5a52fbceb"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+      "summary_lines": [
+        "Summary [ 247.591s] 5272 tests run: 5266 passed (2 slow), 6 failed, 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s"
+      ]
+    },
+    "after": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 54
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 5272,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.002s] (5264/5272) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.004s] (5265/5272) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.006s] (5266/5272) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.005s] (5267/5272) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.004s] (5268/5272) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.013s] (5269/5272) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   0.011s] (5270/5272) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [  24.647s] (5271/5272) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "        SLOW [>180.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+            "        PASS [ 190.025s] (5272/5272) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 245.751s] 5272 tests run: 5272 passed (2 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-lxl2vmps/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/workspace.log",
+              "durable": {
+                "bytes": 762244,
+                "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/workspace.log",
+                "sha256": "18b2ccbc97d388f9821d20080c94eb22b4ca74922ac1635aac5845db05fb3161"
+              },
+              "native": {
+                "bytes": 762244,
+                "path": "/tmp/amazing-gate-command-lxl2vmps/output.log",
+                "sha256": "18b2ccbc97d388f9821d20080c94eb22b4ca74922ac1635aac5845db05fb3161"
+              },
+              "source": "/tmp/amazing-gate-command-lxl2vmps/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "workspace",
+          "raw_native": {
+            "bytes": 762244,
+            "path": "/tmp/amazing-gate-command-lxl2vmps/output.log",
+            "sha256": "18b2ccbc97d388f9821d20080c94eb22b4ca74922ac1635aac5845db05fb3161"
+          },
+          "schema": 1,
+          "source_commit": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-4k3knkp6/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/docs.log",
+              "durable": {
+                "bytes": 30947,
+                "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/docs.log",
+                "sha256": "6abf130fbb5175fcc4e3cbac0b044a8db904426e687bbefe5b990e4303bf61a1"
+              },
+              "native": {
+                "bytes": 30947,
+                "path": "/tmp/amazing-gate-command-4k3knkp6/output.log",
+                "sha256": "6abf130fbb5175fcc4e3cbac0b044a8db904426e687bbefe5b990e4303bf61a1"
+              },
+              "source": "/tmp/amazing-gate-command-4k3knkp6/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "docs",
+          "raw_native": {
+            "bytes": 30947,
+            "path": "/tmp/amazing-gate-command-4k3knkp6/output.log",
+            "sha256": "6abf130fbb5175fcc4e3cbac0b044a8db904426e687bbefe5b990e4303bf61a1"
+          },
+          "schema": 1,
+          "source_commit": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "-p",
+            "amazing-js",
+            "--locked",
+            "--example",
+            "test262_host"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "test realm_module_tests::absent_referrer_uses_the_real_entry_directory_without_eval_source_guessing ... ok",
+            "test protocol_tests::captured_intrinsics_and_worker_protocol_share_the_test_lifetime ... ok",
+            "test realm_module_tests::arbitrary_thrown_values_and_intrinsic_error_brand_are_preserved ... ok",
+            "test realm_module_tests::cycles_and_cached_parse_and_evaluation_errors_are_realm_local ... ok",
+            "test realm_module_tests::filesystem_boundary_and_unsupported_typed_requests_reject_in_requesting_realm ... ok",
+            "test realm_module_tests::first_canonical_record_and_retained_loader_lifetime_are_per_realm ... ok",
+            "test realm_module_tests::shadow_import_value_uses_real_child_registries_and_pending_module_completion ... ok",
+            "test realm_module_tests::top_level_await_capabilities_and_completion_stay_with_their_registry ... ok",
+            "test realm_module_tests::static_root_and_dynamic_import_share_only_the_same_realm_instance ... ok",
+            "",
+            "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-9553kr7_/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/host.log",
+              "durable": {
+                "bytes": 14072,
+                "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/host.log",
+                "sha256": "9ff037a459ee1a1148d7ec97f97134ab6c9a39db52c81e21f35f48b7e232779d"
+              },
+              "native": {
+                "bytes": 14072,
+                "path": "/tmp/amazing-gate-command-9553kr7_/output.log",
+                "sha256": "9ff037a459ee1a1148d7ec97f97134ab6c9a39db52c81e21f35f48b7e232779d"
+              },
+              "source": "/tmp/amazing-gate-command-9553kr7_/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "host",
+          "raw_native": {
+            "bytes": 14072,
+            "path": "/tmp/amazing-gate-command-9553kr7_/output.log",
+            "sha256": "9ff037a459ee1a1148d7ec97f97134ab6c9a39db52c81e21f35f48b7e232779d"
+          },
+          "schema": 1,
+          "source_commit": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "-p",
+            "amazing-js",
+            "--example",
+            "test262_host",
+            "--release",
+            "--locked"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "warning: field `parent` is never read",
+            "   --> crates/amazing-js/src/value.rs:648:9",
+            "    |",
+            "647 | pub(crate) struct DerivedConstructor {",
+            "    |                   ------------------ field in this struct",
+            "648 |     pub parent: JsValue,",
+            "    |         ^^^^^^",
+            "    |",
+            "    = note: `DerivedConstructor` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis",
+            "",
+            "warning: `amazing-js` (lib) generated 37 warnings (run `cargo fix --lib -p amazing-js` to apply 8 suggestions)",
+            "    Finished `release` profile [optimized] target(s) in 40.76s"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-aewvbdyr/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/release.log",
+              "durable": {
+                "bytes": 12142,
+                "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/release.log",
+                "sha256": "2073b6176498958100ad453e0ca37c99181f8d0fc55f8c335dd39a711296f248"
+              },
+              "native": {
+                "bytes": 12142,
+                "path": "/tmp/amazing-gate-command-aewvbdyr/output.log",
+                "sha256": "2073b6176498958100ad453e0ca37c99181f8d0fc55f8c335dd39a711296f248"
+              },
+              "source": "/tmp/amazing-gate-command-aewvbdyr/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "release",
+          "raw_native": {
+            "bytes": 12142,
+            "path": "/tmp/amazing-gate-command-aewvbdyr/output.log",
+            "sha256": "2073b6176498958100ad453e0ca37c99181f8d0fc55f8c335dd39a711296f248"
+          },
+          "schema": 1,
+          "source_commit": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+          "wrapper_exit": 0
+        }
+      ],
+      "phase_exits": {
+        "docs": 0,
+        "host": 0,
+        "release": 0,
+        "workspace": 0
+      },
+      "raw": [
+        {
+          "bytes": 762244,
+          "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/workspace.log",
+          "sha256": "18b2ccbc97d388f9821d20080c94eb22b4ca74922ac1635aac5845db05fb3161"
+        },
+        {
+          "bytes": 30947,
+          "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/docs.log",
+          "sha256": "6abf130fbb5175fcc4e3cbac0b044a8db904426e687bbefe5b990e4303bf61a1"
+        },
+        {
+          "bytes": 14072,
+          "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/host.log",
+          "sha256": "9ff037a459ee1a1148d7ec97f97134ab6c9a39db52c81e21f35f48b7e232779d"
+        },
+        {
+          "bytes": 12142,
+          "path": "/tmp/amazing-native-iterable-list-oracle-evidence/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/after/release.log",
+          "sha256": "2073b6176498958100ad453e0ca37c99181f8d0fc55f8c335dd39a711296f248"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+      "summary_lines": [
+        "Summary [ 245.751s] 5272 tests run: 5272 passed (2 slow), 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s"
+      ]
+    }
+  },
+  "custody": "UNARCHIVED native/tmp raw+all measured ELFs; Root lifecycle only",
+  "zero_loss": true,
+  "oracle_correction": "Historical BEFORE legacy bare-iterator close1 oracle retained. Root primary approved corrected close0 +missing iterator TypeError/no-next/no-return and real next-error identity/no-close; adjacent for-of bodyclose1 retained. Nine new groups identical. No official input changes.",
+  "native_counts": {
+    "before_workspace": {
+      "passed": 5266,
+      "failed": 6,
+      "skipped": 17
+    },
+    "after_workspace": {
+      "passed": 5272,
+      "failed": 0,
+      "skipped": 17
+    },
+    "workspace_docs": {
+      "passed": 38,
+      "failed": 0
+    },
+    "installed_host": {
+      "passed": 16,
+      "failed": 0
+    },
+    "docs_count_note": "Manifest sums docs+host result rows:54, of which genuine host16 is separate; docs38. Raw hashes retained."
+  },
+  "source_freeze_sha256": "c4e16d4c6d3257d76b08f029dc3b25ffb891502517d098bf3bc975186b75d79f",
+  "before_job": {
+    "schema": 2,
+    "lane": "js-lang-iterable-list-20261006",
+    "source_commit": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+    "box_id": "bx_ypsay9aj",
+    "host": "user@217.182.194.160",
+    "port": 19034,
+    "job_id": "503afabd3b4f4db28901ad5bb87d212b",
+    "output_root": "amazing/out/js-lang-iterable-list-20261006/qualification-8a204a75-before",
+    "command_sha256": "b5c49db634973a15f70b833f5479f48dd2d62239e712081a73aa28d0c6a372de",
+    "execution_sha256": "69c829e3312479a14ecad9275632fff07c79012e27806d8a5feed9b6477c98a0",
+    "source_archive_sha256": "875b16296e2cc020ca05996c912581db0f73b76d7629f7e70173d8f78e14f2e8"
+  },
+  "after_job": {
+    "schema": 2,
+    "lane": "js-lang-iterable-list-oracle-20261006",
+    "source_commit": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+    "box_id": "bx_mw65re4t",
+    "host": "user@178.33.123.88",
+    "port": 19036,
+    "job_id": "8f16a2382367488aacad7ca6ecd22f93",
+    "output_root": "amazing/out/js-lang-iterable-list-oracle-20261006/qualification-26de1359-after",
+    "command_sha256": "d440e82b509770dfe5edaef0d1665d19bb195ab64e5f0b6336a25b9be4b71a5c",
+    "execution_sha256": "f2f960e5f5d0bb3bedb15bfe13d75ea948c036c7bfe07689de60d9c3dc2c9658",
+    "source_archive_sha256": "85c4a8643a5c1c59f27ea4201bec1cff17a0eb1d92263dcbfb01e1c8d78d5081"
+  },
+  "storage": {
+    "before": {
+      "actual_storage_exit": 0,
+      "artifact_manifest": {
+        "bytes": 250393,
+        "path": "/tmp/amazing-native-iterable-list-evidence/retained/manifests/qualification-8a204a75-before.json",
+        "sha256": "25899fa0a72dcad431bd281edfdc783048d38ae215a437aa1fa4faeb5b847ae3"
+      },
+      "baseline": null,
+      "capacity": {
+        "admitted": true,
+        "filesystems": [
+          {
+            "available_bytes": 32364113920,
+            "device": 64769,
+            "path": "/tmp/amazing-native-iterable-list-build",
+            "required_bytes": 12884901888,
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 32364113920,
+            "device": 64769,
+            "path": "/tmp/amazing-native-iterable-list-evidence",
+            "required_bytes": 8589934592,
+            "total_bytes": 73635184640
+          }
+        ],
+        "shared_device_requirements": [
+          {
+            "available_bytes": 32364113920,
+            "required_bytes": 23622320128
+          }
+        ]
+      },
+      "command_exit": 0,
+      "copied_unique_bytes": 0,
+      "free_after": [
+        {
+          "available_bytes": 25925779456,
+          "device": 64769,
+          "path": "/tmp/amazing-native-iterable-list-build",
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 25925779456,
+          "device": 64769,
+          "path": "/tmp/amazing-native-iterable-list-evidence",
+          "total_bytes": 73635184640
+        }
+      ],
+      "hardlink_capability": {
+        "failed_artifacts": 0,
+        "first_failures": [],
+        "probed_artifacts": 643,
+        "raw": {
+          "bytes": 250146,
+          "path": "/tmp/amazing-native-iterable-list-build/iterable-list-20261006/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/qualification-8a204a75-before/hardlink.probes.json",
+          "sha256": "7f84aef4305ba0e28c67767a95adb952e80fad145cec97025f8e402be7ca5802"
+        },
+        "supported": true
+      },
+      "job": "qualification-8a204a75-before",
+      "phase": "before",
+      "profile": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+        "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+      },
+      "recoverable_bytes": 1366370930,
+      "recoverable_files": 3781,
+      "retained_elf_files": 631,
+      "retained_files": 643,
+      "retained_logical_bytes": 6809618545,
+      "retention_capacity_required_bytes": 3013632,
+      "retire_after_retention": true,
+      "schema": 1,
+      "selected_retention_method": "hardlink",
+      "session_raw": {
+        "bytes": 2781,
+        "path": "/tmp/amazing-native-iterable-list-build/iterable-list-20261006/8a204a7591094f9f5bb53727cd0dbc23c76ae01c/before/qualification-8a204a75-before/session.json",
+        "sha256": "cf4c72803649cd3ff3c95adabbeeacc851576102bec434c30f6d151cedf1fc7f"
+      },
+      "source": "8a204a7591094f9f5bb53727cd0dbc23c76ae01c",
+      "state": "TERMINAL",
+      "storage_exit": 0,
+      "target_retired": true
+    },
+    "after": {
+      "actual_storage_exit": 0,
+      "artifact_manifest": {
+        "bytes": 254913,
+        "path": "/tmp/amazing-native-iterable-list-oracle-evidence/retained/manifests/qualification-26de1359-after.json",
+        "sha256": "96439b7b7c7e9f9aab64deb0a7742400d33f98b7d564b822d831a40fc29318b0"
+      },
+      "baseline": null,
+      "capacity": {
+        "admitted": true,
+        "filesystems": [
+          {
+            "available_bytes": 32385650688,
+            "device": 64769,
+            "path": "/tmp/amazing-native-iterable-list-oracle-build",
+            "required_bytes": 12884901888,
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 32385650688,
+            "device": 64769,
+            "path": "/tmp/amazing-native-iterable-list-oracle-evidence",
+            "required_bytes": 8589934592,
+            "total_bytes": 73635184640
+          }
+        ],
+        "shared_device_requirements": [
+          {
+            "available_bytes": 32385650688,
+            "required_bytes": 23622320128
+          }
+        ]
+      },
+      "command_exit": 0,
+      "copied_unique_bytes": 0,
+      "free_after": [
+        {
+          "available_bytes": 25922134016,
+          "device": 64769,
+          "path": "/tmp/amazing-native-iterable-list-oracle-build",
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 25922134016,
+          "device": 64769,
+          "path": "/tmp/amazing-native-iterable-list-oracle-evidence",
+          "total_bytes": 73635184640
+        }
+      ],
+      "hardlink_capability": {
+        "failed_artifacts": 0,
+        "first_failures": [],
+        "probed_artifacts": 643,
+        "raw": {
+          "bytes": 263006,
+          "path": "/tmp/amazing-native-iterable-list-oracle-build/iterable-list-oracle-20261006/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/before/qualification-26de1359-after/hardlink.probes.json",
+          "sha256": "813fa33be20b8e4203a48cd2c0a79aa4e34eba1206b6df1f23b2735d6185e6f8"
+        },
+        "supported": true
+      },
+      "job": "qualification-26de1359-after",
+      "phase": "before",
+      "profile": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+        "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+      },
+      "recoverable_bytes": 1366749466,
+      "recoverable_files": 3781,
+      "retained_elf_files": 631,
+      "retained_files": 643,
+      "retained_logical_bytes": 6808505849,
+      "retention_capacity_required_bytes": 3013632,
+      "retire_after_retention": true,
+      "schema": 1,
+      "selected_retention_method": "hardlink",
+      "session_raw": {
+        "bytes": 2867,
+        "path": "/tmp/amazing-native-iterable-list-oracle-build/iterable-list-oracle-20261006/26de1359614f6ff255cf3a82c111b8cc9f18ea0a/before/qualification-26de1359-after/session.json",
+        "sha256": "73b03636f836d6bc1160347ff8c3310f333bef211dc2eddaa64a4a5295c68428"
+      },
+      "source": "26de1359614f6ff255cf3a82c111b8cc9f18ea0a",
+      "state": "TERMINAL",
+      "storage_exit": 0,
+      "target_retired": true
+    }
+  },
+  "public_helpers": {
+    "scripts/linux-run.sh": "301443415f353426f954c88b2532593b25fb7e8d4c311ed66fc969186f6a9054",
+    "scripts/linux-bootstrap.sh": "e6d985ebfe4f6c6771ec554db9329721c0e4e0b09113ec7b5fec244f423f1eb3",
+    "scripts/boat-lane.py": "adca82065f1cde9631cca5610cc4b3c0e625ca3c90193438a14fd040045f2cba",
+    "scripts/test262.py": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+    "scripts/gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+    "scripts/gate-summary.py": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+    "scripts/native-storage-plan.py": "8c09537bc331f619a61f6a683160188b6ff56abf9bc0941e395a0f42b51fea4a",
+    "scripts/completed-job.py": "5db1ec0ed6e28656752b6d7abd7395daf978ccbb76f8293287427d184b1c8a2c",
+    "scripts/lane-fetch.sh": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db"
+  },
+  "shipping_paths": {
+    "THIRD_PARTY_NOTICES.md": {
+      "sha256": "0e1958e5aa94ebcb777b200d0b375f1dd401bceeaa7a5aeb83039ee16ed33fc4",
+      "bytes": 38827
+    },
+    "crates/amazing-js/src/builtins_binary.rs": {
+      "sha256": "eeab8a7ceb85eb94981abe15c9784a1dfe75574022bf622b9b2c7d8e264d08e6",
+      "bytes": 100426
+    },
+    "crates/amazing-js/src/interp.rs": {
+      "sha256": "a1978cc362f803603b2d00920f095f01a2fe1ed2f47a9081961dc5662d405e80",
+      "bytes": 84976
+    },
+    "crates/amazing-js/src/interp_iterable_list.rs": {
+      "sha256": "fd6372eb4afef479ac94a670ef3345ed41714380b9ea7a43c54712a9e5832d51",
+      "bytes": 1726
+    },
+    "crates/amazing-js/src/interp_iterable_list_tests.rs": {
+      "sha256": "123ef3ae28629a8bc6e25c8d621dce8dd3f2ca9326cbb602a8f21c05512bd9f7",
+      "bytes": 7267
+    },
+    "crates/amazing-js/src/interp_stmt.rs": {
+      "sha256": "45e3dce2ac502d029e1aabdeb7ca936a2bfae171aee19c119b102be1fea4ff34",
+      "bytes": 168771
+    },
+    "crates/amazing-js/src/interp_tests.rs": {
+      "sha256": "f3e56736d2c62be393a821d49c97046fc2fe55a8c43d8d879612ea584bba49fb",
+      "bytes": 118258
+    },
+    "docs/lanes/js-lang_iterable-list/decision.md": {
+      "sha256": "e24ccbab4bab9beaa012ffabe4cd7c89b68d0f6c76d86895dac812b84b793b65",
+      "bytes": 3968
+    }
+  },
+  "gate_commands": {
+    "after.command.sh": {
+      "sha256": "d440e82b509770dfe5edaef0d1665d19bb195ab64e5f0b6336a25b9be4b71a5c",
+      "bytes": 21130
+    },
+    "after.storage.json": {
+      "sha256": "3014b522482fff4ed62316e2cf9331325e92b92e64be5fbfab6e7e108c5d9115",
+      "bytes": 892
+    }
+  },
+  "historical_failure": {
+    "source": "3379eb55d3a0b9490c5c8c29c5bfbc970bb85728",
+    "job": "68c3d8bdb7544b038504d0e42875251e",
+    "actual_exit": 1,
+    "workspace": {
+      "passed": 5271,
+      "failed": 1,
+      "skipped": 17
+    },
+    "failure": "interp::tests::array_object_and_for_of_patterns_bind_values_defaults_and_rest",
+    "actual_assertion": {
+      "left": 0,
+      "right": 1,
+      "path": "crates/amazing-js/src/interp_tests.rs:1072"
+    },
+    "native_raw": {
+      "path": "/tmp/amazing-native-iterable-list-evidence/3379eb55d3a0b9490c5c8c29c5bfbc970bb85728/after/workspace.log",
+      "sha256": "8678e7106562d52a3f100af139b0c731903eac41ca39c5188c87adfc06f0ba94"
+    },
+    "diagnosis": "Bare next-only object is not iterable; correct GetIterator rejects before next/return. Legacy authored test expected return=1 and swallowed error. No source defect identified in new collector; parent oracle decision requested. Adjacent real for-of body throw close=1 stays intact.",
+    "official_inputs_changed": false,
+    "source_and_receipts_preserved": true,
+    "candidate_qualified": false
+  },
+  "receipt_catalog": {
+    "before": {
+      "workspace.phase.manifest.json": {
+        "bytes": 2694,
+        "sha256": "431daf9fe8622d7f1837411b788053fb1922f0c87cb8f6f60a3ad02f151917d0"
+      },
+      "vm-06.compact.json": {
+        "bytes": 6146,
+        "sha256": "a9f6b966d368fc0f56511100208bddae51102967908e3fb1be059d6a2b23ec6d"
+      },
+      "vm-01.compact.json": {
+        "bytes": 4848,
+        "sha256": "70761e5f9340bf8aa2c15c19c7125e2b167cf28ba9c6be60f8b5bda03fb1bdd4"
+      },
+      "release.phase.manifest.json": {
+        "bytes": 1694,
+        "sha256": "6716f80dc25670ab813dfe543a91726396504b6d3c1f2a3c0c1be45c50e7fb08"
+      },
+      "vm-00.compact.json": {
+        "bytes": 177515,
+        "sha256": "bd1ab90c0348a9c50185e63333367396413068bcdaa2e2ddb1a2c2f73df57d52"
+      },
+      "vm-07.compact.json": {
+        "bytes": 15400,
+        "sha256": "d5b049cde4035286b576e99ef52c0c752d7595bf59859fbfea97bb3daa6b8160"
+      },
+      "host.phase.manifest.json": {
+        "bytes": 2095,
+        "sha256": "6a6e3d92c1248dd79f3fce01afdb2e7bf67c9c270c744959e3d752d55be88683"
+      },
+      "default-00.compact.json": {
+        "bytes": 177520,
+        "sha256": "bf9739fad443a5b77a1bb451d720d188fcba26799c5f250c643fa89ca632b447"
+      },
+      "default-07.compact.json": {
+        "bytes": 15405,
+        "sha256": "a302dab148c942585ae6615e07ea35630c1386dea3488ea496ab1981a3841fa7"
+      },
+      "docs.phase.manifest.json": {
+        "bytes": 1366,
+        "sha256": "dc465aced826879ed6cc21958250070663de28bf1b1a853440cff77bf301d890"
+      },
+      "default-06.compact.json": {
+        "bytes": 6151,
+        "sha256": "56f2b076e046c3a03422100309aeb679a4a8960c65d55eef7ca8e2c1a64bdc88"
+      },
+      "default-01.compact.json": {
+        "bytes": 4853,
+        "sha256": "e7e2b140c58dda7606d7a996a88ac2399cd77d61ed08c08e30ab89ae60af8466"
+      },
+      "vm-09.compact.json": {
+        "bytes": 4997,
+        "sha256": "5acf6d7b1e97875220ac515e91948136ad270d70875bfbdbb54a53c30a3be2a4"
+      },
+      "corpus-default-04.phase.manifest.json": {
+        "bytes": 1731,
+        "sha256": "fb12d0599ebeaaf4f4e573ef3edff62dff05bd9c6c2d7592a4b9e6d41bcd20e8"
+      },
+      "core.manifest.json": {
+        "bytes": 12117,
+        "sha256": "ef3c05577b837aa1e336a13c56037d37aa6153a858e93a8424f9295c09f08be4"
+      },
+      "corpus-default-05.phase.manifest.json": {
+        "bytes": 1725,
+        "sha256": "8755b6c3e73dc92bcfec8742e2b2f703229b08a9a2b40f97cc8a9bf51ee2e4c7"
+      },
+      "corpus-default-06.phase.manifest.json": {
+        "bytes": 1725,
+        "sha256": "dff3d08775e479553de13d0da6063033ead48622514e6357ce5ea91460110fe4"
+      },
+      "default-03.compact.json": {
+        "bytes": 13963,
+        "sha256": "5072ee45ba994ed05a83420fc826001a8342527342fa78c3c7603f6d6a8025e5"
+      },
+      "corpus-default-07.phase.manifest.json": {
+        "bytes": 1774,
+        "sha256": "634464eb61ade0a47b510914c9f3666a090c8e33189a4d2f887faaa72da45564"
+      },
+      "default-04.compact.json": {
+        "bytes": 9636,
+        "sha256": "41de8e83dddce23ef86f2efbc9fba3a2ea021e024b4fc34a306d97dffc19931f"
+      },
+      "corpus-default-01.phase.manifest.json": {
+        "bytes": 1753,
+        "sha256": "8cd3019a24a0b951bff002c37c8228f50fa1dcd7ed62950b8e7ba84e52a9342c"
+      },
+      "corpus-default-00.phase.manifest.json": {
+        "bytes": 1768,
+        "sha256": "9f4115536c4b283285b58eb34b9a416f069c3290f5a93e527f578578d9b94902"
+      },
+      "vm-08.compact.json": {
+        "bytes": 5463,
+        "sha256": "1044931ef3a0374c20b6d96c01833539df2c45fa801597a8ddc1756ddae46ffb"
+      },
+      "default-05.compact.json": {
+        "bytes": 7439,
+        "sha256": "82d5f8f2de4aa2c9429fbc521cca5ee9b92d5e95524387471723f1df6c7d19ec"
+      },
+      "corpus-vm-10.phase.manifest.json": {
+        "bytes": 1707,
+        "sha256": "fc35f36c01c81151adb282359c0bfeac8adafeb7dc21d215c82c2c765fbc62c4"
+      },
+      "default-02.compact.json": {
+        "bytes": 23314,
+        "sha256": "316c1fa04c9d580290bad1c20d6a602291ceb2435e7418edacb48fe6a62ef1db"
+      },
+      "corpus-vm-09.phase.manifest.json": {
+        "bytes": 1710,
+        "sha256": "ea785034982c5d2c83ee54ed1af8be3ab07713ab00803962dc97d64c2d1b023c"
+      },
+      "corpus-default-03.phase.manifest.json": {
+        "bytes": 1754,
+        "sha256": "50384295c539d449044d00fec6f479030e6e75e84bf8024f60547f53003d043d"
+      },
+      "default-10.compact.json": {
+        "bytes": 9819,
+        "sha256": "6ec24c6e963fd2231e4087b3d9e71e624d47137473add361cfc0379ad21fc1c2"
+      },
+      "corpus-default-02.phase.manifest.json": {
+        "bytes": 1755,
+        "sha256": "1edfabf2182943cfa58ce8d3bea230677dd4a9f4dbc0a444470ac3b5b9448bbd"
+      },
+      "corpus-vm-08.phase.manifest.json": {
+        "bytes": 1703,
+        "sha256": "ec489a97c646268d5f5f29a7fc8e9a6aee655ec7102b8fedcc13baf3dc6c3e7e"
+      },
+      "corpus-vm-05.phase.manifest.json": {
+        "bytes": 1702,
+        "sha256": "ff95e9ec7563a52f6391a23db7d0353a892df78d33094ac75b353808683c3935"
+      },
+      "corpus-vm-04.phase.manifest.json": {
+        "bytes": 1708,
+        "sha256": "fd23c1f1a9dc387225fc11af6e1e6ec2ee2313811a13fc589435d114c73338e2"
+      },
+      "default-08.compact.json": {
+        "bytes": 5468,
+        "sha256": "e8757d732092559d062248c34fb2b7b337ed3b8eca0cd069494bd1aca62fbcbc"
+      },
+      "vm-05.compact.json": {
+        "bytes": 7434,
+        "sha256": "0c1dae695deb6674247813788b545846c38c42338514d4d97d796e79bf6c4bd8"
+      },
+      "vm-02.compact.json": {
+        "bytes": 23309,
+        "sha256": "a89e8911144a49a6eaff8d71b0a39264c794c0c135fae00ad838790bc76ee825"
+      },
+      "corpus-vm-07.phase.manifest.json": {
+        "bytes": 1751,
+        "sha256": "8a820878ceb7475513f79a5d33292d74cfdcf5ef4b5d95c214f08f9cf19dfa00"
+      },
+      "vm-10.compact.json": {
+        "bytes": 9814,
+        "sha256": "e9e77d1136f55ada79c61800c3f95e55b33738118fa7f55bea4f444bb0207a15"
+      },
+      "corpus-vm-06.phase.manifest.json": {
+        "bytes": 1702,
+        "sha256": "7cea96a46bf8f64c63c312196021ab1acb948b6598c22b9e693c9d61ced8cc42"
+      },
+      "default-09.compact.json": {
+        "bytes": 5002,
+        "sha256": "1365f563799fe2dfddea53a17c51d279e22818d00d86babce6556033ebd84a4a"
+      },
+      "storage.summary.json": {
+        "bytes": 2202,
+        "sha256": "3d58a6edf141367b413fb3e861e41ea7b2331bd894a58f28be14a9b8eb2ef1c3"
+      },
+      "corpus-vm-00.phase.manifest.json": {
+        "bytes": 1745,
+        "sha256": "0479718e98c76547ab151abbd27f484083326ded56d82a526bd60fa14ec42cbb"
+      },
+      "corpus-vm-01.phase.manifest.json": {
+        "bytes": 1730,
+        "sha256": "ec9980195c3cd2ab5b8badfa0b1411e9b8d32bc3f3222157fdec0bdf8e86465c"
+      },
+      "corpus-default-08.phase.manifest.json": {
+        "bytes": 1726,
+        "sha256": "eff082b39de7fd5dd00388f9a7d2efd641cbe61fa7e6e46daba20a753f8e9d59"
+      },
+      "corpus-vm-02.phase.manifest.json": {
+        "bytes": 1732,
+        "sha256": "669f65c46881b2537a3bd9196ea3df55e9497af4c6cce7592403274d2ba69b69"
+      },
+      "corpus-vm-03.phase.manifest.json": {
+        "bytes": 1731,
+        "sha256": "ed40d72ae3096751959f559662af0a8de0681b958b80d6fab7923b9fc2dbc6fe"
+      },
+      "corpus-default-09.phase.manifest.json": {
+        "bytes": 1733,
+        "sha256": "a9f4e822fedfdb3308b6fd7f741535f996b371a1149ca0e3815017c8d5696698"
+      },
+      "vm-03.compact.json": {
+        "bytes": 13958,
+        "sha256": "e363bf57c4637a0ab22c148b94aa735f19aa7d55d64701cb31ef95b0032ec31f"
+      },
+      "vm-04.compact.json": {
+        "bytes": 9631,
+        "sha256": "75ffdecfb0866743ceac117b59ec98fb4659f045bb59882202f6da0b2e935fdf"
+      },
+      "corpus-default-10.phase.manifest.json": {
+        "bytes": 1730,
+        "sha256": "76741906b26558b5aec7b63bcf9c719190cdf96df85818bdf5187167fe2129cf"
+      }
+    },
+    "after": {
+      "workspace.phase.manifest.json": {
+        "bytes": 2580,
+        "sha256": "aa29abc00761b1c7081c136c26450715093da995f324c78d247142f7e108ce27"
+      },
+      "vm-06.compact.json": {
+        "bytes": 6152,
+        "sha256": "4b86675a6f5333ef5932bb986027acb3a2766a05ca8e7e1eded66e1ed22e5807"
+      },
+      "vm-01.compact.json": {
+        "bytes": 4854,
+        "sha256": "4464425080cd4032a6ddcc6bd62e49e7e660bfc5a0be59d676b88849a2335385"
+      },
+      "release.phase.manifest.json": {
+        "bytes": 1706,
+        "sha256": "5768c9cf7952b2b72391e57dbc26c3fa0fc9103bb1d6ff1520157080653c9501"
+      },
+      "vm-00.compact.json": {
+        "bytes": 177521,
+        "sha256": "21453022de94507d6baef161ef4ff5666e6de7f20fbaae2f0dbb47a44278a154"
+      },
+      "vm-07.compact.json": {
+        "bytes": 15406,
+        "sha256": "dedb1ddd5e6394949c6d3409de48cce41542cb68c448113bbe6d1d2d4129c3ce"
+      },
+      "host.phase.manifest.json": {
+        "bytes": 2107,
+        "sha256": "4a24ab097988922343dfd08ee74444edd88e0979b318c9ce18a6ccc9072db561"
+      },
+      "default-00.compact.json": {
+        "bytes": 177526,
+        "sha256": "0afeaea0967a037d4fe63f8d766118ebeb2bce17bf58199059ac76caf22d868d"
+      },
+      "default-07.compact.json": {
+        "bytes": 15411,
+        "sha256": "46406028b6ede8dd945173233c964a907896596cb24b9a2c82a4cb428c2b3533"
+      },
+      "docs.phase.manifest.json": {
+        "bytes": 1378,
+        "sha256": "66b6af38a4c7670b2002820f5fc207441f892405a8fa3d0db1fbf011e19b2f8d"
+      },
+      "default-06.compact.json": {
+        "bytes": 6157,
+        "sha256": "5d2411b878f8dd9a4a017ce0a4621a33eeab78b9555ae6f916590db65e0f0c4c"
+      },
+      "default-01.compact.json": {
+        "bytes": 4859,
+        "sha256": "0240d7e0d07eafd7ad34f1b51b49ee9b2863124ec62ef305f25e5b5ea2f785d0"
+      },
+      "vm-09.compact.json": {
+        "bytes": 5003,
+        "sha256": "1fb684359db1944629aefd55002330186fa515de7cac68c2a11a536397a52fef"
+      },
+      "corpus-default-04.phase.manifest.json": {
+        "bytes": 1762,
+        "sha256": "5c863a163cb3348c76713754b97b719c7d39255b3fcc486401bb7c04959b3213"
+      },
+      "core.manifest.json": {
+        "bytes": 12051,
+        "sha256": "8f5ef8bb89e462f799532513a5e974133ccf3a6d785b160a8fdc56450137dd78"
+      },
+      "corpus-default-05.phase.manifest.json": {
+        "bytes": 1756,
+        "sha256": "13ee7912df1d7be62250cbc10c0c1084158871f185dc4882f37d6a08c388ea26"
+      },
+      "corpus-default-06.phase.manifest.json": {
+        "bytes": 1756,
+        "sha256": "7744af8a24f8d90cbec379f4627ae6fe2fa8bab980e66918d882d178ad614437"
+      },
+      "default-03.compact.json": {
+        "bytes": 13969,
+        "sha256": "060ee41f5c252d1d679e56dcb3abb52c049d981179d4cd2e499574da904b33eb"
+      },
+      "corpus-default-07.phase.manifest.json": {
+        "bytes": 1805,
+        "sha256": "859bd6a24806db0a99ba2679ced74e8d7bc68a22e732e6bbbf6f46bfff007f55"
+      },
+      "default-04.compact.json": {
+        "bytes": 9642,
+        "sha256": "df2c4ef4c61be027ff90d53dfb42f9de923ccd2a636367ae5ebcf135d2ae7ee2"
+      },
+      "corpus-default-01.phase.manifest.json": {
+        "bytes": 1784,
+        "sha256": "62b888ff8dee9d3b5f8780db2fa0d9bbe1572f599ed5b5b1209a58f31921fad8"
+      },
+      "corpus-default-00.phase.manifest.json": {
+        "bytes": 1799,
+        "sha256": "40711286f8f86f310e326841e2438d7d920195c1ba51e05bc6a2a24649c33c0b"
+      },
+      "vm-08.compact.json": {
+        "bytes": 5469,
+        "sha256": "63128fec1b9058f35c4e15808070466bc7b86ed2ad5c133dc8509a327fc04552"
+      },
+      "default-05.compact.json": {
+        "bytes": 7445,
+        "sha256": "43ca7aa5c3c8c053599ce192db3ddc3cf58b52801f1bc7f37276146a09b87b1a"
+      },
+      "corpus-vm-10.phase.manifest.json": {
+        "bytes": 1738,
+        "sha256": "6c07006babb759f3ece46beae5cbf4803dafe52ae7ce466769743a2bad4bb901"
+      },
+      "default-02.compact.json": {
+        "bytes": 23320,
+        "sha256": "4068fb63da333bcbd1f40e7478ef8b862cbee46a9cdd05b8917d7589059ab8d8"
+      },
+      "corpus-vm-09.phase.manifest.json": {
+        "bytes": 1741,
+        "sha256": "758d1ed28846764e94bf33649b21611c8c67ac7cae46dc42b334368e39cb7813"
+      },
+      "corpus-default-03.phase.manifest.json": {
+        "bytes": 1785,
+        "sha256": "26829b48e796a55d7ef21d424ecce38a21d11752a4142365d31fda41584a6bf8"
+      },
+      "default-10.compact.json": {
+        "bytes": 9825,
+        "sha256": "ec94e28bdc273fc59365d87caff42c999592e19a473a946c7b176e798d9db424"
+      },
+      "corpus-default-02.phase.manifest.json": {
+        "bytes": 1786,
+        "sha256": "6f6e2e07e2b9848e46c09afd24e9acf654a53eca23de615b66e63d60e244c3fe"
+      },
+      "corpus-vm-08.phase.manifest.json": {
+        "bytes": 1734,
+        "sha256": "7a850fa73e9beb1819a132c6d76e690f8b2ed1b93cb43ac8c84ec5075b174a21"
+      },
+      "corpus-vm-05.phase.manifest.json": {
+        "bytes": 1733,
+        "sha256": "127753e2b3a83866cffdf036c74ac335f959238a1b6edf2294e227f5e68e2c40"
+      },
+      "corpus-vm-04.phase.manifest.json": {
+        "bytes": 1739,
+        "sha256": "968adb7af7da96e2cb0ace65eafbc918181e299c379e8175391dca14def5a695"
+      },
+      "default-08.compact.json": {
+        "bytes": 5474,
+        "sha256": "885695fd37b826c57b8e9fae45c0ae50a000a9030a9102e98a52fd6e010ffe23"
+      },
+      "vm-05.compact.json": {
+        "bytes": 7440,
+        "sha256": "64c571e6814ac09796bb6433e5de96d98ca6581cc117eaca69d3a5695fe40013"
+      },
+      "vm-02.compact.json": {
+        "bytes": 23315,
+        "sha256": "d9fd91d31eedcc09174d8dcc92c7faf1d4f978b769444a228bf4ca72e08de235"
+      },
+      "corpus-vm-07.phase.manifest.json": {
+        "bytes": 1782,
+        "sha256": "457f6643e459addf53e5e5161f781fc44364a5f0375f510758d77af5617ea171"
+      },
+      "vm-10.compact.json": {
+        "bytes": 9820,
+        "sha256": "e894135ebc3a8e14f70ae9a4b3f037be5878ee30d06a48e511d7cca799be4ba5"
+      },
+      "corpus-vm-06.phase.manifest.json": {
+        "bytes": 1733,
+        "sha256": "57f4a9597d6c62cbbd64296f5510b1b3d4f0252c2481eb324d35c37582368305"
+      },
+      "default-09.compact.json": {
+        "bytes": 5008,
+        "sha256": "458c11a71d4cdf658449991d4d902f1ebf0a7f472748036922645cb8481da887"
+      },
+      "storage.summary.json": {
+        "bytes": 2261,
+        "sha256": "63c278b140b61ff6785a229c2938ec05df43ac5c6ac32f460434131b9013e9a7"
+      },
+      "corpus-vm-00.phase.manifest.json": {
+        "bytes": 1776,
+        "sha256": "ebbb8b0baf34683745e3b5255e212cc1d73d915585ed32ebeb2f00ad6d334cf9"
+      },
+      "corpus-vm-01.phase.manifest.json": {
+        "bytes": 1761,
+        "sha256": "ce1cd1d6bf7240732f4eae2795710f0b9b7d58a7f23832d1e346985b83ecec49"
+      },
+      "corpus-default-08.phase.manifest.json": {
+        "bytes": 1757,
+        "sha256": "cd6e1bb2e259498efd8615a19602474774448c8727868313abe2826c1d7275e5"
+      },
+      "corpus-vm-02.phase.manifest.json": {
+        "bytes": 1763,
+        "sha256": "a846ba27c17acc86c93c858a645f53ddfbf3e72ea07f3ffb26106e3d95bde1c6"
+      },
+      "corpus-vm-03.phase.manifest.json": {
+        "bytes": 1762,
+        "sha256": "d28192441bda251c01432a146490cf6d8aa34cb3770b8221fd9c97283bb5299c"
+      },
+      "corpus-default-09.phase.manifest.json": {
+        "bytes": 1764,
+        "sha256": "2e0aca95251d7fecf17cf87cfb161aeb4611cec32f88e0db5a6bec16b8fda344"
+      },
+      "vm-03.compact.json": {
+        "bytes": 13964,
+        "sha256": "2076764e87e33f4b50d4b68dd1ab0d9f7824daf4b3bbe3540b46b7b6d8bc86ce"
+      },
+      "vm-04.compact.json": {
+        "bytes": 9637,
+        "sha256": "9ff83abbe589f37bb3861b6e63d48ae217e583c0cf505c32b6bfcd6f7a7400be"
+      },
+      "corpus-default-10.phase.manifest.json": {
+        "bytes": 1761,
+        "sha256": "ab8b70849bf257a900d4d3dc1fbe549ccb19ad61b78dd050b4b7c330eefe271e"
+      }
+    }
+  }
+}

@@ -1069,7 +1069,14 @@ mod tests {
         let value = r
             .run_script("let closed=0; let it={next:function(){throw 'stop';},return:function(){closed++;}}; try {[...it];} catch(e) {} closed;")
             .unwrap();
-        assert_eq!(num(value), 1.0);
+        // GetIterator rejects this next-only object before observing next or
+        // return. Array spread is not GetIteratorDirect (ECMA-262 7.4.4,
+        // 13.2.4.1); preserve the original source witness, correct its oracle.
+        assert_eq!(num(value), 0.0);
+        let bare = r.run_script("let bareReads=0,bareNext=0,bareType=false; let bare={next(){bareNext++;throw 'next';},get return(){bareReads++;throw 'return';}}; try{[...bare];}catch(e){bareType=e instanceof TypeError;} bareType&&bareNext===0&&bareReads===0;").unwrap();
+        assert_eq!(bare, JsValue::Bool(true));
+        let step = r.run_script("let stepCloses=0,stepToken={},stepCaught=false; let stepIterable={[Symbol.iterator](){return {next(){throw stepToken;},return(){stepCloses++;return {};}};}}; try{[...stepIterable];}catch(e){stepCaught=e===stepToken;} stepCaught&&stepCloses===0;").unwrap();
+        assert_eq!(step, JsValue::Bool(true));
         let mut s = Interpreter::new();
         let value = s
             .run_script("let closed=0; let n=0; let it={[Symbol.iterator](){return this;},next:function(){n++;return {value:n,done:n>3};},return:function(){closed++;}}; try { for (const x of it) { if (x===2) throw 'stop'; } } catch(e) {} closed;")

@@ -1876,6 +1876,9 @@ include!("interp_coroutine.rs");
 include!("interp_async_generator_return.rs");
 include!("interp_async_generator_yield.rs");
 include!("interp_stmt.rs");
+include!("interp_iterable_list.rs");
+#[cfg(test)]
+include!("interp_iterable_list_tests.rs");
 include!("interp_tail_calls.rs");
 include!("interp_references.rs");
 include!("interp_yield_delegate.rs");
