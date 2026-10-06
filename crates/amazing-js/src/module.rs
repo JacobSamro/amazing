@@ -763,7 +763,7 @@ struct ModuleInstance {
 fn execute_module_body(root: &mut Interpreter, instance: &ModuleInstance, has_await: bool) -> Result<(), ModuleFailure> {
     let previous = std::mem::replace(&mut root.global_env, instance.env.clone());
     let outcome = if has_await {
-        evaluate_async_module_body(root, instance)
+        root.with_execution_context(None, |root| evaluate_async_module_body(root, instance))
     } else {
         root.run_program(&instance.program).map(|_| ()).map_err(ModuleFailure::runtime)
     };

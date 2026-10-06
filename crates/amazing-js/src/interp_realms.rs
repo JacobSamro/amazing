@@ -422,7 +422,8 @@ impl Interpreter {
             Some(std::mem::replace(&mut self.active_source_override, Some(source)))
         } else { None };
         let result = self.binding_with_realm(target, |i|
-            i.call_value_with_new_target_inner(function, receiver, args, new_target, caller));
+            i.with_execution_context(None, |i|
+                i.call_value_with_new_target_inner(function, receiver, args, new_target, caller)));
         if let Some(previous_source) = previous_source { self.active_source_override = previous_source; }
         self.realm_callers.pop();
         self.entry_realm = entry;

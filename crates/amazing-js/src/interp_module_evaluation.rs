@@ -96,6 +96,11 @@ impl Interpreter {
         env: EnvHandle,
         has_await: bool,
     ) -> Result<Option<JsValue>, Throw> {
+        self.with_execution_context(None, |i| i.module_start_body_context(program, env, has_await))
+    }
+
+    fn module_start_body_context(&mut self, program: &ast::Program,
+        env: EnvHandle, has_await: bool) -> Result<Option<JsValue>, Throw> {
         let previous = std::mem::replace(&mut self.global_env, env.clone());
         let result = if has_await {
             let body = FunctionBody::Block(ast::Block {

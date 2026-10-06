@@ -697,6 +697,10 @@ impl Interpreter {
     }
 
     fn run_job(&mut self, job: Job) -> Result<(), Throw> {
+        self.with_execution_context(None, |i| i.run_job_context(job))
+    }
+
+    fn run_job_context(&mut self, job: Job) -> Result<(), Throw> {
         match job {
             Job::Promise(job) => run_promise_reaction(job.reaction, job.fate, self),
             Job::ModuleImport(job) => self.run_module_import_job(job),
@@ -2210,7 +2214,7 @@ impl Interpreter {
         }
         self.depth += 1;
         self.frames.push(CallFrame {
-            context_id: CallFrame::next_context_id(),
+            context_id: self.execution_contexts.last().copied().unwrap_or_else(CallFrame::next_context_id),
             this: this.clone(),
             home: fun.home.clone(),
             // Retain the original FunctionEnvironment function, not its

@@ -114,6 +114,7 @@ struct Segment {
     saved_strict: bool,
     completion: Option<JsValue>,
     saved_completion: Option<JsValue>,
+    saved_execution_contexts: Vec<u64>,
     /// `i.frames.len()` inside the current segment: an `await` evaluated at exactly this depth
     /// belongs to the body itself (anything deeper is a nested, non-coroutine call).
     base: usize,
@@ -125,7 +126,7 @@ impl Segment {
     fn capture(i: &Interpreter, strict: bool, awaits: bool) -> Segment {
         let frame = i.frames.last();
         Segment {
-            context_id: frame.map(|frame| frame.context_id).unwrap_or_else(CallFrame::next_context_id),
+            context_id: i.execution_contexts.last().copied().unwrap_or_else(CallFrame::next_context_id),
             this: frame.map(|f| f.this.clone()).unwrap_or(JsValue::Undefined),
             home: frame.and_then(|f| f.home.clone()),
             super_constructor: frame.and_then(|f| f.super_constructor.clone()),
@@ -135,6 +136,7 @@ impl Segment {
             saved_strict: false,
             completion: None,
             saved_completion: None,
+            saved_execution_contexts: Vec::new(),
             base: 0,
             awaits,
         }
@@ -145,6 +147,10 @@ impl Segment {
 fn enter_segment(i: &mut Interpreter) {
     SEGMENT.with(|segment| {
         if let Some(segment) = segment.borrow_mut().as_mut() {
+            segment.saved_execution_contexts = i.execution_contexts.clone();
+            if i.execution_contexts.last() != Some(&segment.context_id) {
+                i.execution_contexts.push(segment.context_id);
+            }
             i.frames.push(CallFrame {
                 context_id: segment.context_id,
                 this: segment.this.clone(),
@@ -167,6 +173,7 @@ fn leave_segment(i: &mut Interpreter) {
         if let Some(segment) = segment.borrow_mut().as_mut() {
             segment.completion = std::mem::replace(&mut i.completion, segment.saved_completion.clone());
             i.frames.pop();
+            i.execution_contexts = std::mem::take(&mut segment.saved_execution_contexts);
             // A class evaluation may enter strict mode after this segment
             // began. Retain its actual suspended strictness, then restore
             // the driver; the class wrapper still restores its outer scope.

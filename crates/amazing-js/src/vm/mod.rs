@@ -608,6 +608,10 @@ impl Program {
     /// temporary registers/scopes/references drop on success or error.
     /// Legacy user callbacks reached through coercion are not fuel-metered yet.
     pub fn run(&self, interpreter: &mut Interpreter, limit: usize) -> Result<JsValue, Throw> {
+        interpreter.with_execution_context(None, |i| self.run_in_current_context(i, limit))
+    }
+
+    pub(crate) fn run_in_current_context(&self, interpreter: &mut Interpreter, limit: usize) -> Result<JsValue, Throw> {
         let previous = interpreter.completion.clone();
         interpreter.completion = None;
         let env = interpreter.global_env.clone();
@@ -2330,6 +2334,8 @@ fn with_vm_call_context<T>(
 ) -> Result<T, Throw> {
     let frame_depth = i.frames.len();
     let previous_strict = i.strict_eval_context;
+    let identity = context.as_ref().map(|frame| frame.context_id)
+        .or_else(|| i.execution_contexts.last().copied());
     if let Some(context) = context {
         // Initial execution already has this invocation on the stack;
         // recursive invocations of the same function have distinct IDs.
@@ -2338,7 +2344,7 @@ fn with_vm_call_context<T>(
         }
     }
     i.strict_eval_context = strict;
-    let result = operation(i);
+    let result = i.with_execution_context(identity, operation);
     i.frames.truncate(frame_depth);
     i.strict_eval_context = previous_strict;
     result

@@ -367,6 +367,7 @@ pub struct Interpreter {
     realms: HashMap<u64, RealmState>,
     intrinsic_constructors: HashMap<String, (Obj, Obj)>,
     entry_realm: Option<RealmHandle>,
+    execution_contexts: Vec<u64>,
     realm_callers: Vec<RealmHandle>,
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     put_forwards: Vec<(Weak<RefCell<JsObject>>, String, String)>,
@@ -604,6 +605,7 @@ impl Interpreter {
             realms: HashMap::new(),
             intrinsic_constructors: HashMap::new(),
             entry_realm: None,
+            execution_contexts: Vec::new(),
             realm_callers: Vec::new(),
             host_cache: HashMap::new(),
             put_forwards: Vec::new(),
@@ -1336,8 +1338,12 @@ impl Interpreter {
     }
 
     pub fn run_program_with_backend(&mut self, p: &ast::Program, backend: ExecutionBackend) -> Result<JsValue, Throw> {
+        self.with_execution_context(None, |i| i.run_program_backend_context(p, backend))
+    }
+
+    fn run_program_backend_context(&mut self, p: &ast::Program, backend: ExecutionBackend) -> Result<JsValue, Throw> {
         (match backend {
-            ExecutionBackend::TreeWalk => self.run_program(p),
+            ExecutionBackend::TreeWalk => self.run_program_context(p),
             ExecutionBackend::Bytecode => {
                 let is_module = !self.in_eval && self.global_env.kind() == EnvKind::Module;
                 let code = vm::compile(p, is_module).map_err(|error| Throw::type_error(error.to_string()))?;
@@ -1347,7 +1353,7 @@ impl Interpreter {
                 let previous_strict = self.strict_eval_context;
                 self.strict_eval_context |= has_use_strict_directive(&p.body)
                     || (!self.in_eval && self.global_env.kind() == EnvKind::Module);
-                let result = code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
+                let result = code.run_in_current_context(self, vm::DEFAULT_INSTRUCTION_LIMIT);
                 self.strict_eval_context = previous_strict;
                 self.entry_realm = previous_entry;
                 result
@@ -1356,6 +1362,10 @@ impl Interpreter {
     }
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
+        self.with_execution_context(None, |i| i.run_program_context(p))
+    }
+
+    fn run_program_context(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         let previous_entry = self.entry_realm;
         let realm = self.binding_current_realm();
         self.entry_realm.get_or_insert(realm);
@@ -1378,7 +1388,7 @@ impl Interpreter {
             match vm::compile(p, is_module) {
                 Ok(code) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM compiled"); }
-                    return code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
+                    return code.run_in_current_context(self, vm::DEFAULT_INSTRUCTION_LIMIT);
                 }
                 Err(_) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM fallback"); }
@@ -1414,7 +1424,7 @@ impl Interpreter {
         env.0.borrow_mut().kind = EnvKind::Module;
         let previous_strict = self.strict_eval_context;
         self.strict_eval_context = true;
-        let result = self.hoist(&program.body, &env);
+        let result = self.with_execution_context(None, |i| i.hoist(&program.body, &env));
         self.strict_eval_context = previous_strict;
         result
     }
@@ -1959,3 +1969,7 @@ include!("interp_module_bytes.rs");
 
 include!("interp_module_source.rs");
 include!("interp_module_source_tests.rs");
+include!("interp_execution_contexts.rs");
+#[cfg(test)]
+#[path = "interp_execution_contexts_tests.rs"]
+mod execution_contexts_tests;
