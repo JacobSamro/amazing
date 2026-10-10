@@ -1,0 +1,63 @@
+{
+ "schema": 1,
+ "ticket": "resume-batch2",
+ "date": "2026-10-11",
+ "published_base": "0ce364ee6ff786e00defb74dc04bb6bf825a4409",
+ "gated_source_commit": "0ce243d71b1f281c31a52574adad152dd73ea407",
+ "tickets": [
+  "b79ebe444 render sweep script accepts no option flags on Bash 3.2 (tooling)",
+  "70131d27f weak collections: symbol keys, upsert methods, iterator closing",
+  "0ce243d71 RegExp Symbol.match/search/replace generic over RegExp-like receivers"
+ ],
+ "workspace": {
+  "nextest": {
+   "passed": 5536,
+   "failed": 0,
+   "skipped": 17
+  },
+  "doctests": {
+   "passed": 39,
+   "failed": 0
+  }
+ },
+ "test262": {
+  "shards": 16,
+  "timeout_seconds": 60,
+  "summary": {
+   "files": {
+    "fail": 424,
+    "pass": 52983,
+    "skipped": 294,
+    "unsupported": 171
+   },
+   "variants": {
+    "fail": 835,
+    "pass": 101743,
+    "unsupported": 340
+   }
+  },
+  "gained_files": 61,
+  "lost_files": 0,
+  "lost_variants": 0,
+  "baseline": "t262-12f86885-resume-batch1-20261010 (published 0ce364ee6)",
+  "result_sha256": "6d51b34f9628c8d371ec4281fcf31e5578d5f9043202beac7943ceb20c463d6c",
+  "shard_sha256": {
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-0/shard-0.compact.json": "49f2e6262266539529417caf68d37acb51426c948a60f497fb72ec8134f2c909",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-0/shard-12.compact.json": "c4b1bab2472d3784f4f34cf37a63b5c148ff12214a89b3e6b4ff3650ccd65856",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-0/shard-4.compact.json": "7a3ea33a64b8f564d1f6ff41bd3b0adeb765e1720eb2b7b1ceaa3e87f53d635d",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-0/shard-8.compact.json": "974a909601bf712cf28e19e5c5558f55e48c8a93c7142e8888eb5666909fceaf",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-1/shard-1.compact.json": "d567dad105d7d401d6f03f6acc0372429c5787c41774a3baec4dd66e9a723d74",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-1/shard-13.compact.json": "7b877c1dc86895257ae27c684b8002149d54b4406b5c13d62ea1d1942ff7394e",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-1/shard-5.compact.json": "eb91d5b9317091f5b15d6475bb33ec426497b0bb3c2ed4b76d5b4673fc163dbc",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-1/shard-9.compact.json": "02bbb8fbbb8d17cfdaffc7a51abb5b925590d11536bf06573ff9d076257c8259",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-2/shard-10.compact.json": "e8580eac4dfe943a21d4695038080daf0856a15fdb92d83f1fe9efec413519d4",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-2/shard-14.compact.json": "bea4e8840046b120f9398fe249ae206930d001a7e63a7891981ebb6f9cb85e34",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-2/shard-2.compact.json": "d76fa193525b2452bfddaf88787f782956db658b32f1702bfa1fd7e8d3dc6934",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-2/shard-6.compact.json": "e9d566f8593addfb03cf39e2610d62b99579cf5dacc332c4dcedbca1ac8c5d6a",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-3/shard-11.compact.json": "63f9d92e61893c0f5ff1884aa5871e95e0d5a5b43f235519e7c8b5f159f678c3",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-3/shard-15.compact.json": "693975e9ce507daf66d64e01a29cc83ba9e4ef3095a9f96734c5e3fb96134e0c",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-3/shard-3.compact.json": "28f82ce98794190089357f42f958ece42392e7a4fa9766cba60d04d3a56896d5",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch2-20261011-20261010T220528-1791669928349299000/pool-3/shard-7.compact.json": "83a96be9170ef9a400ca3ba0ff572ad899daa03436ea739f7dc9ea1ab369a3ba"
+  }
+ }
+}
