@@ -255,6 +255,13 @@ pub(crate) fn execute_page_scripts_lenient(
     probe: Option<&str>,
     viewport: (f32, f32),
 ) -> LenientScriptResult {
+    execute_page_scripts_lenient_with_head(host,page,html,probe,viewport,None)
+}
+/// Receiving HTTP headers must come from the real loader; raw HTML callers
+/// explicitly create a literal fixture/document instead.
+pub(crate) fn execute_page_scripts_lenient_with_head(
+    host:&Rc<RefCell<BrowserDomHost>>,page:&str,html:&str,probe:Option<&str>,viewport:(f32,f32),
+    head:Option<&crate::navigation_response::RootResponseHead>)->LenientScriptResult {
     let mut errors = Vec::new();
     let mut probe_lines = Vec::new();
     let mut scheduler = match crate::js_scheduler::DriverScheduler::new(
@@ -265,7 +272,15 @@ pub(crate) fn execute_page_scripts_lenient(
             return LenientScriptResult { errors, probe: probe_lines };
         }
     };
-    scheduler.set_location_url(page);
+    let admission=match head {
+        Some(head)=>scheduler.set_location_url_with_head(page,head),
+        None=>scheduler.set_location_url_initial(crate::runtime_binding_host::modules::source_url(page)),
+    };
+    if let Err(error)=admission {
+        errors.push(format!("receiving document admission: {}",error.describe()));
+        return LenientScriptResult{errors,probe:probe_lines};
+    }
+
     // IA-LIVE-3: give matchMedia the real per-page viewport instead of the
     // interpreter's hardcoded default (runtime_host_integrator_assist.rs).
     scheduler.set_viewport(viewport.0, viewport.1);
@@ -442,7 +457,11 @@ pub(crate) fn prepare_page_scripts(
 ) -> Result<Option<crate::js_scheduler::DriverScheduler>, String> {
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
         .map_err(|error| error.describe())?;
-    scheduler.set_location_url(page);
+    // This API receives literal source directly (render/reftest fixtures),
+    // rather than an HTTP loader result; no received head is fabricated.
+    scheduler.set_location_url_initial(crate::runtime_binding_host::modules::source_url(page))
+        .map_err(|error|format!("literal document admission: {}",error.describe()))?;
+
     let deferred = run_interleaved_parse(host, &mut scheduler, html, |scheduler, script| {
         let source = match &script.src {
             Some(_) if script.kind == ScriptKind::Module => scheduler.load_module_source(&scheduler.page_script_url(page, script))?,
@@ -541,10 +560,12 @@ pub(crate) fn cmd_run(path: Option<&str>) -> ExitCode {
     };
     let entry = if let Some(path) = path {
         let url = crate::runtime_binding_host::modules::source_url(path);
-        scheduler.set_location_url(&url);
+        if let Err(error)=scheduler.set_location_url_initial(&url) {eprintln!("amazing run: {}",error.describe());return ExitCode::FAILURE;}
         let script = PageScript { kind: ScriptKind::Classic, node: amazing_dom::NodeIdx(0), node_generation: host.borrow().dom.node_generation(amazing_dom::NodeIdx(0)), src: Some(url.clone()), body: "".into() };
         scheduler.run_page_script(&script, &source, &url)
-    } else { scheduler.run_script(&source) };
+    } else {
+        scheduler.set_location_url_initial("about:blank").and_then(|_|scheduler.run_script(&source))
+    };
     let checkpoint = scheduler.pump_at(std::time::Duration::from_millis(16), true);
     let result = entry.and_then(|value| checkpoint.map(|_| value));
     match result {
@@ -601,6 +622,9 @@ pub(crate) fn cmd_domrun(args: &[String]) -> ExitCode {
         Ok(scheduler) => scheduler,
         Err(error) => { eprintln!("amazing domrun: {}", error.describe()); return ExitCode::FAILURE; }
     };
+    if let Err(error)=scheduler.set_location_url_initial(crate::runtime_binding_host::modules::source_url(html_path)) {
+        eprintln!("amazing domrun receiving document: {}",error.describe());return ExitCode::FAILURE;
+    }
     let entry = scheduler.run_script(&script);
     let checkpoint = scheduler.pump_at(std::time::Duration::from_millis(16), true);
     let result = entry.and_then(|value| checkpoint.map(|_| value));

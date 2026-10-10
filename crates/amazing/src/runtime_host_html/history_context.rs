@@ -27,7 +27,7 @@ impl FrameRuntime {
 
     /// Fully active means this actual current Document and every actual
     /// container Document are active. A saved old global is insufficient.
-    pub(super) fn history_context(&self, dom: &Dom, document: NodeIdx) -> Option<HtmlHistoryContext> {
+    pub(crate) fn history_context(&self, dom: &Dom, document: NodeIdx) -> Option<HtmlHistoryContext> {
         let (realm, context) = self.contexts.iter().find(|(realm, context)|
             context.document == document && self.history_context_is_current(dom, **realm, context))?;
         let mut seen = HashSet::from([*realm]);

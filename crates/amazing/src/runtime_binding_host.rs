@@ -854,7 +854,7 @@ pub(crate) fn install(
         pending_form_selection_events: Vec::new(),
         messaging: None,
         encoding: None,
-        net: NetRuntime::new(),
+        net: NetRuntime::new().map_err(|error|Throw::type_error(format!("Native pending network initialization failed: {error}")))?,
         integrator_assist: IaRuntime::new(),
         modules: modules::ModuleRuntime::new(),
         cssom: CssomRuntime::default(),

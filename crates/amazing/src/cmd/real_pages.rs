@@ -88,12 +88,17 @@ pub(crate) fn fetch_document(url: &str) -> Result<(String, Vec<u8>, Option<Strin
         timeout: std::time::Duration::from_secs(15),
         ..amazing_net::FetchOptions::default()
     };
-    let response = amazing_net::fetch(url, &options).map_err(|error| error.to_string())?;
-    if !(200..300).contains(&response.status) {
-        return Err(format!("HTTP {} {}", response.status, response.reason));
-    }
-    let content_type = response.headers.get("content-type").map(str::to_owned);
-    Ok((response.url, response.body, content_type))
+    let received=fetch_document_received(url,&options)?;
+    let response=received.into_response();
+    let content_type=response.headers.get("content-type").map(str::to_owned);
+    Ok((response.url,response.body,content_type))
+}
+
+fn fetch_document_received(url:&str,options:&amazing_net::FetchOptions)->Result<amazing_net::ReceivedResponse,String> {
+    let received=amazing_net::fetch_received(url,options).map_err(|error|error.to_string())?;
+    let response=received.response();
+    if !(200..300).contains(&response.status) {return Err(format!("HTTP {} {}",response.status,response.reason));}
+    Ok(received)
 }
 
 /// `amazing render-page <page.html|url> <out.bmp> [viewport_width] [fixed_height]`.
@@ -115,9 +120,14 @@ pub(crate) fn cmd_render_page(args: &[String]) -> ExitCode {
 
     let started = Instant::now();
     let remote = page.starts_with("http://") || page.starts_with("https://");
-    let (base_url, html, content_type) = if remote {
-        match fetch_document(page) {
-            Ok(document) => document,
+    let (base_url, html, content_type, response_head) = if remote {
+        let options=amazing_net::FetchOptions{max_response_bytes:16*1024*1024,timeout:std::time::Duration::from_secs(15),..amazing_net::FetchOptions::default()};
+        match fetch_document_received(page,&options) {
+            Ok(received)=>{
+                let head=crate::navigation_response::RootResponseHead::received(&received,String::new());
+                let response=received.into_response();let content_type=response.headers.get("content-type").map(str::to_owned);
+                (response.url,response.body,content_type,Some(head))
+            },
             Err(error) => {
                 let errors = vec![format!("fetch: {error}")];
                 emit(&PageReport {
@@ -130,7 +140,7 @@ pub(crate) fn cmd_render_page(args: &[String]) -> ExitCode {
         }
     } else {
         match crate::cmd::parse::read_bytes(Some(page), "render-page") {
-            Ok(bytes) => (page.to_owned(), bytes, None),
+            Ok(bytes) => (page.to_owned(), bytes, None,None),
             Err(code) => return code,
         }
     };
@@ -167,8 +177,8 @@ pub(crate) fn cmd_render_page(args: &[String]) -> ExitCode {
         .unwrap_or_else(|| amazing_css::MediaEnvironment::default().viewport_height_px);
     let outcome = if scripting {
         let text = crate::document::decode_html_bytes(&html, content_type.as_deref());
-        crate::cmd::js::execute_page_scripts_lenient(
-            &host, &base_url, &text, probe_source.as_deref(), (width, viewport_height),
+        crate::cmd::js::execute_page_scripts_lenient_with_head(
+            &host, &base_url, &text, probe_source.as_deref(), (width, viewport_height),response_head.as_ref(),
         )
     } else {
         crate::cmd::js::LenientScriptResult { errors: Vec::new(), probe: Vec::new() }

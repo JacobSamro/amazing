@@ -188,6 +188,9 @@ impl Drop for FixtureServer {
     }
 }
 
+#[path = "wpt_harness_dynamic.rs"]
+mod dynamic;
+
 fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String, Vec<u8>)>, scaffold: bool) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
     let mut request = Vec::new();
@@ -215,6 +218,15 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
     // not fit the single-Content-Type-header write below).
     if let Some(path) = path.as_deref() {
         let path_only = path.split('#').next().unwrap_or(path);
+        {
+            let (route, query) = path_only.split_once('?').unwrap_or((path_only, ""));
+            if let Some((handler, relative)) = dynamic::lookup(route) {
+                if source_bytes(root, &root.join(relative), scaffold).is_ok() {
+                    handler(&mut stream, query);
+                    return;
+                }
+            }
+        }
         if let Some((route, query)) = path_only.split_once('?') {
             if route == "/encoding/resources/single-byte-raw.py"
                 && source_bytes(root, &root.join("encoding/resources/single-byte-raw.py"), scaffold).is_ok() {
@@ -1050,15 +1062,19 @@ fn fetch_page(
     url: &str,
     record: bool,
     target: Option<usize>,
-) -> Result<crate::navigator::NavigationResult<Vec<u8>>, String> {
+) -> Result<crate::navigator::NavigationResult<crate::navigation_response::RootNavigationResponse>, String> {
     let use_process = crate::runtime_host_ipc::enabled();
-    navigator.navigate(url, record, target, 0, move |url, process_body| {
+    navigator.navigate_received(url,record,target,0,move|url,process_body,head| {
         if use_process {
-            Ok(process_body.to_vec())
+            crate::navigation_response::RootNavigationResponse::network(process_body,
+                head.ok_or("Missing actual accepted process root response")?).map(|response|(response,url.to_owned()))
         } else {
-            let response = amazing_net::fetch(url, &amazing_net::FetchOptions::default())
-                .map_err(|error| format!("fixture navigation: {error}"))?;
-            Ok(response.body)
+            let received=amazing_net::fetch_received(url,&amazing_net::FetchOptions::default())
+                .map_err(|error|format!("fixture navigation: {error}"))?;
+            // This actual native request used default options, hence sent no
+            // Referer. Unknown request referrers never receive this default.
+            let final_url=received.response().url.clone();
+            Ok((crate::navigation_response::RootNavigationResponse::direct(received,String::new()),final_url))
         }
     })
 }
@@ -1089,7 +1105,7 @@ fn execute(options: &Options) -> Result<(), String> {
     };
     let mut navigator = crate::navigator::Navigator::new(1);
     let shim_selected = !options.scaffold && std::env::var_os("AMAZING_WPT_SHIM_ADDR").is_some();
-    let (fixture, url, history_state) = if shim_selected {
+    let (fixture, url, history_state, response_head) = if shim_selected {
         // Pinned fetch/api and xhr resource requests must resolve to the
         // `web-platform.test` origins the std-only shim answers, not to the
         // loopback fixture server, so the document URL stays on that host.
@@ -1097,6 +1113,7 @@ fn execute(options: &Options) -> Result<(), String> {
             FixtureServer::origin_only("http://web-platform.test"),
             format!("http://web-platform.test/{}", options.test),
             None,
+            None, // explicit generated/local literal fixture, no received HTTP head
         )
     } else {
         let generated =
@@ -1105,10 +1122,10 @@ fn execute(options: &Options) -> Result<(), String> {
         let fixture = FixtureServer::start(root.clone(), generated, options.scaffold)?;
         let url = fixture.url(&options.test);
         let page = fetch_page(&mut navigator, &url, true, None)?;
-        if page.rendered != expected_html {
+        if page.rendered.body != expected_html {
             return Err("fixture navigation differed from pinned page bytes".into());
         }
-        (fixture, page.url, page.history_state)
+        (fixture, page.url, page.history_state,Some(page.rendered.head))
     };
     // NET-40: `.https.` tests (e.g. `websockets/mixed-content.https.any.js`)
     // assert on `location.protocol` and mixed-content restrictions
@@ -1132,6 +1149,7 @@ fn execute(options: &Options) -> Result<(), String> {
         &fixture,
         &mut navigator,
         history_state,
+        response_head,
         0,
     )
 }
@@ -1145,6 +1163,7 @@ fn execute_page(
     fixture: &FixtureServer,
     navigator: &mut crate::navigator::Navigator,
     history_state: Option<amazing_js::SerializedValue>,
+    response_head: Option<crate::navigation_response::RootResponseHead>,
     depth: usize,
 ) -> Result<(), String> {
     if depth >= 32 {
@@ -1165,7 +1184,12 @@ fn execute_page(
     scheduler
         .js
         .set_viewport_size(options.width, options.height);
-    scheduler.set_location_url(&url);
+    match response_head.as_ref() {
+        Some(head)=>scheduler.set_location_url_with_head(&url,head),
+        // This branch is only the explicit native generated/local fixture
+        // checkpoint selected above, never missing/failed HTTP admission.
+        None=>scheduler.set_location_url_initial(&url),
+    }.map_err(|error|error.describe())?;
     let module_root = root.to_owned();
     let scaffold = options.scaffold;
     scheduler.set_module_source_loader(Rc::new(move |url| {
@@ -1386,7 +1410,7 @@ fn execute_page(
                 let page = fetch_page(navigator, &current, false, None)?;
                 let file = fixture_file(root, fixture, &page.url)?;
                 let html = document_source(root, &file, options.scaffold)?;
-                if page.rendered != html {
+                if page.rendered.body != html {
                     return Err("fixture reload differed from pinned page bytes".into());
                 }
                 return execute_page(
@@ -1398,6 +1422,7 @@ fn execute_page(
                     fixture,
                     navigator,
                     page.history_state,
+                    Some(page.rendered.head),
                     depth + 1,
                 );
             } else if let Some((target, target_url)) = navigator
@@ -1419,7 +1444,7 @@ fn execute_page(
                     let page = fetch_page(navigator, &target_url, false, Some(target))?;
                     let file = fixture_file(root, fixture, &page.url)?;
                     let html = document_source(root, &file, options.scaffold)?;
-                    if page.rendered != html {
+                    if page.rendered.body != html {
                         return Err("fixture traversal differed from pinned page bytes".into());
                     }
                     return execute_page(
@@ -1431,6 +1456,7 @@ fn execute_page(
                         fixture,
                         navigator,
                         page.history_state,
+                        Some(page.rendered.head),
                         depth + 1,
                     );
                 }
@@ -1441,7 +1467,7 @@ fn execute_page(
             let page = fetch_page(navigator, &next, true, None)?;
             let file = fixture_file(root, fixture, &page.url)?;
             let html = document_source(root, &file, options.scaffold)?;
-            if page.rendered != html {
+            if page.rendered.body != html {
                 return Err("fixture navigation differed from pinned page bytes".into());
             }
             return execute_page(
@@ -1453,6 +1479,7 @@ fn execute_page(
                 fixture,
                 navigator,
                 page.history_state,
+                Some(page.rendered.head),
                 depth + 1,
             );
         }

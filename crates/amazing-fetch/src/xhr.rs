@@ -7,6 +7,8 @@ use crate::api::{
     PendingFetchApi,
 };
 use crate::{FetchError, HttpUrl, NetworkOrCache, Origin, Site};
+mod streaming;
+pub use streaming::XhrServiceRequest;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -164,6 +166,13 @@ pub trait XhrTextDecoder {
     fn decode(&self, bytes: &[u8], charset: Option<&str>) -> String;
 }
 
+/// Actual URL-resolution base and native origin are separate. An about/file
+/// base must not mint an HTTP origin or require a fabricated replacement URL.
+pub struct XhrUrlContext {
+    pub base_url: amazing_net::ParsedUrl,
+    pub origin: Origin,
+}
+
 /// Each call returns a batch for the embedder to dispatch. Dispatch may re-enter
 /// `open` or `abort`; the generation field lets the embedder discard stale events.
 pub struct Xhr {
@@ -179,7 +188,11 @@ pub struct Xhr {
     override_mime: Option<String>,
     request_headers: ApiHeaders,
     request: Option<ApiRequest>,
+    native_client: Option<crate::service::ClientContext>,
     response: Option<ApiResponse>,
+    stream_response: Option<streaming::StreamResponse>,
+    stream_progress_ms: u64,
+    stream_upload_ms: u64,
     received: Vec<u8>,
     pending_body: Option<Vec<u8>>,
     pending_offset: usize,
@@ -211,7 +224,11 @@ impl Xhr {
             override_mime: None,
             request_headers: ApiHeaders::new(HeaderGuard::Request),
             request: None,
+            native_client: None,
             response: None,
+            stream_response: None,
+            stream_progress_ms: 0,
+            stream_upload_ms: 0,
             received: Vec::new(),
             pending_body: None,
             pending_offset: 0,
@@ -271,6 +288,11 @@ impl Xhr {
         base: &HttpUrl,
         origin: Origin,
     ) -> Result<Vec<XhrEvent>, XhrError> {
+        self.open_with_url_context(method,url,asynchronous,
+            &XhrUrlContext{base_url:base.as_parsed().clone(),origin})
+    }
+    pub fn open_with_url_context(&mut self,method:&[u16],url:&[u16],asynchronous:bool,
+        context:&XhrUrlContext)->Result<Vec<XhrEvent>,XhrError> {
         if self.context.window && !self.context.document_fully_active {
             return Err(XhrError::InvalidStateOpen);
         }
@@ -293,9 +315,9 @@ impl Xhr {
         } else {
             method
         };
-        let parsed = base
-            .resolve(&usv_string(url))
-            .map_err(|_| XhrError::SyntaxUrl)?;
+        let parsed = context.base_url.resolve(&usv_string(url))
+            .map_err(|_|XhrError::SyntaxUrl)?;
+        let parsed=HttpUrl::from_parsed(parsed).map_err(|_|XhrError::SyntaxUrl)?;
         if !asynchronous && self.context.window {
             if self.timeout_ms != 0 {
                 return Err(XhrError::InvalidAccessSyncTimeout);
@@ -311,11 +333,13 @@ impl Xhr {
         self.send_flag = false;
         self.method = method;
         self.url = Some(parsed);
-        self.origin = Some(origin);
+        self.origin = Some(context.origin.clone());
         self.asynchronous = asynchronous;
         self.request_headers = ApiHeaders::new(HeaderGuard::Request);
         self.request = None;
+        self.native_client = None;
         self.response = None;
+        self.stream_response = None;
         self.received.clear();
         self.pending_body = None;
         self.pending_offset = 0;
@@ -686,44 +710,45 @@ impl Xhr {
             self.state = XhrState::Unsent;
             self.send_flag = false;
             self.response = None;
+        self.stream_response = None;
             self.received.clear();
             self.pending_body = None;
             self.pending_offset = 0;
             self.request = None;
+        self.native_client = None;
             Vec::new()
         } else {
             Vec::new()
         }
     }
+    /// Native relevant-settings origin retained by open/send, independent of
+    /// response URL and the caller of a responseXML getter.
+    pub fn response_document_origin(&self)->Option<&Origin> {self.origin.as_ref()}
     pub fn response_url(&self) -> &str {
-        self.response.as_ref().map_or("", |r| r.url.as_str())
+        self.response.as_ref().map(|r| r.url.split('#').next().unwrap_or(""))
+            .or_else(|| self.stream_response.as_ref().map(|r| r.url.as_str())).unwrap_or("")
     }
     pub fn status(&self) -> u16 {
-        self.response.as_ref().map_or(0, |r| r.status)
+        self.response.as_ref().map(|r| r.status)
+            .or_else(|| self.stream_response.as_ref().map(|r| r.head.status)).unwrap_or(0)
     }
     pub fn status_text(&self) -> &str {
-        self.response
-            .as_ref()
-            .map_or("", |r| r.status_text.as_str())
+        self.response.as_ref().map(|r| r.status_text.as_str())
+            .or_else(|| self.stream_response.as_ref().map(|r| r.head.reason.as_str())).unwrap_or("")
     }
     pub fn get_response_header(&self, name: &[u16]) -> Result<Option<String>, XhrError> {
         let name = byte_string(name).map_err(|_| XhrError::ByteString)?;
         if self.state < XhrState::HeadersReceived {
             return Ok(None);
         }
-        Ok(self
-            .response
-            .as_ref()
-            .and_then(|r| r.headers.get_string(&name).ok().flatten()))
+        Ok(self.response_headers().and_then(|headers| headers.get_string(&name).ok().flatten()))
     }
     pub fn get_all_response_headers(&self) -> String {
         if self.state < XhrState::HeadersReceived {
             return String::new();
         }
-        let Some(response) = &self.response else {
-            return String::new();
-        };
-        let mut headers = response.headers.sorted_entries();
+        let Some(headers) = self.response_headers() else { return String::new(); };
+        let mut headers = headers.sorted_entries();
         headers.retain(|(n, _)| !matches!(n.as_str(), "set-cookie" | "set-cookie2"));
         headers.sort_by(|a, b| a.0.to_ascii_uppercase().cmp(&b.0.to_ascii_uppercase()));
         headers
@@ -748,9 +773,8 @@ impl Xhr {
     /// are handled by the DOM embedder and become a null response.
     pub fn document_source(&self) -> Option<XhrDocumentSource> {
         if self.state != XhrState::Done { return None; }
-        let response = self.response.as_ref()?;
-        if !response.body.shared_present() { return None; }
-        let header = response.headers.get_string("content-type").ok().flatten();
+        if !self.response_body_present() { return None; }
+        let header = self.response_headers()?.get_string("content-type").ok().flatten();
         let mime = self.override_mime.as_deref().or(header.as_deref())
             .and_then(crate::mime::MimeType::parse)
             .unwrap_or_else(|| crate::mime::MimeType::parse("text/xml").expect("static MIME"));
@@ -761,7 +785,7 @@ impl Xhr {
         Some(XhrDocumentSource {
             bytes: self.received.clone(),
             content_type: mime.essence(),
-            url: response.url.clone(),
+            url: self.response_document_url().to_owned(),
             charset: self.final_charset(),
         })
     }
@@ -774,9 +798,9 @@ impl Xhr {
                 Err(XhrError::UnsupportedDocument)
             }
             XhrResponseType::Blob if self.state == XhrState::Done => {
-                if self.response.is_none() { return Ok(XhrResponseValue::Null); }
-                let header = self.response.as_ref().and_then(|response|
-                    response.headers.get_string("content-type").ok().flatten());
+                if !self.has_response() { return Ok(XhrResponseValue::Null); }
+                let header = self.response_headers().and_then(|headers|
+                    headers.get_string("content-type").ok().flatten());
                 let content_type = self.override_mime.as_deref().or(header.as_deref());
                 let content_type = content_type.and_then(crate::mime::MimeType::parse)
                     .map_or_else(|| "application/octet-stream".to_owned(), |mime| mime.serialize());
@@ -788,29 +812,22 @@ impl Xhr {
                 Ok(XhrResponseValue::Null)
             }
             XhrResponseType::Json => Ok(XhrResponseValue::Json(parse_json(&self.received).ok())),
-            XhrResponseType::ArrayBuffer if self.response.is_none() => Ok(XhrResponseValue::Null),
+            XhrResponseType::ArrayBuffer if !self.has_response() => Ok(XhrResponseValue::Null),
             XhrResponseType::ArrayBuffer => {
                 Ok(XhrResponseValue::ArrayBuffer(self.received.clone()))
             }
         }
     }
     fn final_charset(&self) -> Option<String> {
-        let response = self.response.as_ref()?;
-        let header = response.headers.get_string("content-type").ok().flatten();
+        let header = self.response_headers()?.get_string("content-type").ok().flatten();
         self.override_mime
             .as_deref()
             .and_then(charset_parameter)
             .or_else(|| header.as_deref().and_then(charset_parameter))
     }
     fn response_length(&self) -> Option<u64> {
-        self.response
-            .as_ref()?
-            .headers
-            .get_string("content-length")
-            .ok()
-            .flatten()?
-            .parse()
-            .ok()
+        let value=self.response_headers()?.get_string("content-length").ok().flatten()?;
+        extract_response_length(&value)
     }
     fn expired(&self, now_ms: u64) -> bool {
         self.timeout_ms != 0 && now_ms.saturating_sub(self.started_ms) >= u64::from(self.timeout_ms)
@@ -830,6 +847,7 @@ impl Xhr {
         self.send_flag = false;
         self.pending_body = None;
         self.request = None;
+        self.native_client = None;
         events.push(self.event(
             XhrEventTarget::Request,
             XhrEventKind::ReadyStateChange,
@@ -873,7 +891,9 @@ impl Xhr {
         self.state = XhrState::Done;
         self.send_flag = false;
         self.request = None;
+        self.native_client = None;
         self.response = None;
+        self.stream_response = None;
         self.received.clear();
         self.pending_body = None;
         self.pending_offset = 0;
@@ -916,7 +936,7 @@ impl Xhr {
             ready_state: self.state,
             loaded,
             total: total.unwrap_or(0),
-            length_computable: total.is_some(),
+            length_computable: total.is_some_and(|length| length != 0),
         }
     }
 }
@@ -956,4 +976,26 @@ fn force_utf8_charset(mime: &str) -> Option<String> {
     }
     record.set_parameter("charset", "UTF-8");
     Some(record.serialize())
+}
+
+// Fetch §3.4: compare the decoded/split values before decimal interpretation.
+// Identical duplicate strings are accepted; numeric equivalence is insufficient.
+fn extract_response_length(value:&str)->Option<u64> {
+    let mut values=value.split(',').map(|value|value.trim_matches([' ', '\t']));
+    let candidate=values.next()?;
+    if candidate.is_empty() || !candidate.bytes().all(|byte|byte.is_ascii_digit())
+        || values.any(|value|value!=candidate) {return None;}
+    candidate.parse().ok()
+}
+#[cfg(test)]
+mod response_length_tests {
+    use super::extract_response_length;
+    #[test]
+    fn full_content_length_extraction_matrix() {
+        for (value,expected) in [("3",Some(3)),(" 3\t, 3 ",Some(3)),("03,03",Some(3)),
+            ("0",Some(0)),("",None),("3,4",None),("03,3",None),("+3",None),("-1",None),
+            ("3,",None),("3.0",None),("٣",None),("\"3\"",None),("18446744073709551616",None)] {
+            assert_eq!(extract_response_length(value),expected,"{value:?}");
+        }
+    }
 }

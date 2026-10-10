@@ -103,12 +103,27 @@ impl DriverScheduler {
         let url = url.into();
         self.js.set_location_url(&url);
         self.bindings.set_document_url(&mut self.js, &url);
-        // Top realm origin, so same-origin iframe WindowProxy access (JSRT-9)
-        // compares against a real value rather than the "" default.
-        if let Ok(parsed) = amazing_net::url::ParsedUrl::parse(&url) {
-            let realm = self.js.binding_current_realm();
-            let _ = self.js.binding_set_realm_origin(realm, &parsed.origin().serialize());
+        // Use the actual native Window origin, including opaque identity;
+        // History/current-URL changes cannot remint it from the new URL.
+        let realm=self.js.binding_current_realm();
+        if let Some(origin)=self.bindings.native_receiving_realm_origin(realm) {
+            let _=self.js.binding_set_realm_origin(realm,&origin.serialize());
         }
+    }
+    /// Explicit initial/literal creation checkpoint, not HTTP failure fallback.
+    pub(crate) fn set_location_url_initial(&mut self,url:impl Into<String>)->Result<(),Throw> {
+        let url=url.into();self.js.set_location_url(&url);
+        self.bindings.initialize_initial_root_document(&mut self.js,&url).map(|_|())
+    }
+    pub(crate) fn set_location_url_with_response(&mut self,url:impl Into<String>,
+        received:&amazing_net::ReceivedResponse)->Result<(),Throw> {
+        let url=url.into();self.js.set_location_url(&url);
+        self.bindings.initialize_received_root_document(&mut self.js,&url,received).map(|_|())
+    }
+    pub(crate) fn set_location_url_with_head(&mut self,url:impl Into<String>,
+        head:&crate::navigation_response::RootResponseHead)->Result<(),Throw> {
+        let url=url.into();self.js.set_location_url(&url);
+        self.bindings.initialize_received_root_head(&mut self.js,&url,head).map(|_|())
     }
     /// IA-LIVE-3: the driver's real viewport, for `window.matchMedia` to
     /// evaluate size-based media features against (`runtime_host_

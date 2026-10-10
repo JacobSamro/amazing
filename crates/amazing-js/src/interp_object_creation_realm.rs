@@ -39,6 +39,16 @@ mod object_creation_realm_tests {
     }
 
     #[test]
+    fn host_wrapper_registers_its_allocating_realm() {
+        let (mut i, parent, child) = runtime(ExecutionBackend::Bytecode);
+        let proto = i.binding_object_prototype();
+        let wrapper = i.binding_with_realm(child, |i|
+            i.binding_wrap_host(HostHandle { arena: 3, slot: 1, generation: 1, brand: 5 }, &proto)).unwrap();
+        assert_eq!(i.binding_object_creation_realm(&wrapper).unwrap(), child);
+        assert_eq!(i.binding_current_realm(), parent);
+    }
+
+    #[test]
     fn object_realm_uses_actual_ast_and_vm_callable_allocation() {
         for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
             let (mut i, parent, child) = runtime(backend);

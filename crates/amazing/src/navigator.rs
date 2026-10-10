@@ -335,6 +335,8 @@ pub struct NavigationResult<T> {
     pub history_length: usize,
     pub history: Vec<String>,
     pub history_state: Option<SerializedValue>,
+    /// Exact accepted process response; no URL/body-only fallback.
+    pub response_head: Option<amazing_process::protocol::NetworkHead>,
 }
 
 /// Owns one tab's browser history, process tokens, and child navigables.
@@ -460,6 +462,19 @@ impl Navigator {
         outgoing_scroll_y: i32,
         render: impl FnOnce(&str, &[u8]) -> Result<T, String>,
     ) -> Result<NavigationResult<T>, String> {
+        self.navigate_with_head(url,record,target,outgoing_scroll_y,
+            |url,body,_head|render(url,body).map(|output|(output,None)),false)
+    }
+    pub fn navigate_received<T>(&mut self,url:&str,record:bool,target:Option<usize>,outgoing_scroll_y:i32,
+        render:impl FnOnce(&str,&[u8],Option<&amazing_process::protocol::NetworkHead>)->Result<(T,String),String>)
+        ->Result<NavigationResult<T>,String> {
+        self.navigate_with_head(url,record,target,outgoing_scroll_y,
+            |url,body,head|render(url,body,head).map(|(output,final_url)|(output,Some(final_url))),true)
+    }
+    fn navigate_with_head<T>(&mut self,url:&str,record:bool,target:Option<usize>,outgoing_scroll_y:i32,
+        render:impl FnOnce(&str,&[u8],Option<&amazing_process::protocol::NetworkHead>)->Result<(T,Option<String>),String>,capture_head:bool)
+        ->Result<NavigationResult<T>,String> {
+        let mut response_head=None;
         let target = if !record && target == self.index {
             None
         } else {
@@ -498,7 +513,8 @@ impl Navigator {
                             .position(|candidate| candidate.id == step)
                     })
                     .unwrap_or(usize::MAX);
-                let rendered = driver.navigate(
+                let rendered=if capture_head {
+                    driver.navigate_received(
                     tab_id,
                     url,
                     record,
@@ -509,12 +525,29 @@ impl Navigator {
                         outstanding_ipc: true,
                         ..Eligibility::default()
                     },
-                    render,
-                )?;
+                    |url,body,head| {response_head=Some(head.clone());render(url,body,Some(head))},
+                    )?
+                } else {
+                    driver.navigate(
+                    tab_id,
+                    url,
+                    record,
+                    step_index,
+                    snapshot,
+                    Eligibility {
+                        // Until the renderer reports quiescence, discard conservatively.
+                        outstanding_ipc: true,
+                        ..Eligibility::default()
+                    },
+                    |url,body|render(url,body,None),
+                    )?
+                };
+                let (rendered,rendered_url)=rendered;
                 let history = driver.history(tab_id).ok_or("missing tab history")?;
                 let active = history
                     .active_entry(ROOT_NAVIGABLE)
                     .ok_or("navigation has no active root")?;
+                if rendered_url.as_ref().is_some_and(|url|url!=&active.url) {return Err("Received render URL differs from accepted navigation".into());}
                 let scroll = active
                     .snapshot
                     .scroll
@@ -535,7 +568,7 @@ impl Navigator {
                     active.document,
                 )
             } else {
-                let rendered = render(url, &[])?;
+                let (rendered,received_url) = render(url, &[],None)?;
                 let scroll = target
                     .and_then(|index| self.entries.get(index))
                     .map_or(0, |entry| entry.scroll_y);
@@ -549,7 +582,7 @@ impl Navigator {
                     });
                 (
                     rendered,
-                    url.to_owned(),
+                    received_url.unwrap_or_else(||url.to_owned()),
                     None,
                     scroll,
                     direct_restored_state,
@@ -593,6 +626,7 @@ impl Navigator {
             history_length: self.entries.len(),
             history: self.urls(),
             history_state: restored_state,
+            response_head,
         })
     }
 

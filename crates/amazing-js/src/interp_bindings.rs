@@ -155,6 +155,8 @@ impl Interpreter {
         };
         let mut object = JsObject::ordinary();
         object.proto = Some(prototype.clone());
+        // A wrapper allocated through this API has a registered creation realm.
+        object.realm = Some(self.host_realm);
         object.host_identity = Some(HostIdentity { realm: self.host_realm, handle });
         let wrapper = JsValue::object(object);
         if let JsValue::Object(object) = &wrapper {

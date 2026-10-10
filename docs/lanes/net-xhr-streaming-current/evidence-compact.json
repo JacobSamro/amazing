@@ -1,0 +1,14 @@
+{
+ "base": "0ce364ee6ff786e00defb74dc04bb6bf825a4409",
+ "before_commit": "637fb5062 (dev + measure-wpt-dom.py --suite xhr|fetch + the same trickle.py fixture handler)",
+ "after_source_commit": "adc8fec700f57bfec643621fab6cfb8226c17cb7",
+ "host": "Boat lane resume-xhr2; raw under OUT/xhr-{before,after} (jsonl deleted after compaction)",
+ "workspace": {"before": "5536 passed / 0 failed / 17 skipped; doctests 0 failed", "after": "5560 passed / 0 failed / 17 skipped; doctests 0 failed"},
+ "h2_upload_test": "authenticated_h2_upload_flow_window_sibling_and_end_before_response exists only on the candidate; failed until dispatch.rs delivered parsed H2 events before reading a closed socket; passes 3/3.",
+ "wpt_xhr": {"selected_files": 326, "before": {"pass":44,"fail":53,"timeout":8,"error":7,"unsupported":214,"pass_subtests":166}, "after": {"pass":46,"fail":53,"timeout":7,"error":6,"unsupported":214,"pass_subtests":175},
+   "lost_files": [], "lost_subtests": [], "gained_files": ["xhr/abort-during-readystatechange.any.js","xhr/thrown-error-in-events.html"],
+   "note": "xhr/event-readystatechange-loaded.any.js passes on both sides with the real trickle.py fixture (multiple LOADING events from real chunks).",
+   "raw_sha256_round1": {"before":"85578703c5b1f2e07b73a438a4e66182da53fd0f208ad2eb6ea4a90695240eb0","after":"d99e24fe9e279a801911d7936e82bb3652616637f8acdb911a9be2f071ae06b4"}},
+ "wpt_fetch": {"before": {"pass":34,"fail":131,"timeout":27,"error":14,"unsupported":302,"pass_subtests":1306}, "after": {"pass":34,"fail":129,"timeout":29,"error":14,"unsupported":302,"pass_subtests":1306}, "lost_files": [], "lost_subtests": [], "gained_files": [], "note": "two non-passing files moved fail->timeout; no pass changed",
+   "raw_sha256_round1": {"before":"e2fae31d6ef1e2f2842e07a5d01da49ae6f17a00fa0053e2d1fdc7ed9695e34e","after":"c1fd526a535c0ef855f65f80e30e8596fee85a9e83d421938d50c2194fd6f46f"}}
+}

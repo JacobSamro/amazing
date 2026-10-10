@@ -401,7 +401,9 @@ mod windows {
             let scroll_y = self.tab().scroll_y;
             let result = self.tab_mut().navigator
                 .get_or_insert_with(|| crate::navigator::Navigator::new(tab_id))
-                .navigate(&input, record, target, scroll_y, |url, _body| render_page(url, width));
+                .navigate_received(&input, record, target, scroll_y, |url, body, network_head| {
+                    render_page(url,width,network_head.map(|head|(body,head)))
+                });
             match result {
                 Ok(result) => {
                     let rendered = result.rendered;
@@ -1032,13 +1034,23 @@ mod windows {
             .into_owned()
     }
 
-    fn render_page(input: &str, width: u32) -> Result<RenderedPage, String> {
-        let response = amazing_net::fetch_stream(input, &amazing_net::FetchOptions::default(), amazing_net::StreamOptions::default())
-            .map_err(|error| error.to_string())?;
-        let content_type = response.headers.get("content-type")
-            .map(|value| value.split(';').next().unwrap_or("").trim().to_ascii_lowercase());
-        let (document, _) = crate::document::parse_streaming_document(response)
-            .map_err(|error| error.to_string())?;
+    fn render_page(input: &str, width: u32, accepted:Option<(&[u8],&amazing_process::protocol::NetworkHead)>) -> Result<(RenderedPage,String), String> {
+        let (document,head,content_type)=if let Some((body,network_head))=accepted {
+            let head=crate::navigation_response::RootResponseHead::network(network_head)?;
+            let content_type=head.metadata().headers.iter().find(|field|field.name.eq_ignore_ascii_case("content-type"))
+                .map(|field|field.value.clone());
+            let document=crate::document::parse_document_bytes(body,&head.metadata().url,content_type.as_deref())
+                .map_err(|error|error.to_string())?;
+            (document,head,content_type)
+        } else {
+            let response=amazing_net::fetch_stream(input,&amazing_net::FetchOptions::default(),amazing_net::StreamOptions::default())
+                .map_err(|error|error.to_string())?;
+            let head=crate::navigation_response::RootResponseHead::streaming(&response,String::new());
+            let content_type=response.headers.get("content-type").map(str::to_owned);
+            let (document,_)=crate::document::parse_streaming_document(response).map_err(|error|error.to_string())?;
+            (document,head,content_type)
+        };
+        let final_url=accepted.map(|(_,network)|network.url.clone()).unwrap_or_else(||head.metadata().url.clone());
         document.require_static_xml().map_err(|error| error.to_string())?;
         let host = Rc::new(RefCell::new(BrowserDomHost {
             dom: document.dom,
@@ -1052,7 +1064,10 @@ mod windows {
         };
         let mut js = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
             .map_err(|error| error.describe())?;
-        js.set_location_url(input);
+        let receiving_url=if head.is_local_file() {
+            crate::runtime_binding_host::modules::source_url(&final_url)
+        } else {final_url.clone()};
+        js.set_location_url_with_head(&receiving_url,&head).map_err(|error|error.describe())?;
         if let Some(content_type) = content_type.as_deref() {
             js.set_document_content_type(content_type);
         }
@@ -1073,7 +1088,7 @@ mod windows {
             if !js.parser_session_current(parser_session) { break; }
             let source = match script.src {
                 Some(src) => {
-                    let script_url = resolve_script_url(input, &src);
+                    let script_url = resolve_script_url(&final_url, &src);
                     let response =
                         amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
                             .map_err(|error| format!("external script {src}: {error}"))?;
@@ -1167,7 +1182,7 @@ mod windows {
             &paint,
         );
         drop(host_ref);
-        Ok(RenderedPage {
+        Ok((RenderedPage {
             surface,
             runtime: PageRuntime {
                 host,
@@ -1178,7 +1193,7 @@ mod windows {
                 layout: root,
                 media,
             },
-        })
+        },final_url))
     }
 
     fn compose_gpu_frame(
@@ -1647,7 +1662,7 @@ mod windows {
         fn native_page_load_decodes_html_bytes_before_parsing() {
             let path = std::env::temp_dir().join(format!("amazing-gui-html2-{}.html", std::process::id()));
             std::fs::write(&path, b"<p>\x80</p>").unwrap();
-            let rendered = render_page(path.to_str().unwrap(), 320).expect("HTML page renders");
+            let (rendered,_) = render_page(path.to_str().unwrap(), 320,None).expect("HTML page renders");
             let tree = rendered.runtime.host.borrow().dom.dump(NodeIdx(0));
             let _ = std::fs::remove_file(path);
             assert!(tree.contains("\"€\""), "{tree}");
@@ -1688,7 +1703,7 @@ mod windows {
 
         #[test]
         fn page_click_runtime_mutates_dom_and_repaints() {
-            let rendered = render_page("../../examples/phase8.html", 640).expect("fixture renders");
+            let (rendered,_) = render_page("../../examples/phase8.html", 640,None).expect("fixture renders");
             let RenderedPage { surface, runtime } = rendered;
             let mut state = GuiState::new(null_mut(), null_mut());
             state.width = 640;

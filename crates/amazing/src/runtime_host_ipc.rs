@@ -60,6 +60,7 @@ struct Tab {
     network: NetworkSession,
     renderer: ProcessHost,
     next_navigable: u64,
+    received_roots: BTreeMap<u64,(NetworkHead,Vec<u8>)>,
 }
 impl Tab {
     fn launch(id: u64, child: &Path) -> Result<Self, String> {
@@ -79,6 +80,7 @@ impl Tab {
             network,
             renderer,
             next_navigable: ROOT_NAVIGABLE + 1,
+            received_roots: BTreeMap::new(),
         })
     }
     fn history_proxy(&self) -> HistoryProxy {
@@ -144,7 +146,7 @@ impl Tab {
             RENDERER_ID,
             epoch,
             eligibility,
-            4096,
+            4096usize.saturating_add(self.received_roots.get(&entry.document).map_or(0,|(_,body)|body.len())),
             now_ms(),
         ) {
             Ok(request) => {
@@ -191,11 +193,16 @@ impl Tab {
         self.history_proxy()
             .discard(request)
             .map_err(|error| format!("renderer discard: {error:?}"))?;
+        self.received_roots.remove(&document);
         Ok(())
     }
     fn drain_orphans(&mut self) -> Result<(), String> {
         for request in self.history.take_orphaned_discards() {
+            let document=request.document;
             let _ = self.history_proxy().discard(request);
+            // The native history already retired this identity, even if its
+            // renderer is unavailable. Its accepted bytes cannot be restored.
+            self.received_roots.remove(&document);
         }
         Ok(())
     }
@@ -432,6 +439,20 @@ impl Driver {
         eligibility: Eligibility,
         render: impl FnOnce(&str, &[u8]) -> Result<T, String>,
     ) -> Result<T, String> {
+        self.navigate_with_received_head(tab_id,url,record,history_pos,outgoing,eligibility,
+            |url,body,_head|render(url,body),false)
+    }
+    /// Root accepted response callback, including original id/client/epoch and
+    /// ordered navigation metadata. History restores use the original snapshot.
+    pub fn navigate_received<T>(&mut self,tab_id:u64,url:&str,record:bool,history_pos:usize,
+        outgoing:HistorySnapshot,eligibility:Eligibility,
+        render:impl FnOnce(&str,&[u8],&NetworkHead)->Result<T,String>)->Result<T,String> {
+        self.navigate_with_received_head(tab_id,url,record,history_pos,outgoing,eligibility,
+            |url,body,head|render(url,body,head.ok_or("Missing accepted root response head")?),true)
+    }
+    fn navigate_with_received_head<T>(&mut self,tab_id:u64,url:&str,record:bool,history_pos:usize,
+        outgoing:HistorySnapshot,eligibility:Eligibility,
+        render:impl FnOnce(&str,&[u8],Option<&NetworkHead>)->Result<T,String>,restore_body:bool)->Result<T,String> {
         let child = self.child.clone();
         let tab = self.tab(tab_id)?;
         if tab
@@ -439,7 +460,9 @@ impl Driver {
             .crashed()
             .map_err(|error| format!("renderer status: {error:?}"))?
         {
-            tab.history.renderer_crashed(RENDERER_ID);
+            for document in tab.history.renderer_crashed(RENDERER_ID) {
+                tab.received_roots.remove(&document);
+            }
             // A replacement renderer receives a fresh document token below.
             tab.renderer = ProcessHost::spawn(
                 &child,
@@ -497,7 +520,12 @@ impl Driver {
                     }
                 }
                 if root_frozen {
-                    return render(&entry.url, &[]);
+                    if restore_body {
+                        let (head,body)=tab.received_roots.get(&entry.document)
+                            .ok_or("Frozen root has no authentic response snapshot")?;
+                        return render(&entry.url,body,Some(head));
+                    }
+                    return render(&entry.url,&[],None);
                 }
             }
         }
@@ -529,7 +557,7 @@ impl Driver {
                 return Err(error);
             }
         };
-        let output = match render(&head.url, &body) {
+        let output = match render(&head.url, &body,Some(&head)) {
             Ok(output) => output,
             Err(error) => {
                 let _ = tab.history.cancel(&ticket);
@@ -539,11 +567,13 @@ impl Driver {
         if current.is_some() {
             tab.freeze_current_tree(eligibility)?;
         }
+        let saved_head=head.clone();
         let entry = tab
             .history
             .commit(ticket, head.url, committed_snapshot)
             .map_err(|error| format!("history commit: {error:?}"))?;
         tab.activate(&entry)?;
+        tab.received_roots.insert(entry.document,(saved_head,body));
         tab.drain_orphans()?;
         Ok(output)
     }
@@ -916,6 +946,21 @@ mod tests {
                 .status,
             DocumentStatus::Active
         );
+        let original_first_id=driver.tabs[&7].received_roots[&first_document].0.id;
+        // The opt-in receiving route restores actual accepted headers and bytes,
+        // never a second fetch or an empty synthesized response.
+        driver.navigate_received(7,&format!("{origin}/other"),false,2,
+            HistorySnapshot::default(),Eligibility::default(),|url,body,head| {
+                assert_eq!(url,format!("{origin}/other"));assert_eq!(body,b"second");
+                let receipt=crate::navigation_response::RootResponseHead::network(head)?;
+                assert_eq!(receipt.metadata().status,200);
+                assert_eq!(receipt.metadata().url,url);Ok(())
+            }).unwrap();
+        driver.navigate_received(7,&format!("{origin}/final"),false,1,
+            HistorySnapshot::default(),Eligibility::default(),|url,body,head| {
+                assert_eq!(url,format!("{origin}/final"));assert_eq!(body,b"first");
+                assert_eq!(head.id,original_first_id);Ok(())
+            }).unwrap();
         driver.tabs.get_mut(&7).unwrap().renderer.kill().unwrap();
         driver
             .navigate(

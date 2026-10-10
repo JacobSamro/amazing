@@ -166,17 +166,7 @@ impl RuntimeBindingHost<'_> {
 
     /// Pure document base lookup, safe during navigation before script callbacks.
     pub(super) fn dom_document_base_url(&self, document: NodeIdx) -> Result<String, DomError> {
-        let (fallback, charset) = self.dom_document_url_context(document)?;
-        let href = self.state.borrow().host.borrow().dom.document_base_href(document)?;
-        let Some(href) = href else { return Ok(fallback); };
-        let encoder = |query: &str| super::runtime_host_net::encode_document_query(query, &charset);
-        let parsed = amazing_net::ParsedUrl::parse(&fallback).ok();
-        let resolved = amazing_net::ParsedUrl::parse_with_query_encoder(
-            &String::from_utf16_lossy(&href), parsed.as_ref(), &encoder);
-        Ok(match resolved {
-            Ok(url) if !matches!(url.scheme(), "data" | "javascript") => url.serialize(),
-            _ => fallback,
-        })
+        document_base_url_from_state(&self.state.borrow(), document)
     }
 
     pub(super) fn dom_resolve_element_url(&mut self, element: NodeIdx, input: &[u16]) -> Result<Vec<u16>, Throw> {
@@ -2373,3 +2363,27 @@ mod message_events;
 
 #[path = "runtime_host_dom_bindings/event_realms.rs"]
 mod event_realms;
+
+/// Pure extraction of the existing document/base/charset algorithm. No author
+/// callback or incumbent-realm lookup occurs during original receiver capture.
+pub(in crate::runtime_binding_host) fn document_base_url_from_state(
+    state:&BindingState,document:NodeIdx)->Result<String,DomError> {
+    let host=state.host.borrow();
+    let metadata=host.dom.document_metadata(document)?;
+    let (mut url,charset)=if document==NodeIdx(0) {
+        (state.document_url.clone().unwrap_or_else(||"about:blank".into()),
+         state.document_character_set.clone().unwrap_or_else(||"UTF-8".into()))
+    } else {
+        (metadata.map(|data|data.url.clone()).unwrap_or_else(||"about:blank".into()),
+         metadata.map(|data|data.character_set.clone()).unwrap_or_else(||"UTF-8".into()))
+    };
+    if let Some(context)=state.frames.document_context(&host.dom,document) {url=context.document_url;}
+    if let Some(base)=state.frames.receiving_fallback_base_url(&host.dom,document) {url=base;}
+    let href=host.dom.document_base_href(document)?;
+    let Some(href)=href else {return Ok(url);};
+    let encoder=|query:&str|super::runtime_host_net::encode_document_query(query,&charset);
+    let base=amazing_net::ParsedUrl::parse(&url).ok();
+    let resolved=amazing_net::ParsedUrl::parse_with_query_encoder(
+        &String::from_utf16_lossy(&href),base.as_ref(),&encoder);
+    Ok(match resolved {Ok(url) if !matches!(url.scheme(),"data"|"javascript")=>url.serialize(),_=>url})
+}

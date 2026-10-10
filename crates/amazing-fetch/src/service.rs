@@ -150,6 +150,8 @@ pub enum ServiceEvent {
     /// Original-global observer receipt, independently of endpoint delivery.
     CoepReport { id: ServiceId, document: crate::reporting::ReportingDocument,
         report: Result<crate::reporting::NativeReportSnapshot, crate::reporting::ReportError> },
+    /// Opt-in body bytes actually drained to the native socket; no remote ACK.
+    RequestBodyProgress {id:ServiceId,sent:u64,total:u64,complete:bool},
     ResponseHead { id: ServiceId, head: ApiResponseHead },
     BodyChunk { id: ServiceId, bytes: Vec<u8> },
     StreamFinished { id: ServiceId },
@@ -193,6 +195,7 @@ pub struct SubresourceResponse {
 }
 
 struct Task {
+    track_upload: bool,
     pending: PendingFetchApi,
     context: ClientContext,
     url: String,
@@ -638,6 +641,23 @@ impl NetworkService {
         self.streams.insert(id, StreamTask::new(credit));
         Ok(id)
     }
+    /// Track only the actual main-hop request body, not a CORS preflight.
+    /// Call before the first service step; redirects retain the opted-in route.
+    /// Actual current native hop id for transport diagnostics/flow control.
+    /// Redirects may replace it; it grants no request/client policy authority.
+    pub fn wire_request_id(&self,id:ServiceId)->Option<amazing_net::dispatch::RequestId> {
+        self.active.get(&id).map(|task|task.pending.id())
+    }
+    pub fn track_stream_upload(&mut self,id:ServiceId)->bool {
+        if !self.streams.contains_key(&id) {return false;}
+        let Some(task)=self.active.get_mut(&id) else {
+            return self.ready.iter().any(|event|matches!(event,ServiceEvent::Finished{id:found,..} if *found==id));
+        };
+        if task.track_upload {return false;}
+        if task.pending.is_main() && !self.dispatcher.track_request_upload(task.pending.id()) {return false;}
+        task.track_upload=true;
+        true
+    }
     pub fn grant_credit(&mut self, id: ServiceId, bytes: usize) -> bool {
         let Some(stream) = self.streams.get_mut(&id) else { return false; };
         stream.credit = stream.credit.saturating_add(bytes);
@@ -924,6 +944,7 @@ impl NetworkService {
         self.active.insert(
             id,
             Task {
+                track_upload: false,
                 pending,
                 context,
                 url,
@@ -980,7 +1001,14 @@ impl NetworkService {
         if both {
             self.prefer_websocket = !self.prefer_websocket;
         }
-        for event in self.dispatcher.step(http_budget, now) {
+        let network_events=self.dispatcher.step(http_budget, now);
+        for progress in self.dispatcher.take_request_upload_progress() {
+            if let Some((id,_))=self.active.iter().find(|(_,task)| task.track_upload
+                && task.pending.is_main() && task.pending.id()==progress.id) {
+                result.push(ServiceEvent::RequestBodyProgress{id:*id,sent:progress.sent,total:progress.total,complete:progress.complete});
+            }
+        }
+        for event in network_events {
             let wire_id = match &event {
                 NetEvent::Head { id, .. }
                 | NetEvent::Body { id, .. }
@@ -1151,6 +1179,7 @@ impl NetworkService {
                 let top_level = task.context.security.top_level_navigation;
                 let wall_time = task.context.now_unix;
                 let partition_key = task.context.partition_key.clone();
+                let previous_wire=task.pending.id();
                 finished = task.pending.on_event_with_cache(
                     &event,
                     &mut self.dispatcher,
@@ -1176,6 +1205,12 @@ impl NetworkService {
                     |url| self.hsts.upgrade(url, wall_time),
                     Some(&mut self.preflight_cache),
                 );
+                if task.track_upload && task.pending.is_main() && task.pending.id()!=previous_wire {
+                    if !self.dispatcher.track_request_upload(task.pending.id()) {
+                        task.pending.cancel(&mut self.dispatcher);
+                        finished=Some(Err(ApiError::Network(FetchError::Transport)));
+                    }
+                }
             }
             let wire_done = matches!(&event, NetEvent::Done { .. });
             if !self.streams.contains_key(&id) { result.push(ServiceEvent::Network { id, event }); }

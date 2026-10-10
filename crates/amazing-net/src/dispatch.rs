@@ -166,11 +166,15 @@ impl Connector for StdConnector {
     }
 }
 
+mod upload;
+pub use upload::RequestUploadProgress;
+
 enum Transport {
     Plain(TcpStream),
     Tls(amazing_net_tls::TlsStream),
 }
 impl Transport {
+    fn output_drained(&self)->bool { match self {Self::Plain(_)=>true,Self::Tls(stream)=>stream.output_drained()} }
     fn read_step(&mut self, b: &mut [u8], remaining: &mut usize) -> io::Result<usize> {
         let budget = *remaining;
         match self {
@@ -252,6 +256,9 @@ struct H2Connection {
     inbound: Vec<u8>,
     outbound: Vec<u8>,
     written: usize,
+    output_base: u64,
+    uploads: upload::H2Uploads,
+    upload_progress: Vec<RequestUploadProgress>,
 }
 impl H2Connection {
     fn new(
@@ -272,13 +279,18 @@ impl H2Connection {
             inbound: Vec::new(),
             outbound: Vec::new(),
             written: 0,
+            output_base: 0,
+            uploads: upload::H2Uploads::default(),
+            upload_progress: Vec::new(),
         };
         conn.collect_output();
         Ok(conn)
     }
     fn collect_output(&mut self) {
         if let Some(io) = self.client.io_mut() {
-            self.outbound.extend(io.take_output());
+            let bytes=io.take_output();
+            self.uploads.output(&bytes,self.output_base+self.outbound.len() as u64);
+            self.outbound.extend(bytes);
         }
     }
     fn drain_output(&mut self, remaining: &mut usize, limit: usize) -> Result<(), DispatchError> {
@@ -302,6 +314,7 @@ impl H2Connection {
                 Err(e) => return Err(e.into()),
             }
             if self.written == self.outbound.len() {
+                self.output_base+=self.outbound.len() as u64;
                 self.outbound.clear();
                 self.written = 0;
             }
@@ -309,6 +322,9 @@ impl H2Connection {
         let step = self.transport.flush_metered(*remaining);
         *remaining -= step.socket_bytes;
         step.result?;
+        if self.transport.output_drained() {
+            self.uploads.drained(self.output_base+self.written as u64,&mut self.upload_progress);
+        }
         Ok(())
     }
     fn step(&mut self, remaining: &mut usize, limit: usize) -> Result<(), DispatchError> {
@@ -372,6 +388,7 @@ enum Framing {
     Eof,
 }
 struct Entry {
+    upload: Option<upload::HttpUpload>,
     io_generation: u64,
     url: ParsedUrl,
     origin: String,
@@ -406,6 +423,7 @@ pub struct Dispatcher<R = StdResolver, C = StdConnector> {
     idle: HashMap<String, Transport>,
     h2: HashMap<String, H2Connection>,
     cancelled: Vec<RequestId>,
+    upload_progress: Vec<RequestUploadProgress>,
     websockets: BTreeMap<WebSocketId, WebSocketConnection>,
 }
 impl Dispatcher<StdResolver, StdConnector> {
@@ -452,6 +470,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             idle: HashMap::new(),
             h2: HashMap::new(),
             cancelled: Vec::new(),
+            upload_progress: Vec::new(),
             websockets: BTreeMap::new(),
         }
     }
@@ -576,6 +595,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         self.active.insert(
             id,
             Entry {
+                upload: None,
                 io_generation: 0,
                 url,
                 origin,
@@ -601,7 +621,32 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         );
         Ok(id)
     }
+    /// Enable receipts before a request starts transmitting. Legacy submit and
+    /// NetEvent sequences are unchanged for callers that do not opt in.
+    pub fn track_request_upload(&mut self,id:RequestId)->bool {
+        let reserved=self.active.iter().filter(|(_,entry)|entry.upload.is_some()).map(|(id,_)|*id)
+            .chain(self.upload_progress.iter().map(|progress|progress.id)).collect::<std::collections::BTreeSet<_>>().len();
+        if reserved>=self.limits.max_in_flight {return false;}
+        let Some(entry)=self.active.get_mut(&id) else {return false;};
+        if entry.written!=0 || entry.h2_stream.is_some() || entry.upload.is_some() {return false;}
+        let Some(end)=entry.request.windows(4).position(|bytes|bytes==b"\r\n\r\n") else {return false;};
+        entry.upload=Some(upload::HttpUpload::new(end+4,entry.options.body.len()));
+        true
+    }
+    fn record_upload_progress(&mut self,progress:RequestUploadProgress) {
+        if let Some(old)=self.upload_progress.iter_mut().find(|old|old.id==progress.id) {*old=progress;}
+        else {self.upload_progress.push(progress);}
+    }
+    fn collect_upload_progress(&mut self) {
+        let progress:Vec<_>=self.h2.values_mut().flat_map(|conn|std::mem::take(&mut conn.upload_progress)).collect();
+        for progress in progress {self.record_upload_progress(progress);}
+    }
+    pub fn take_request_upload_progress(&mut self)->Vec<RequestUploadProgress> {
+        std::mem::take(&mut self.upload_progress)
+    }
     pub fn cancel(&mut self, id: RequestId) -> bool {
+        self.upload_progress.retain(|progress|progress.id!=id);
+        for conn in self.h2.values_mut() {conn.upload_progress.retain(|progress|progress.id!=id);}
         if let Some(entry) = self.active.remove(&id) {
             self.retire_h2_stream(&entry);
             self.cancelled.push(id);
@@ -623,6 +668,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
     fn retire_h2_stream(&mut self, entry: &Entry) {
         if let Some(stream) = entry.h2_stream {
             if let Some(conn) = self.h2.get_mut(&entry.origin) {
+                if let Some(id)=conn.uploads.forget(stream) {conn.upload_progress.retain(|progress|progress.id!=id);}
                 let _ = conn.client.cancel(stream);
                 let _ = conn.client.next_event_ready(stream);
                 conn.collect_output();
@@ -672,6 +718,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 continue;
             };
             if now >= entry.deadline {
+                self.upload_progress.retain(|progress|progress.id!=id);
                 self.retire_h2_stream(&entry);
                 events.push(NetEvent::Error {
                     id,
@@ -684,6 +731,12 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 continue;
             }
             let result = self.advance(id, &mut entry, &mut remaining, now, &mut events);
+            if entry.transport.as_ref().is_some_and(Transport::output_drained) {
+                if let Some(upload)=entry.upload.as_mut() {
+                    if let Some(progress)=upload.drained(id,entry.written) {self.record_upload_progress(progress);}
+                }
+            }
+            self.collect_upload_progress();
             match result {
                 Ok(done) => {
                     if !done {
@@ -717,6 +770,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 self.h2.remove(&origin);
             }
         }
+        self.collect_upload_progress();
         events
     }
     fn advance(
@@ -985,6 +1039,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                     .client
                     .start_streaming(&fields, &e.options.body)
                     .map_err(|x| NetError::MalformedResponse(x.to_string()))?;
+                if let Some(upload)=&e.upload {conn.uploads.track(stream,id,upload.total);}
                 conn.collect_output();
                 e.h2_stream = Some(stream);
                 e.request.clear();
@@ -1003,16 +1058,25 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                     .h2
                     .get_mut(&e.origin)
                     .ok_or(DispatchError::UnsupportedProtocol)?;
-                if let Err(error) = conn.step(remaining, self.limits.max_buffered_bytes) {
-                    self.h2.remove(&e.origin);
-                    return Err(error);
-                }
                 let stream = e.h2_stream.expect("started h2 stream");
-                let Some(event) = conn
+                // Deliver events already parsed before touching the socket: a
+                // peer that closes right after its final frame must not turn
+                // a completed stream into IncompleteBody.
+                let mut ready = conn
                     .client
                     .next_event_ready(stream)
-                    .map_err(|x| NetError::MalformedResponse(x.to_string()))?
-                else {
+                    .map_err(|x| NetError::MalformedResponse(x.to_string()))?;
+                if ready.is_none() {
+                    if let Err(error) = conn.step(remaining, self.limits.max_buffered_bytes) {
+                        self.h2.remove(&e.origin);
+                        return Err(error);
+                    }
+                    ready = conn
+                        .client
+                        .next_event_ready(stream)
+                        .map_err(|x| NetError::MalformedResponse(x.to_string()))?;
+                }
+                let Some(event) = ready else {
                     return Ok(false);
                 };
                 match event {
@@ -1970,3 +2034,7 @@ mod tests {
 
 #[cfg(test)]
 mod pending_io_tests;
+
+#[cfg(test)]
+#[path = "dispatch/upload_native_tests.rs"]
+mod upload_native_tests;

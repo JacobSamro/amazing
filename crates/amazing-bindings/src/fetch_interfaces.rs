@@ -9,7 +9,7 @@ use amazing_fetch::{
         ApiError, ApiHeaders, ApiRequest, ApiRequestInit, ApiRequestInput, ApiResponse,
         ApiResponseInit, BodyInput, JsonValue,
     },
-    xhr::{Xhr, XhrError, XhrEvent, XhrResponseType, XhrResponseValue, XhrTextDecoder},
+    xhr::{Xhr, XhrError, XhrEvent, XhrResponseType, XhrResponseValue, XhrTextDecoder, XhrUrlContext},
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -199,6 +199,15 @@ pub trait FetchHost: BindingHost {
     fn fetch_range_error(&mut self, message: &str) -> Self::Error;
     fn fetch_type_error(&mut self, message: &str) -> Self::Error;
     fn fetch_number_value(&self, value: &Self::Value) -> Option<f64>;
+    /// Legacy hosts retain their existing URL behavior. Browser hosts override
+    /// with the object's immutable creation realm and actual receiving client.
+    fn fetch_xhr_url_context(&mut self,_receiver:&Self::Value)->Result<XhrUrlContext,Self::Error> {
+        let base=self.fetch_base()?;
+        Ok(XhrUrlContext{base_url:base.as_parsed().clone(),origin:base.origin().clone()})
+    }
+    fn fetch_xhr_prepare(&mut self,_record:Rc<RefCell<FetchObject>>,_receiver:Self::Value)
+        ->Result<(),Self::Error> {Ok(())}
+    fn fetch_xhr_discard_prepared(&mut self,_record:&Rc<RefCell<FetchObject>>,_generation:u64) {}
     fn fetch_xhr_execute(&mut self, xhr: &mut Xhr) -> Result<Vec<XhrEvent>, XhrError>;
     fn fetch_xhr_start(&mut self, record: Rc<RefCell<FetchObject>>,
         receiver: Self::Value) -> Result<(), Self::Error>;
@@ -1181,13 +1190,15 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
             let method = arg_units(host, args, 0)?;
             let url = arg_units(host, args, 1)?;
             let async_flag = args.get(2).map(|v| host.to_boolean(v)).unwrap_or(true);
-            let base = host.fetch_base()?;
+            let context = host.fetch_xhr_url_context(receiver)?;
+            let previous_generation={let object=record.borrow();let FetchObject::Xhr(xhr)=&*object else {unreachable!()};xhr.generation()};
             let events = {
                 let mut record = record.borrow_mut();
                 let FetchObject::Xhr(xhr) = &mut *record else { return Err(host.fetch_type_error("Expected XMLHttpRequest")); };
-                xhr.open(&method, &url, async_flag, &base, base.origin().clone())
-                    .map_err(|e| host.fetch_xhr_error(e))?
+                xhr.open_with_url_context(&method, &url, async_flag, &context)
             };
+            let events=events.map_err(|error|host.fetch_xhr_error(error))?;
+            host.fetch_xhr_discard_prepared(&record,previous_generation);
             for event in events { host.fetch_xhr_event(receiver, event)?; }
             Ok(host.undefined())
         }
@@ -1206,13 +1217,23 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
                 let mut record = record.borrow_mut();
                 let FetchObject::Xhr(xhr) = &mut *record else { return Err(host.fetch_type_error("Expected XMLHttpRequest")); };
                 xhr.set_upload_listeners(upload_has_listeners);
-                xhr.send(body, 0).map_err(|e| host.fetch_xhr_error(e))?
+                xhr.send(body, 0)
             };
-            for event in events { host.fetch_xhr_event(receiver, event)?; }
+            let events=events.map_err(|error|host.fetch_xhr_error(error))?;
+            let generation={let object=record.borrow();let FetchObject::Xhr(xhr)=&*object else {unreachable!()};xhr.generation()};
+            host.fetch_xhr_prepare(record.clone(),receiver.clone())?;
+            for event in events {
+                if let Err(error)=host.fetch_xhr_event(receiver,event) {
+                    host.fetch_xhr_discard_prepared(&record,generation);
+                    return Err(error);
+                }
+            }
             let asynchronous = {
-                let record = record.borrow();
-                let FetchObject::Xhr(xhr) = &*record else { unreachable!() };
-                if !xhr.send_invoked() { return Ok(host.undefined()); }
+                let object=record.borrow();let FetchObject::Xhr(xhr)=&*object else {unreachable!()};
+                if !xhr.send_invoked() || xhr.generation()!=generation {
+                    drop(object);host.fetch_xhr_discard_prepared(&record,generation);
+                    return Ok(host.undefined());
+                }
                 xhr.is_asynchronous()
             };
             if asynchronous {
@@ -1221,16 +1242,20 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
                 let events = {
                     let mut record = record.borrow_mut();
                     let FetchObject::Xhr(xhr) = &mut *record else { unreachable!() };
-                    host.fetch_xhr_execute(xhr).map_err(|e| host.fetch_xhr_error(e))?
+                    host.fetch_xhr_execute(xhr)
                 };
+                host.fetch_xhr_discard_prepared(&record,generation);
+                let events=events.map_err(|error|host.fetch_xhr_error(error))?;
                 for event in events { host.fetch_xhr_event(receiver, event)?; }
             }
             Ok(host.undefined())
         }
         O::XhrAbort => {
+            let previous_generation={let object=record.borrow();let FetchObject::Xhr(xhr)=&*object else {unreachable!()};xhr.generation()};
             let events = { let mut record = record.borrow_mut();
                 let FetchObject::Xhr(xhr) = &mut *record else { return Err(host.fetch_type_error("Expected XMLHttpRequest")); };
                 xhr.abort() };
+            host.fetch_xhr_discard_prepared(&record,previous_generation);
             for event in events { host.fetch_xhr_event(receiver, event)?; }
             Ok(host.undefined())
         }

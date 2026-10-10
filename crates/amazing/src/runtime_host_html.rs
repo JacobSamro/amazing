@@ -5,6 +5,9 @@
 //! wraps the same Document/Element prototypes as the top realm rather than a
 //! fully independent intrinsic set.
 use super::*;
+#[path = "runtime_host_navigation_context.rs"]
+pub(crate) mod receiving_context;
+use receiving_context::{ReceivingWindowEnvironment,ReceivingNativeAdmission};
 #[path = "runtime_host_html_sandbox.rs"]
 mod sandbox;
 use sandbox::{SandboxFlags, parse_sandbox};
@@ -85,6 +88,7 @@ struct NavigationSource {
     /// Policy at initiation, retained even when the source Document retires.
     policy: HtmlDocumentContext,
     client_context: Option<amazing_fetch::service::ClientContext>,
+    receiving_environment: Option<ReceivingWindowEnvironment>,
     referrer_policy: amazing_fetch::ReferrerPolicy,
 }
 
@@ -103,7 +107,8 @@ struct HtmlNavigation {
 pub(super) struct FrameRuntime {
     parser_lifecycle: parser_lifecycle::ParserLifecycle,
     documents: HashMap<NodeIdx, FrameDocument>,
-    contexts: HashMap<RealmHandle, WindowContext>,
+    pub(crate) contexts: HashMap<RealmHandle, WindowContext>,
+    receiving_admissions: HashMap<(NodeIdx,u64),ReceivingNativeAdmission>,
     cross_origin_descriptors: HashMap<(RealmHandle, RealmHandle, String), Property>,
     /// Captured creation/navigation base, retained for old documents too.
     about_base_urls: HashMap<NodeIdx, (u64, String)>,
@@ -143,11 +148,11 @@ pub(super) struct FrameRuntime {
 // Each Window is the global target of one actual browsing context. The proxy
 // is stable across navigation; stale globals retain their own document identity.
 #[derive(Clone)]
-struct WindowContext {
+pub(crate) struct WindowContext {
     event_target_slot: u64,
     document: NodeIdx,
     document_generation: u64,
-    frame: Option<NodeIdx>,
+    pub(crate) frame: Option<NodeIdx>,
     frame_generation: Option<u64>,
     global: JsValue,
     window: JsValue,
@@ -156,6 +161,8 @@ struct WindowContext {
     origin: String,
     fetch_origin: amazing_fetch::Origin,
     document_url: String,
+    creation_url: String,
+    receiving_environment: Option<ReceivingWindowEnvironment>,
     installed: bool,
     indices: usize,
 }
@@ -558,8 +565,16 @@ impl RuntimeBindings {
         let origin = ParsedUrl::parse(url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into());
         let fetch_origin = HttpUrl::parse(url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque());
         let generation = self.state.borrow().host.borrow().dom.node_generation(NodeIdx(0));
-        for context in self.state.borrow_mut().frames.contexts.values_mut().filter(|context| context.frame.is_none()) {
+        let mut state=self.state.borrow_mut();
+        let admitted:HashSet<_>=state.frames.receiving_admissions.keys().copied().collect();
+        for context in state.frames.contexts.values_mut().filter(|context| context.frame.is_none()) {
+            if admitted.contains(&(context.document,context.document_generation))
+                && generation==Some(context.document_generation) {
+                context.document_url=url.to_owned();
+                continue;
+            }
             if let Some(generation) = generation { context.document_generation = generation; }
+            context.creation_url=url.to_owned();
             context.origin = origin.clone();
             context.fetch_origin = fetch_origin.clone();
             context.document_url = url.to_owned();
@@ -713,6 +728,7 @@ impl RuntimeBindings {
         self.state.borrow_mut().frames.record_proxy_target(&proxy, realm);
         self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
             event_target_slot, document, document_generation, frame: Some(frame), frame_generation: Some(frame_generation), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
+            creation_url: child_url.to_owned(), receiving_environment: None,
             installed: false, indices: 0,
         });
         let state = self.state.clone();
@@ -910,7 +926,8 @@ impl RuntimeBindings {
                 let referrer_policy = adapter.html_document_referrer_policy(owner).unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin);
                 NavigationSource { document: owner, generation, base_url,
                     document_url: owner_context.document_url.clone(), origin,
-                    fetch_origin: owner_context.fetch_origin.clone(), policy, client_context, referrer_policy }
+                    fetch_origin: owner_context.fetch_origin.clone(), policy, client_context, referrer_policy,
+                    receiving_environment: owner_context.receiving_environment.clone() }
             };
             let mut ancestor_origins = Vec::new();
             let mut ancestor = Some(owner_context.clone());
@@ -947,6 +964,7 @@ impl RuntimeBindings {
                 && host.borrow().dom.get_attribute_ns(node, None, "loading")
                     .is_some_and(|value| value.eq_ignore_ascii_case("lazy"));
             let mut response_policy = None;
+            let mut receiving_response = None;
             let mut response_referrer_policy = None;
             let loaded = (|| -> Result<LoadedChildDocument, String> {
                 // `srcdoc` takes priority over `src` per spec: its content is
@@ -997,6 +1015,7 @@ impl RuntimeBindings {
                 policy.csp = amazing_fetch::CspPolicyList::from_headers(&policy_headers)
                     .map_err(|error| format!("iframe response policy: {error:?}"))?;
                 response_referrer_policy = Some(resource_response::response_referrer_policy(&response.headers));
+                receiving_response=HttpUrl::parse(&response.url).ok().map(|url|(url.origin().clone(),policy_headers));
                 response_policy = Some(policy);
                 let document_url = if canonical || resolver.is_none() { response.url.clone() } else { logical_url.clone() };
                 // HTML-34: only the HTML case defers to a script-interleaved
@@ -1070,7 +1089,7 @@ impl RuntimeBindings {
                         self.state.borrow_mut().frames.about_base_urls.insert(document, (generation, source.base_url.clone()));
                     }
                 }
-                let _ = self.ensure_realm(js, node, document, &url, sandbox, Some(&source));
+                let receiving_realm = self.ensure_realm(js, node, document, &url, sandbox, Some(&source)).ok();
                 // Only actual about documents inherit their initiating policy.
                 // Remote documents receive their own response policy, never
                 // the creator's CSP merely because their origin is related.
@@ -1078,6 +1097,10 @@ impl RuntimeBindings {
                 if let Some(policy) = policy {
                     let adapter = RuntimeBindingHost { js, state: self.state.clone() };
                     if adapter.set_document_network_policy(document, policy).is_err() { continue; }
+                }
+                if let Some(realm)=receiving_realm {
+                    let _=self.admit_receiving_child(js,realm,&source,receiving_response.as_ref(),
+                        response_referrer_policy.unwrap_or(source.referrer_policy));
                 }
             }
             if let Some(document) = document {
@@ -1704,7 +1727,8 @@ impl RuntimeBindingHost<'_> {
         Ok(HtmlNavigation { document: target_context.document, generation: target_generation,
             url: url.into(), replace, reload: false, source: NavigationSource { document: source_context.document,
                 generation: source_generation, base_url, document_url: source_context.document_url,
-                origin, fetch_origin: source_context.fetch_origin, policy, client_context, referrer_policy } })
+                origin, fetch_origin: source_context.fetch_origin, policy, client_context, referrer_policy,
+                receiving_environment: source_context.receiving_environment.clone() } })
     }
 
     pub(super) fn html_location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
@@ -1889,7 +1913,7 @@ impl RuntimeBindingHost<'_> {
             self.state.borrow_mut().frames.record_proxy_target(&window, realm);
             self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
                 event_target_slot, document: NodeIdx(0), document_generation, frame: None, frame_generation: None, global, parent: window.clone(), top: window.clone(), window,
-                origin: ParsedUrl::parse(&document_url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into()), fetch_origin, document_url, installed: false, indices: 0,
+                origin: ParsedUrl::parse(&document_url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into()), fetch_origin, creation_url: document_url.clone(), document_url, receiving_environment: None, installed: false, indices: 0,
             });
         }
         let context = self.state.borrow().frames.contexts[&realm].clone();

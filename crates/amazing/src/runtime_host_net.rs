@@ -1,5 +1,11 @@
 //! Fetch, XHR and WebSocket runtime adapter owned by the net lane.
 use super::*;
+#[path="runtime_host_net/xhr_streaming.rs"]
+mod xhr_streaming;
+use xhr_streaming::XhrPrepared;
+use super::html::receiving_context::{ReceivingDocumentIdentity,receiving_document_client_from_state};
+use amazing_fetch::{ReceivingDocumentClient,xhr::{XhrServiceRequest,XhrUrlContext}};
+use std::collections::VecDeque;
 use amazing_bindings::fetch_interfaces::{FetchHeaders, FetchHost, FetchInterface, FetchObject, FetchOperation, HeaderIterationKind};
 use amazing_fetch::{api::{ApiError, ApiRequest, ApiResponse, PendingFetchApi}, cookies::{CookieAccess, CookieSite}, service::{ClientContext, NetworkService, ServiceEvent, ServiceId, WebSocketClient}, xhr::{Xhr, XhrError, XhrEvent, XhrEventKind, XhrEventTarget, XhrState}, HttpUrl};
 use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent};
@@ -112,12 +118,16 @@ impl WsObject {
 enum XhrTransport {
     Data,
     Dispatch(PendingFetchApi),
+    Stream(XhrServiceRequest),
+    Terminal(Vec<XhrEvent>),
 }
 struct XhrPending {
     record: Rc<RefCell<FetchObject>>,
     receiver: JsValue,
     generation: u64,
     started: Instant,
+    receiving: ReceivingDocumentClient<ReceivingDocumentIdentity>,
+    queued_events: VecDeque<XhrEvent>,
     transport: XhrTransport,
 }
 
@@ -133,6 +143,8 @@ pub(super) struct NetRuntime {
     fetch_pending: Vec<(ServiceId, JsValue, JsValue, AbortSignalId)>,
     fetch_pump_scheduled: bool,
     xhr_pending: Vec<XhrPending>,
+    xhr_prepared: Vec<XhrPrepared>,
+    fetch_event_inbox: VecDeque<ServiceEvent>,
     xhr_ready_state_override: Option<(u64, XhrState)>,
     xhr_document_nodes: HashMap<u64, (u64, NodeIdx)>,
     websockets: Vec<WsObject>,
@@ -142,12 +154,12 @@ pub(super) struct NetRuntime {
 }
 
 impl NetRuntime {
-    pub(super) fn new() -> Self {
-        Self {
+    pub(super) fn new() -> std::io::Result<Self> {
+        Ok(Self {
             document_policies: HashMap::new(),
             fetch_objects: Vec::new(),
             fetch_interfaces: Vec::new(),
-            fetch_network: NetworkService::new(DispatchLimits::default()),
+            fetch_network: NetworkService::new_pending_io(DispatchLimits::default())?,
             legacy_fetch: None,
             fetch_listeners: Vec::new(),
             fetch_header_iterator_prototype: None,
@@ -155,13 +167,15 @@ impl NetRuntime {
             fetch_pending: Vec::new(),
             fetch_pump_scheduled: false,
             xhr_pending: Vec::new(),
+            xhr_prepared: Vec::new(),
+            fetch_event_inbox: VecDeque::new(),
             xhr_ready_state_override: None,
             xhr_document_nodes: HashMap::new(),
             websockets: Vec::new(),
             ws_by_service: HashMap::new(),
             websocket_prototype: None,
             close_event_prototype: None,
-        }
+        })
     }
 }
 
@@ -180,11 +194,13 @@ impl RuntimeBindings {
             matches!(host.dom.abort_signal_reason(*signal), Ok(None))
                 && state.net.fetch_network.has_pending_request_io(*id))
             || state.net.xhr_pending.iter().any(|task| {
-                let XhrTransport::Dispatch(pending) = &task.transport else { return false; };
-                matches!(&*task.record.borrow(), FetchObject::Xhr(xhr)
-                    if xhr.generation() == task.generation && xhr.send_invoked()
-                        && xhr.state() != XhrState::Done
-                        && state.net.fetch_network.dispatcher.has_pending_request_io(pending.id()))
+                let current=matches!(&*task.record.borrow(),FetchObject::Xhr(xhr)
+                    if xhr.generation()==task.generation&&xhr.send_invoked()&&xhr.state()!=XhrState::Done);
+                current && match &task.transport {
+                    XhrTransport::Dispatch(pending)=>state.net.fetch_network.dispatcher.has_pending_request_io(pending.id()),
+                    XhrTransport::Stream(pending)=>state.net.fetch_network.has_pending_request_io(pending.id()),
+                    XhrTransport::Data|XhrTransport::Terminal(_)=>false,
+                }
             })
     }
 }
@@ -280,6 +296,7 @@ impl RuntimeBindingHost<'_> {
     }
     pub(super) fn fetch_pump(&mut self) -> Result<JsValue, Throw> {
         self.state.borrow_mut().net.fetch_pump_scheduled = false;
+        let outcome=(|| {
         let aborted = {
             let state = self.state.borrow();
             let host = state.host.borrow();
@@ -289,7 +306,12 @@ impl RuntimeBindingHost<'_> {
         };
         for id in aborted { self.state.borrow_mut().net.fetch_network.abort(id); }
         let events = self.state.borrow_mut().net.fetch_network.step(8192, Instant::now());
-        for event in events {
+        self.state.borrow_mut().net.fetch_event_inbox.extend(events);
+        loop {
+            let Some(event)=self.state.borrow_mut().net.fetch_event_inbox.pop_front() else {break;};
+            match self.xhr_stream_event(&event) {
+                Ok(true)=>continue,Ok(false)=>{},Err(error)=>{self.schedule_fetch_pump()?;return Err(error);}
+            }
             let (id, result) = match event {
                 ServiceEvent::Finished { id, result } => (id, result),
                 ServiceEvent::ExternalNetwork(event) => {
@@ -330,10 +352,18 @@ impl RuntimeBindingHost<'_> {
         self.xhr_drive()?;
         self.websocket_pump_deferred()?;
         if !self.state.borrow().net.fetch_pending.is_empty() || !self.state.borrow().net.xhr_pending.is_empty()
-            || !self.state.borrow().net.ws_by_service.is_empty() {
+            || !self.state.borrow().net.ws_by_service.is_empty()
+            || !self.state.borrow().net.fetch_event_inbox.is_empty()
+            || self.state.borrow().net.fetch_network.has_pending_output() {
             self.schedule_fetch_pump()?;
         }
         Ok(JsValue::Undefined)
+        })();
+        if outcome.is_err() && (!self.state.borrow().net.fetch_event_inbox.is_empty()
+            || !self.state.borrow().net.xhr_pending.is_empty() || self.state.borrow().net.fetch_network.has_pending_output()) {
+            self.schedule_fetch_pump()?;
+        }
+        outcome
     }
     fn fetch_error_value(&mut self, error: &ApiError) -> Result<JsValue, Throw> {
         if *error == ApiError::Aborted {
@@ -347,14 +377,15 @@ impl RuntimeBindingHost<'_> {
         let root = self.state.borrow().host.borrow().dom.abort_signal_reason(signal).ok().flatten()?;
         self.root_value(root)
     }
-    fn xhr_events(&mut self, task: &XhrPending, events: Vec<XhrEvent>) -> Result<(), Throw> {
-        for event in events {
-            let current = match &*task.record.borrow() {
-                FetchObject::Xhr(xhr) => xhr.is_current_event(&event),
-                _ => false,
-            };
-            if !current { break; }
-            self.fetch_xhr_event(&task.receiver, event)?;
+    fn xhr_events(&mut self, task: &mut XhrPending, events: Vec<XhrEvent>) -> Result<(), Throw> {
+        task.queued_events.extend(events);
+        while let Some(event)=task.queued_events.pop_front() {
+            let current=matches!(&*task.record.borrow(),FetchObject::Xhr(xhr) if xhr.is_current_event(&event));
+            if !current || !self.xhr_receiving_alive(task) {task.queued_events.clear();break;}
+            let state=self.state.clone();let receiver=task.receiver.clone();
+            self.js.binding_with_realm(task.receiving.identity.realm,|js| {
+                RuntimeBindingHost{js,state}.fetch_xhr_event(&receiver,event)
+            })?;
         }
         Ok(())
     }
@@ -376,44 +407,54 @@ impl RuntimeBindingHost<'_> {
             let XhrTransport::Dispatch(pending) = &mut task.transport else { unreachable!() };
             xhr.on_dispatch_event(pending, &event, &mut state.net.fetch_network.dispatcher, elapsed, now)
         }.map_err(|e| self.fetch_xhr_error(e))?;
-        self.xhr_events(&task, events)?;
+        self.xhr_events(&mut task, events)?;
         let keep = matches!(&*task.record.borrow(), FetchObject::Xhr(xhr)
             if xhr.generation() == task.generation && xhr.send_invoked());
         if keep { self.state.borrow_mut().net.xhr_pending.push(task); }
         Ok(())
     }
     fn xhr_drive(&mut self) -> Result<(), Throw> {
-        let tasks = std::mem::take(&mut self.state.borrow_mut().net.xhr_pending);
-        let mut survivors = Vec::new();
-        for task in tasks {
-            let now_ms = task.started.elapsed().as_millis() as u64;
-            let events = {
-                let mut record = task.record.borrow_mut();
-                let FetchObject::Xhr(xhr) = &mut *record else { continue; };
-                if xhr.generation() != task.generation || !xhr.send_invoked() { continue; }
-                match (&task.transport, xhr.state()) {
-                    (XhrTransport::Data, XhrState::Opened) =>
-                        xhr.advance(&mut FetchDataOnly, &amazing_fetch::Site::Opaque(0), now_ms),
-                    (_, XhrState::HeadersReceived) =>
-                        xhr.pull_response(1, now_ms),
-                    (_, XhrState::Loading) =>
-                        xhr.pull_response(8192, now_ms),
-                    (XhrTransport::Dispatch(pending), XhrState::Opened) => {
-                        let mut state = self.state.borrow_mut();
-                        xhr.check_dispatch_timeout(pending, &mut state.net.fetch_network.dispatcher, now_ms)
-                            .map(|events| events.unwrap_or_default())
-                    }
-                    _ => Ok(Vec::new()),
+        let tasks=std::mem::take(&mut self.state.borrow_mut().net.xhr_pending);
+        let mut survivors=Vec::new();let mut failure=None;
+        for mut task in tasks {
+            let current=matches!(&*task.record.borrow(),FetchObject::Xhr(xhr)
+                if xhr.generation()==task.generation&&(xhr.send_invoked()||!task.queued_events.is_empty()));
+            if !current || !self.xhr_receiving_alive(&task) {
+                match &mut task.transport {
+                    XhrTransport::Stream(pending)=>{pending.cancel(&mut self.state.borrow_mut().net.fetch_network);}
+                    XhrTransport::Dispatch(pending)=>{pending.cancel(&mut self.state.borrow_mut().net.fetch_network.dispatcher);}
+                    XhrTransport::Data|XhrTransport::Terminal(_)=>{},
                 }
-            }.map_err(|e| self.fetch_xhr_error(e))?;
-            self.xhr_events(&task, events)?;
-            let keep = matches!(&*task.record.borrow(), FetchObject::Xhr(xhr)
-                if xhr.generation() == task.generation && xhr.send_invoked());
-            if keep { survivors.push(task); }
+                if current {if let FetchObject::Xhr(xhr)=&mut *task.record.borrow_mut(){xhr.abort();}}
+                continue;
+            }
+            let now_ms=task.started.elapsed().as_millis() as u64;
+            let events={let mut object=task.record.borrow_mut();let FetchObject::Xhr(xhr)=&mut *object else {unreachable!()};
+                match (&mut task.transport,xhr.state()) {
+                    (XhrTransport::Terminal(events),_)=>Ok(std::mem::take(events)),
+                    (XhrTransport::Stream(pending),_)=>xhr.check_service_timeout(pending,
+                        &mut self.state.borrow_mut().net.fetch_network,now_ms).map(|events|events.unwrap_or_default()),
+                    (XhrTransport::Data,XhrState::Opened)=>xhr.advance(&mut FetchDataOnly,&amazing_fetch::Site::Opaque(0),now_ms),
+                    (XhrTransport::Dispatch(pending),XhrState::Opened)=>xhr.check_dispatch_timeout(pending,
+                        &mut self.state.borrow_mut().net.fetch_network.dispatcher,now_ms).map(|events|events.unwrap_or_default()),
+                    (_,XhrState::HeadersReceived)=>xhr.pull_response(1,now_ms),
+                    (_,XhrState::Loading)=>xhr.pull_response(8192,now_ms),
+                    _=>Ok(Vec::new()),
+                }};
+            let result=events.map_err(|error|self.fetch_xhr_error(error)).and_then(|events|self.xhr_events(&mut task,events));
+            if let Err(error)=result {if failure.is_none(){failure=Some(error);}}
+            let keep=matches!(&*task.record.borrow(),FetchObject::Xhr(xhr)
+                if xhr.generation()==task.generation&&(xhr.send_invoked()||!task.queued_events.is_empty()));
+            if keep && self.xhr_receiving_alive(&task) {survivors.push(task);}
+            else if let XhrTransport::Stream(pending)=&mut task.transport {
+                pending.cancel(&mut self.state.borrow_mut().net.fetch_network);
+            }
         }
         self.state.borrow_mut().net.xhr_pending.extend(survivors);
+        if let Some(error)=failure {self.schedule_fetch_pump()?;return Err(error);}
         Ok(())
     }
+
 }
 
 fn is_ws_token(s: &str) -> bool {
@@ -1498,61 +1539,82 @@ impl FetchHost for RuntimeBindingHost<'_> {
             Ok(value) => Throw(value), Err(_) => Throw::type_error(message),
         }
     }
-    fn fetch_xhr_execute(&mut self, xhr: &mut Xhr) -> Result<Vec<XhrEvent>, XhrError> {
-        if xhr.is_data_request() {
-            let mut events = xhr.advance(&mut FetchDataOnly, &amazing_fetch::Site::Opaque(0), 0)?;
-            while matches!(xhr.state(), XhrState::HeadersReceived | XhrState::Loading) {
-                events.extend(xhr.pull_response(8192, 0)?);
+    fn fetch_xhr_execute(&mut self,xhr:&mut Xhr)->Result<Vec<XhrEvent>,XhrError> {
+        // Drive the same policy/cookie/cache service. Unrelated requests retain
+        // their actual receipts for the event loop; no second transport loses
+        // either their completion or the original XHR client security.
+        let start=Instant::now();
+        let admitted=xhr.start_buffered_service(&mut self.state.borrow_mut().net.fetch_network,0,start);
+        let mut pending=match admitted {
+            Ok(pending)=>pending,
+            Err(error)=>return xhr.service_start_failed(error),
+        };
+        let mut events=Vec::new();
+        loop {
+            let now=Instant::now();let elapsed=start.elapsed().as_millis() as u64;
+            let incoming=self.state.borrow_mut().net.fetch_network.step(8192,now);
+            let mut terminal_error=None;
+            for event in incoming {
+                let own=matches!(&event,ServiceEvent::Finished{id,..}|ServiceEvent::Network{id,..} if *id==pending.id());
+                if own {
+                    match xhr.on_buffered_service_event(&mut pending,
+                        &mut self.state.borrow_mut().net.fetch_network,event,elapsed) {
+                        Ok(batch)=>events.extend(batch),
+                        Err(error)=>{if terminal_error.is_none(){terminal_error=Some(error);}}
+                    }
+                } else {self.state.borrow_mut().net.fetch_event_inbox.push_back(event);}
             }
-            return Ok(events);
-        }
-        // A synchronous XHR blocks the event loop, but it must not drive the
-        // shared NetworkService dispatcher: `Dispatcher::step` advances every
-        // in-flight connection, so consuming its events here would silently drop
-        // the replies of pending asynchronous XHRs and fetches, leaving them
-        // hung. Give the blocking request its own dispatcher (same StdResolver,
-        // so the WPT shim host routing still applies) so asynchronous traffic
-        // keeps its events.
-        let start = Instant::now();
-        let mut dispatcher = Dispatcher::new(DispatchLimits::default());
-        let mut pending = xhr.start_dispatch(&mut dispatcher, 0, start)?;
-        let mut events = Vec::new();
-        for tick in 0..15_000 {
-            let now = start + Duration::from_millis(tick);
-            for event in dispatcher.step(8192, now) {
-                events.extend(xhr.on_dispatch_event(&mut pending, &event,
-                    &mut dispatcher, tick, now)?);
+            if let Some(error)=terminal_error {
+                pending.cancel(&mut self.state.borrow_mut().net.fetch_network);
+                if !self.state.borrow().net.fetch_event_inbox.is_empty() || self.state.borrow().net.fetch_network.has_pending_output() {
+                    let _=self.schedule_fetch_pump();
+                }
+                return Err(error);
             }
-            if matches!(xhr.state(), XhrState::HeadersReceived | XhrState::Loading) {
-                while matches!(xhr.state(), XhrState::HeadersReceived | XhrState::Loading) {
-                    events.extend(xhr.pull_response(8192, tick)?);
+            if xhr.state()==XhrState::Done {
+                if !self.state.borrow().net.fetch_event_inbox.is_empty() || self.state.borrow().net.fetch_network.has_pending_output() {
+                    self.schedule_fetch_pump().map_err(|_|XhrError::Network(amazing_fetch::FetchError::Transport))?;
                 }
                 return Ok(events);
             }
-            if xhr.state() == XhrState::Done { return Ok(events); }
+            // Each genuine native Fetch hop retains its configured transport
+            // deadline. A second invented driver deadline must not turn an
+            // ordinary transport failure into XHR's author-configured timeout.
             std::thread::sleep(Duration::from_millis(1));
         }
-        Err(XhrError::Timeout)
     }
-    fn fetch_xhr_start(&mut self, record: Rc<RefCell<FetchObject>>,
-        receiver: JsValue) -> Result<(), Throw> {
-        let started = Instant::now();
-        let (generation, data) = match &*record.borrow() {
-            FetchObject::Xhr(xhr) => (xhr.generation(), xhr.is_data_request()),
-            _ => return Err(self.fetch_type_error("Expected XMLHttpRequest")),
-        };
-        let transport = if data { XhrTransport::Data } else {
-            let result = {
-                let mut state = self.state.borrow_mut();
-                let mut object = record.borrow_mut();
-                let FetchObject::Xhr(xhr) = &mut *object else { unreachable!() };
-                xhr.start_dispatch(&mut state.net.fetch_network.dispatcher, 0, started)
-            };
-            XhrTransport::Dispatch(result.map_err(|error| self.fetch_xhr_error(error))?)
-        };
-        self.state.borrow_mut().net.xhr_pending.push(XhrPending {
-            record, receiver, generation, started, transport,
-        });
+    fn fetch_xhr_url_context(&mut self,receiver:&JsValue)->Result<XhrUrlContext,Throw> {
+        self.xhr_url_context_received(receiver)
+    }
+    fn fetch_xhr_prepare(&mut self,record:Rc<RefCell<FetchObject>>,receiver:JsValue)->Result<(),Throw> {
+        self.xhr_prepare_received(record,receiver)
+    }
+    fn fetch_xhr_discard_prepared(&mut self,record:&Rc<RefCell<FetchObject>>,generation:u64) {
+        self.xhr_discard_received(record,generation)
+    }
+    fn fetch_xhr_start(&mut self,record:Rc<RefCell<FetchObject>>,receiver:JsValue)->Result<(),Throw> {
+        let generation=match &*record.borrow() {FetchObject::Xhr(xhr)=>xhr.generation(),
+            _=>return Err(Throw::type_error("Expected XMLHttpRequest"))};
+        let prepared={let mut state=self.state.borrow_mut();
+            let index=state.net.xhr_prepared.iter().position(|prepared|
+                Rc::ptr_eq(&prepared.record,&record)&&prepared.generation==generation)
+                .ok_or_else(||Throw::type_error("Missing original XHR receiving capture"))?;
+            state.net.xhr_prepared.remove(index)};
+        if receiving_document_client_from_state(&self.state.borrow(),&prepared.receiving.identity).is_err() {
+            if let FetchObject::Xhr(xhr)=&mut *record.borrow_mut() {xhr.abort();}
+            return Ok(());
+        }
+        let transport={let mut state=self.state.borrow_mut();let mut object=record.borrow_mut();
+            let FetchObject::Xhr(xhr)=&mut *object else {unreachable!()};
+            match xhr.start_service_received(&mut state.net.fetch_network,&prepared.receiving,
+                prepared.started.elapsed().as_millis() as u64,Instant::now()) {
+                Ok(pending)=>XhrTransport::Stream(pending),
+                Err(error)=>XhrTransport::Terminal(xhr.service_start_failed(error).unwrap_or_default()),
+            }};
+        let mut transport=transport;
+        let queued_events=match &mut transport {XhrTransport::Terminal(events)=>std::mem::take(events).into(),_=>VecDeque::new()};
+        self.state.borrow_mut().net.xhr_pending.push(XhrPending{record,receiver,generation,
+            started:prepared.started,receiving:prepared.receiving,queued_events,transport});
         self.schedule_fetch_pump()
     }
     fn fetch_upload_has_listeners(&mut self, receiver: &JsValue) -> Result<bool, Throw> {
@@ -1576,41 +1638,8 @@ impl FetchHost for RuntimeBindingHost<'_> {
             .filter(|(slot, _)| *slot == key.slot)
             .map_or(current, |(_, state)| state)
     }
-    fn fetch_xhr_event(&mut self, receiver: &JsValue, event: XhrEvent) -> Result<(), Throw> {
-        let key = self.platform_object(receiver, FetchInterface::XMLHttpRequest.brand())
-            .ok_or_else(|| Throw::type_error("Stale XHR receiver"))?;
-        let previous = self.state.borrow_mut().net.xhr_ready_state_override.replace((key.slot, event.ready_state));
-        let _override_guard = XhrStateOverrideGuard(self.state.clone(), previous);
-        let name = match event.kind {
-            XhrEventKind::ReadyStateChange => "readystatechange",
-            XhrEventKind::LoadStart => "loadstart", XhrEventKind::Progress => "progress",
-            XhrEventKind::Load => "load", XhrEventKind::Error => "error",
-            XhrEventKind::Abort => "abort", XhrEventKind::Timeout => "timeout",
-            XhrEventKind::LoadEnd => "loadend",
-        };
-        let target = if event.target == XhrEventTarget::Upload {
-            self.js.binding_get_property(receiver, "upload")?
-        } else { receiver.clone() };
-        let value = self.fetch_allocate(FetchInterface::ProgressEvent,
-            FetchObject::ProgressEvent { kind: name.into(), loaded: event.loaded,
-                total: event.total, length_computable: event.length_computable })?;
-        self.js.binding_define_data_property(&value, "target", target.clone(), BindingPropertyFlags::METHOD)?;
-        self.js.binding_define_data_property(&value, "currentTarget", target.clone(), BindingPropertyFlags::METHOD)?;
-        let callback = self.js.binding_get_property(&target, &format!("on{name}"))?;
-        if self.js.binding_is_callable(&callback) {
-            binding_call(self.js, &callback, &target, &[value.clone()])?;
-        }
-        let brand = if event.target == XhrEventTarget::Upload {
-            FetchInterface::XMLHttpRequestUpload.brand()
-        } else { FetchInterface::XMLHttpRequest.brand() };
-        let key = self.platform_object(&target, brand).ok_or_else(|| Throw::type_error("Stale XHR target"))?;
-        let listeners = self.state.borrow().net.fetch_listeners.iter()
-            .filter(|(slot, family, kind, _)| *slot == key.slot && *family == brand.0 && kind == name)
-            .map(|(_, _, _, callback)| callback.clone()).collect::<Vec<_>>();
-        for callback in listeners {
-            binding_call(self.js, &callback, &target, &[value.clone()])?;
-        }
-        Ok(())
+    fn fetch_xhr_event(&mut self,receiver:&JsValue,event:XhrEvent)->Result<(),Throw> {
+        self.xhr_dispatch_event_received(receiver,event)
     }
     fn fetch_xhr_error(&mut self, error: XhrError) -> Throw {
         let name = error.dom_exception_name();
@@ -1629,12 +1658,17 @@ impl FetchHost for RuntimeBindingHost<'_> {
             if generation == xhr.generation() { return self.wrap_node(document); }
         }
         let Some(source) = xhr.document_source() else { return Ok(JsValue::Null); };
-        let document = match self.create_inert_document(&source.bytes, &source.content_type,
-            &source.url, source.charset.as_deref()) {
+        let realm=self.js.binding_object_creation_realm(receiver)?;
+        let origin=xhr.response_document_origin().cloned().ok_or_else(||Throw::type_error("Missing original XHR document origin"))?;
+        let state=self.state.clone();
+        let parsed=self.js.binding_with_realm(realm,|js|Ok(RuntimeBindingHost{js,state}
+            .create_inert_document(&source.bytes,&source.content_type,&source.url,source.charset.as_deref())))?;
+        let document = match parsed {
             Ok(document) => document,
             Err(DomError::SyntaxError) => return Ok(JsValue::Null),
             Err(error) => return Err(throw_dom_error(self, error)),
         };
+        self.html_set_inert_document_origin(document,origin).map_err(|error|throw_dom_error(self,error))?;
         self.state.borrow_mut().net.xhr_document_nodes.insert(key.slot, (xhr.generation(), document));
         self.wrap_node(document)
     }
@@ -1786,7 +1820,7 @@ mod tests {
         let mut js = Interpreter::new_with_external_scheduler(crate::js_scheduler::JS_CAPACITY).unwrap();
         js.set_dom_host(host.clone());
         let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
-        bindings.set_document_url(&mut js, &url);
+        bindings.initialize_initial_root_document(&mut js,&url).unwrap();
         assert!(!bindings.has_pending_network_io());
         js.run_script("var data=new XMLHttpRequest();data.open('GET','data:text/plain,ready');data.send();").unwrap();
         assert!(!bindings.has_pending_network_io());
@@ -1797,7 +1831,9 @@ mod tests {
         let wire = {
             let state = bindings.state.borrow();
             match &state.net.xhr_pending.last().unwrap().transport {
-                XhrTransport::Dispatch(pending) => pending.id(), XhrTransport::Data => panic!("HTTP transport"),
+                XhrTransport::Dispatch(pending) => pending.id(),
+                XhrTransport::Stream(pending)=>state.net.fetch_network.wire_request_id(pending.id()).expect("actual HTTP hop"),
+                XhrTransport::Data|XhrTransport::Terminal(_)=>panic!("HTTP transport"),
             }
         };
         assert!(bindings.state.borrow_mut().net.fetch_network.dispatcher.set_paused(wire, true));
@@ -2376,7 +2412,7 @@ mod tests {
             native_forwarded: false,
         }));
         let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
-        scheduler.set_location_url(&format!("http://127.0.0.1:{port}/"));
+        scheduler.set_location_url_initial(&format!("http://127.0.0.1:{port}/")).unwrap();
 
         scheduler.run_script(
             "var asyncDone=false; var a=new XMLHttpRequest(); a.onload=function(){asyncDone=true;}; \
@@ -2405,3 +2441,16 @@ mod tests {
         assert!(done, "pending async XHR lost its reply behind a synchronous XHR");
     }
 }
+
+impl NetRuntime {
+    pub(super) fn document_network_policy(&self,dom:&amazing_dom::Dom,
+        document:NodeIdx,generation:u64)->Option<ClientContext> {
+        if dom.node_generation(document)!=Some(generation)
+            || !matches!(&dom.get(document).kind,amazing_dom::NodeKind::Document) {return None;}
+        self.document_policies.get(&(document,generation)).cloned()
+    }
+}
+
+#[cfg(test)]
+#[path="runtime_host_net/xhr_streaming_tests.rs"]
+mod xhr_streaming_tests;

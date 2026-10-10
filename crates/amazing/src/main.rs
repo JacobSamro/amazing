@@ -10,6 +10,7 @@ mod gpu;
 mod gui;
 mod js_scheduler;
 mod navigator;
+mod navigation_response;
 mod page;
 mod font_metrics;
 mod render_oracle;
