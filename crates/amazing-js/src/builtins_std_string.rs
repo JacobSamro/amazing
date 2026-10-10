@@ -320,13 +320,16 @@ fn std_regexp_match_records(i: &mut Interpreter, regex: &JsValue, source: &crate
 }
 
 fn std_regexp_symbol_match(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if regexp_data(&this).is_none() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    if !this.is_object() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    // Generic (RegExp-like) receivers take the spec algorithm over Get/RegExpExec.
+    if regexp_data(&this).is_none() { return native_regexp_symbol_match(i, this, args); }
     let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
     native_string_match(i, JsValue::str(source), vec![this])
 }
 
 fn std_regexp_symbol_search(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if regexp_data(&this).is_none() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    if !this.is_object() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    if regexp_data(&this).is_none() { return native_regexp_symbol_search(i, this, args); }
     let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
     native_string_search(i, JsValue::str(source), vec![this])
 }
@@ -357,7 +360,7 @@ fn std_regexp_species_constructor(i: &mut Interpreter, regexp: &JsValue) -> Resu
 }
 
 fn std_regexp_symbol_replace(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if regexp_data(&this).is_none() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    if !this.is_object() { return Err(Throw::type_error("incompatible RegExp receiver")); }
     let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
     let replacement = std_reflect_arg(&args, 1);
     regexp_replace(i, &source, &[this, replacement])

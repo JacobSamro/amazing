@@ -1,0 +1,54 @@
+{
+ "label": "regexp-generic",
+ "source_commit": "0ce364ee6+regexp-generic","base_commit": "0ce364ee6",
+ "before": {
+  "files": {
+   "pass": 52922,
+   "fail": 485,
+   "timeout": 0,
+   "unsupported": 171,
+   "skipped": 294
+  },
+  "variants": {
+   "pass": 101622,
+   "fail": 956,
+   "timeout": 0,
+   "unsupported": 340,
+   "skipped": 0
+  },
+  "sha256": "83daa94120c36d429d3b762581718ea7ab6f28efad4418c1147b56ca47ff398e",
+  "path": "/home/user/amazing/out/resume-t262/before.json"
+ },
+ "after": {
+  "files": {
+   "pass": 52931,
+   "fail": 476,
+   "timeout": 0,
+   "unsupported": 171,
+   "skipped": 294
+  },
+  "variants": {
+   "pass": 101640,
+   "fail": 938,
+   "timeout": 0,
+   "unsupported": 340,
+   "skipped": 0
+  },
+  "sha256": "380aab46d33bd7dcc357b73d3f7b31a37903cf1369271a4d4c6151d18e641544",
+  "path": "/home/user/amazing/out/resume-t262/after2.json"
+ },
+ "lost_files": [],
+ "lost_variants": [],
+ "gained_files": [
+  "built-ins/RegExp/prototype/Symbol.replace/coerce-lastindex.js",
+  "built-ins/RegExp/prototype/Symbol.replace/get-exec-err.js",
+  "built-ins/RegExp/prototype/Symbol.replace/get-flags-err.js",
+  "built-ins/RegExpStringIteratorPrototype/ancestry.js",
+  "staging/sm/RegExp/lastIndex-match-or-replace.js",
+  "staging/sm/RegExp/match-local-tolength-recompilation.js",
+  "staging/sm/RegExp/replace-local-tolength-recompilation.js",
+  "staging/sm/RegExp/replace-twoBytes.js",
+  "staging/sm/String/matchAll.js"
+ ],
+ "gained_variant_count": 18
+}

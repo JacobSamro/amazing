@@ -51,6 +51,7 @@ impl Interpreter {
         base.proto = Some(self.object_proto.clone());
         let base = Obj(Rc::new(RefCell::new(base)));
         self.std_collection_iter_set_base(&base);
+        self.regexp_string_iterator_proto.borrow_mut().proto = Some(base.clone());
         let mut helper = JsObject::ordinary();
         helper.proto = Some(base.clone());
         let helper = Obj(Rc::new(RefCell::new(helper)));

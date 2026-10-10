@@ -826,11 +826,18 @@ fn regexp_match(
     this: &JsValue,
     source: impl Into<crate::value::JsString>,
 ) -> Result<Option<amazing_regex::Match>, Throw> {
+    if regexp_data(this).is_none() {
+        return Err(Throw::type_error("incompatible RegExp receiver"));
+    }
+    let units = regexp_units(source)?;
+    // RegExpBuiltinExec step 4 runs ToLength(? Get(R, "lastIndex")) *before* it
+    // reads the matcher/flags: a valueOf side effect can `compile` the RegExp,
+    // and the new program and flags must then be the ones used.
+    let index = regexp_last_index(i, this)?;
     let regex =
         regexp_data(this).ok_or_else(|| Throw::type_error("incompatible RegExp receiver"))?;
-    let units = regexp_units(source)?;
     let mut matcher = regex.matcher_utf16(&units).map_err(regexp_error)?;
-    regexp_match_with(i, this, regex.flags(), &mut matcher)
+    regexp_match_with(i, this, index, regex.flags(), &mut matcher)
 }
 /// ToLength(? Get(rx, "lastIndex")), clamped exactly as RegExpBuiltinExec
 /// requires (NaN or negative becomes 0; huge values saturate at 2**53-1).
@@ -846,10 +853,10 @@ fn regexp_last_index(i: &mut Interpreter, this: &JsValue) -> Result<usize, Throw
 fn regexp_match_with(
     i: &mut Interpreter,
     this: &JsValue,
+    index: usize,
     flags: amazing_regex::Flags,
     matcher: &mut amazing_regex::Matcher<'_>,
 ) -> Result<Option<amazing_regex::Match>, Throw> {
-    let index = regexp_last_index(i, this)?;
     let stateful = flags.global || flags.sticky;
     let result = matcher
         .exec(if stateful { index } else { 0 })
@@ -1504,7 +1511,9 @@ struct RegexpReplaceMatch {
 }
 fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[JsValue]) -> Result<JsValue, Throw> {
     let regexp = &args[0];
-    let regex = regexp_data(regexp).unwrap();
+    // `regex` is None for a generic RegExp-like receiver (custom `exec`, a
+    // subclass-less duck type): only the default-`exec` fast path needs it.
+    let regex = regexp_data(regexp);
     // RegExp.prototype[Symbol.replace] (§22.2.6.11) reads the *composed*
     // "flags" string exactly once (step 6.a.i for a string replacement,
     // and unconditionally for a functional one too), not "global"/
@@ -1543,7 +1552,7 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
         // result object per match -- it matters when matching over one very
         // long string produces many thousands of matches in a single call.
         let exec = i.get_prop(regexp, "exec")?;
-        let (matched, position, captures, named) = if regexp_exec_default(&exec) {
+        let (matched, position, captures, named) = if let (true, Some(regex)) = (regexp_exec_default(&exec), regex.as_ref()) {
             match regexp_match(i, regexp, source)? {
                 None => break,
                 Some(m) => {
@@ -1552,6 +1561,8 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
                         .chain(m.captures.iter().skip(1).map(|r| r.clone()
                             .map(|r| crate::value::JsString::from_units(units[r].to_vec()))))
                         .collect::<Vec<_>>();
+                    // Re-read: ToLength(lastIndex) may have recompiled the RegExp.
+                    let regex = regexp_data(regexp).unwrap_or_else(|| regex.clone());
                     let named = if regex.group_names().is_empty() {
                         JsValue::Undefined
                     } else {
@@ -1603,13 +1614,9 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
         matches.push(RegexpReplaceMatch { matched, position, captures, named });
         if !global { break; }
         if empty {
-            let last_index = i.get_prop(regexp, "lastIndex")?;
-            let last = i.to_number(&last_index)?;
-            let next = amazing_regex::advance_index(
-                &units,
-                if last.is_nan() { 0 } else { last.max(0.0) as usize },
-                unicode,
-            );
+            // ToLength(? Get(rx, "lastIndex")): saturates at 2**53 - 1.
+            let last = regexp_last_index(i, regexp)?;
+            let next = amazing_regex::advance_index(&units, last, unicode);
             i.set_prop(regexp, "lastIndex", JsValue::num(next as f64))?;
         }
     }
