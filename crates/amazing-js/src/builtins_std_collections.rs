@@ -497,13 +497,16 @@ fn std_set_is_disjoint_from(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
 }
 
 type StdWeakObject = Weak<RefCell<JsObject>>;
-struct StdWeakMapData { owner: StdWeakObject, entries: Vec<(StdWeakObject, JsValue)> }
-struct StdWeakSetData { owner: StdWeakObject, entries: Vec<StdWeakObject> }
-struct StdWeakRefData { owner: StdWeakObject, target: StdWeakObject }
+/// CanBeHeldWeakly keys: objects (held weakly) and Symbols not created by Symbol.for.
+#[derive(Clone)]
+enum StdWeakKey { Object(StdWeakObject), Symbol(JsSymbol) }
+struct StdWeakMapData { owner: StdWeakObject, entries: Vec<(StdWeakKey, JsValue)> }
+struct StdWeakSetData { owner: StdWeakObject, entries: Vec<StdWeakKey> }
+struct StdWeakRefData { owner: StdWeakObject, target: StdWeakKey }
 struct StdFinalizationData {
     owner: StdWeakObject,
     _callback: JsValue,
-    registrations: Vec<(StdWeakObject, JsValue, Option<JsValue>)>,
+    registrations: Vec<(StdWeakKey, JsValue, Option<JsValue>)>,
 }
 thread_local! {
     static STD_WEAK_MAPS: RefCell<HashMap<usize, StdWeakMapData>> = RefCell::new(HashMap::new());
@@ -513,11 +516,33 @@ thread_local! {
 }
 
 fn std_weak_id(object: &Obj) -> usize { Rc::as_ptr(&object.0) as usize }
-fn std_weak_key(value: &JsValue) -> Option<Obj> {
-    if let JsValue::Object(object) = value { Some(object.clone()) } else { None }
+fn std_weak_key(i: &Interpreter, value: &JsValue) -> Option<StdWeakKey> {
+    match value {
+        JsValue::Object(object) => Some(StdWeakKey::Object(Rc::downgrade(&object.0))),
+        JsValue::Symbol(symbol) if !i.symbol_registry.values().any(|registered| registered == symbol) =>
+            Some(StdWeakKey::Symbol(symbol.clone())),
+        _ => None,
+    }
+}
+fn std_weak_alive(key: &StdWeakKey) -> bool {
+    match key { StdWeakKey::Object(object) => object.upgrade().is_some(), StdWeakKey::Symbol(_) => true }
+}
+fn std_weak_key_same(a: &StdWeakKey, b: &StdWeakKey) -> bool {
+    match (a, b) {
+        (StdWeakKey::Object(a), StdWeakKey::Object(b)) =>
+            a.upgrade().is_some_and(|a| b.upgrade().is_some_and(|b| Rc::ptr_eq(&a, &b))),
+        (StdWeakKey::Symbol(a), StdWeakKey::Symbol(b)) => a == b,
+        _ => false,
+    }
 }
 fn std_weak_same(a: &StdWeakObject, b: &Obj) -> bool {
     a.upgrade().is_some_and(|object| Rc::ptr_eq(&object, &b.0))
+}
+fn std_weak_value(key: &StdWeakKey) -> JsValue {
+    match key {
+        StdWeakKey::Object(object) => object.upgrade().map(|o| JsValue::Object(Obj(o))).unwrap_or(JsValue::Undefined),
+        StdWeakKey::Symbol(symbol) => JsValue::Symbol(symbol.clone()),
+    }
 }
 
 impl Interpreter {
@@ -525,7 +550,8 @@ impl Interpreter {
         for (name, constructor, methods) in [
             ("WeakMap", std_weak_map_constructor as crate::value::NativeFn,
                 vec![("get", 1, std_weak_map_get as crate::value::NativeFn), ("set", 2, std_weak_map_set),
-                     ("has", 1, std_weak_map_has), ("delete", 1, std_weak_map_delete)]),
+                     ("has", 1, std_weak_map_has), ("delete", 1, std_weak_map_delete),
+                     ("getOrInsert", 2, std_weak_map_get_or_insert), ("getOrInsertComputed", 2, std_weak_map_get_or_insert_computed)]),
             ("WeakSet", std_weak_set_constructor as crate::value::NativeFn,
                 vec![("add", 1, std_weak_set_add as crate::value::NativeFn), ("has", 1, std_weak_set_has),
                      ("delete", 1, std_weak_set_delete)]),
@@ -541,7 +567,7 @@ impl Interpreter {
             let constructor = Self::native_constructor(name, constructor, &self.function_proto);
             if let JsValue::Object(object) = &constructor {
                 object.borrow_mut().define("name", symbol_data(JsValue::str(name), false, true)).unwrap();
-                object.borrow_mut().define("length", symbol_data(JsValue::num(if name == "FinalizationRegistry" { 1.0 } else { 0.0 }), false, true)).unwrap();
+                object.borrow_mut().define("length", symbol_data(JsValue::num(if name == "FinalizationRegistry" || name == "WeakRef" { 1.0 } else { 0.0 }), false, true)).unwrap();
                 object.borrow_mut().define("prototype", symbol_data(JsValue::Object(prototype.clone()), false, false)).unwrap();
             }
             prototype.borrow_mut().define("constructor", symbol_data(constructor.clone(), true, true)).unwrap();
@@ -579,51 +605,78 @@ fn std_weak_map_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     if !source.is_null() && !source.is_undefined() {
         let adder = i.get_prop(&this, "set")?;
         if !std_callable(&adder) { return Err(Throw::type_error("WeakMap set is not callable")); }
-        for entry in i.iterate(&source)? {
-            if !entry.is_object() { return Err(Throw::type_error("WeakMap iterator value is not an object")); }
-            let key = i.get_prop(&entry, "0")?;
-            let value = i.get_prop(&entry, "1")?;
-            i.call_value(&adder, this.clone(), vec![key, value])?;
+        let record = std_collection_sync_iterator(i, source)?;
+        while let Some(entry) = std_iterator_step(i, &record)? {
+            let result = (|| {
+                if !entry.is_object() { return Err(Throw::type_error("WeakMap iterator value is not an object")); }
+                let key = i.get_prop(&entry, "0")?;
+                let value = i.get_prop(&entry, "1")?;
+                i.call_value(&adder, this.clone(), vec![key, value])
+            })();
+            if let Err(error) = result { return Err(std_iterator_abrupt_close(i, &record, error)); }
         }
     }
     Ok(this)
 }
 
-fn std_weak_map_get(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let owner = std_weak_map_owner(&this)?;
-    let Some(key) = std_weak_key(&std_reflect_arg(&args, 0)) else { return Ok(JsValue::Undefined); };
-    Ok(STD_WEAK_MAPS.with(|registry| registry.borrow().get(&std_weak_id(&owner)).and_then(|data|
-        data.entries.iter().find(|(candidate, _)| std_weak_same(candidate, &key)).map(|(_, value)| value.clone()))
-        .unwrap_or(JsValue::Undefined)))
+fn std_weak_map_lookup(owner: &Obj, key: &StdWeakKey) -> Option<JsValue> {
+    STD_WEAK_MAPS.with(|registry| registry.borrow().get(&std_weak_id(owner)).and_then(|data|
+        data.entries.iter().find(|(candidate, _)| std_weak_key_same(candidate, key)).map(|(_, value)| value.clone())))
 }
-fn std_weak_map_set(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let owner = std_weak_map_owner(&this)?;
-    let key = std_weak_key(&std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakMap key must be an object"))?;
-    let value = std_reflect_arg(&args, 1);
+fn std_weak_map_put(owner: &Obj, key: StdWeakKey, value: JsValue) {
     STD_WEAK_MAPS.with(|registry| {
         let mut registry = registry.borrow_mut();
-        let data = registry.get_mut(&std_weak_id(&owner)).unwrap();
-        data.entries.retain(|(candidate, _)| candidate.upgrade().is_some());
-        if let Some((_, old)) = data.entries.iter_mut().find(|(candidate, _)| std_weak_same(candidate, &key)) {
+        let data = registry.get_mut(&std_weak_id(owner)).unwrap();
+        data.entries.retain(|(candidate, _)| std_weak_alive(candidate));
+        if let Some((_, old)) = data.entries.iter_mut().find(|(candidate, _)| std_weak_key_same(candidate, &key)) {
             *old = value;
-        } else { data.entries.push((Rc::downgrade(&key.0), value)); }
+        } else { data.entries.push((key, value)); }
     });
+}
+fn std_weak_map_get(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let owner = std_weak_map_owner(&this)?;
+    let Some(key) = std_weak_key(i, &std_reflect_arg(&args, 0)) else { return Ok(JsValue::Undefined); };
+    Ok(std_weak_map_lookup(&owner, &key).unwrap_or(JsValue::Undefined))
+}
+fn std_weak_map_set(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let owner = std_weak_map_owner(&this)?;
+    let key = std_weak_key(i, &std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakMap key cannot be held weakly"))?;
+    std_weak_map_put(&owner, key, std_reflect_arg(&args, 1));
     Ok(this)
 }
-fn std_weak_map_has(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_weak_map_get_or_insert(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let owner = std_weak_map_owner(&this)?;
-    let Some(key) = std_weak_key(&std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
-    Ok(JsValue::Bool(STD_WEAK_MAPS.with(|registry| registry.borrow().get(&std_weak_id(&owner))
-        .is_some_and(|data| data.entries.iter().any(|(candidate, _)| std_weak_same(candidate, &key))))))
+    let key = std_weak_key(i, &std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakMap key cannot be held weakly"))?;
+    if let Some(value) = std_weak_map_lookup(&owner, &key) { return Ok(value); }
+    let value = std_reflect_arg(&args, 1);
+    std_weak_map_put(&owner, key, value.clone());
+    Ok(value)
 }
-fn std_weak_map_delete(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_weak_map_get_or_insert_computed(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let owner = std_weak_map_owner(&this)?;
-    let Some(key) = std_weak_key(&std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
+    let key_value = std_reflect_arg(&args, 0);
+    let key = std_weak_key(i, &key_value).ok_or_else(|| Throw::type_error("WeakMap key cannot be held weakly"))?;
+    let callback = std_reflect_arg(&args, 1);
+    if !std_callable(&callback) { return Err(Throw::type_error("WeakMap upsert callback is not callable")); }
+    if let Some(value) = std_weak_map_lookup(&owner, &key) { return Ok(value); }
+    let value = i.call_value(&callback, JsValue::Undefined, vec![key_value])?;
+    std_weak_map_put(&owner, key, value.clone());
+    Ok(value)
+}
+fn std_weak_map_has(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let owner = std_weak_map_owner(&this)?;
+    let Some(key) = std_weak_key(i, &std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
+    Ok(JsValue::Bool(STD_WEAK_MAPS.with(|registry| registry.borrow().get(&std_weak_id(&owner))
+        .is_some_and(|data| data.entries.iter().any(|(candidate, _)| std_weak_key_same(candidate, &key))))))
+}
+fn std_weak_map_delete(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let owner = std_weak_map_owner(&this)?;
+    let Some(key) = std_weak_key(i, &std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
     let deleted = STD_WEAK_MAPS.with(|registry| {
         let mut registry = registry.borrow_mut();
         let data = registry.get_mut(&std_weak_id(&owner)).unwrap();
         let old = data.entries.len();
-        data.entries.retain(|(candidate, _)| !std_weak_same(candidate, &key));
+        data.entries.retain(|(candidate, _)| !std_weak_key_same(candidate, &key));
         data.entries.len() != old
     });
     Ok(JsValue::Bool(deleted))
@@ -637,54 +690,59 @@ fn std_weak_set_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     if !source.is_null() && !source.is_undefined() {
         let adder = i.get_prop(&this, "add")?;
         if !std_callable(&adder) { return Err(Throw::type_error("WeakSet add is not callable")); }
-        for value in i.iterate(&source)? { i.call_value(&adder, this.clone(), vec![value])?; }
+        let record = std_collection_sync_iterator(i, source)?;
+        while let Some(value) = std_iterator_step(i, &record)? {
+            if let Err(error) = i.call_value(&adder, this.clone(), vec![value]) {
+                return Err(std_iterator_abrupt_close(i, &record, error));
+            }
+        }
     }
     Ok(this)
 }
-fn std_weak_set_add(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_weak_set_add(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let owner = std_weak_set_owner(&this)?;
-    let key = std_weak_key(&std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakSet value must be an object"))?;
+    let key = std_weak_key(i, &std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakSet value cannot be held weakly"))?;
     STD_WEAK_SETS.with(|registry| {
         let mut registry = registry.borrow_mut();
         let data = registry.get_mut(&std_weak_id(&owner)).unwrap();
-        data.entries.retain(|candidate| candidate.upgrade().is_some());
-        if !data.entries.iter().any(|candidate| std_weak_same(candidate, &key)) {
-            data.entries.push(Rc::downgrade(&key.0));
+        data.entries.retain(std_weak_alive);
+        if !data.entries.iter().any(|candidate| std_weak_key_same(candidate, &key)) {
+            data.entries.push(key);
         }
     });
     Ok(this)
 }
-fn std_weak_set_has(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_weak_set_has(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let owner = std_weak_set_owner(&this)?;
-    let Some(key) = std_weak_key(&std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
+    let Some(key) = std_weak_key(i, &std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
     Ok(JsValue::Bool(STD_WEAK_SETS.with(|registry| registry.borrow().get(&std_weak_id(&owner))
-        .is_some_and(|data| data.entries.iter().any(|candidate| std_weak_same(candidate, &key))))))
+        .is_some_and(|data| data.entries.iter().any(|candidate| std_weak_key_same(candidate, &key))))))
 }
-fn std_weak_set_delete(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_weak_set_delete(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let owner = std_weak_set_owner(&this)?;
-    let Some(key) = std_weak_key(&std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
+    let Some(key) = std_weak_key(i, &std_reflect_arg(&args, 0)) else { return Ok(JsValue::Bool(false)); };
     let deleted = STD_WEAK_SETS.with(|registry| {
         let mut registry = registry.borrow_mut();
         let data = registry.get_mut(&std_weak_id(&owner)).unwrap();
         let old = data.entries.len();
-        data.entries.retain(|candidate| !std_weak_same(candidate, &key));
+        data.entries.retain(|candidate| !std_weak_key_same(candidate, &key));
         data.entries.len() != old
     });
     Ok(JsValue::Bool(deleted))
 }
 
-fn std_weak_ref_constructor(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_weak_ref_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(owner) = &this else { return Err(Throw::type_error("WeakRef requires new")); };
-    let target = std_weak_key(&std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakRef target must be an object"))?;
+    let target = std_weak_key(i, &std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakRef target cannot be held weakly"))?;
     STD_WEAK_REFS.with(|registry| registry.borrow_mut().insert(std_weak_id(owner),
-        StdWeakRefData { owner: Rc::downgrade(&owner.0), target: Rc::downgrade(&target.0) }));
+        StdWeakRefData { owner: Rc::downgrade(&owner.0), target }));
     Ok(this)
 }
 fn std_weak_ref_deref(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(owner) = &this else { return Err(Throw::type_error("incompatible WeakRef receiver")); };
     STD_WEAK_REFS.with(|registry| registry.borrow().get(&std_weak_id(owner))
         .filter(|data| std_weak_same(&data.owner, owner))
-        .map(|data| data.target.upgrade().map(|target| JsValue::Object(Obj(target))).unwrap_or(JsValue::Undefined))
+        .map(|data| std_weak_value(&data.target))
         .ok_or_else(|| Throw::type_error("incompatible WeakRef receiver")))
 }
 
@@ -702,25 +760,26 @@ fn std_finalization_owner(this: &JsValue) -> Result<Obj, Throw> {
         .is_some_and(|data| std_weak_same(&data.owner, owner)));
     if valid { Ok(owner.clone()) } else { Err(Throw::type_error("incompatible FinalizationRegistry receiver")) }
 }
-fn std_finalization_register(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_finalization_register(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let owner = std_finalization_owner(&this)?;
-    let target = std_weak_key(&std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("target must be an object"))?;
+    let target_value = std_reflect_arg(&args, 0);
+    let target = std_weak_key(i, &target_value).ok_or_else(|| Throw::type_error("target cannot be held weakly"))?;
     let held = std_reflect_arg(&args, 1);
-    if std_same_value(&JsValue::Object(target.clone()), &held) {
+    if std_same_value(&target_value, &held) {
         return Err(Throw::type_error("target and holdings must differ"));
     }
     let token = args.get(2).filter(|value| !value.is_undefined()).cloned();
-    if token.as_ref().is_some_and(|value| std_weak_key(value).is_none()) {
-        return Err(Throw::type_error("unregister token must be an object"));
+    if token.as_ref().is_some_and(|value| std_weak_key(i, value).is_none()) {
+        return Err(Throw::type_error("unregister token cannot be held weakly"));
     }
     STD_FINALIZATION.with(|registry| registry.borrow_mut().get_mut(&std_weak_id(&owner)).unwrap()
-        .registrations.push((Rc::downgrade(&target.0), held, token)));
+        .registrations.push((target, held, token)));
     Ok(JsValue::Undefined)
 }
-fn std_finalization_unregister(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_finalization_unregister(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let owner = std_finalization_owner(&this)?;
     let token = std_reflect_arg(&args, 0);
-    if std_weak_key(&token).is_none() { return Err(Throw::type_error("unregister token must be an object")); }
+    if std_weak_key(i, &token).is_none() { return Err(Throw::type_error("unregister token cannot be held weakly")); }
     let removed = STD_FINALIZATION.with(|registry| {
         let mut registry = registry.borrow_mut();
         let data = registry.get_mut(&std_weak_id(&owner)).unwrap();
@@ -739,6 +798,20 @@ mod strong_collection_protocol_tests {
             let mut i = Interpreter::new();
             assert_eq!(i.run_script_with_backend(source, backend).unwrap_or_else(|e|panic!("{backend:?}: {}\n{source}",e.describe())),JsValue::Bool(true),"{backend:?}");
         }
+    }
+    #[test]
+    fn weak_collections_accept_unregistered_symbols_and_upsert() {
+        check(r#"
+          var s=Symbol('s'),reg=Symbol.for('r'),o={},ok=true;
+          var wm=new WeakMap([[s,1]]),ws=new WeakSet([s]);
+          ok=ok && wm.get(s)===1 && wm.has(s) && ws.has(s) && wm.delete(s) && !wm.has(s);
+          ok=ok && wm.getOrInsert(o,5)===5 && wm.getOrInsert(o,6)===5 && wm.getOrInsertComputed(s,function(k){return k===s?7:0;})===7;
+          for(var f of [function(){wm.set(reg,1);},function(){ws.add(reg);},function(){new WeakRef(reg);},function(){wm.getOrInsert(1,1);}]){
+            try{f();ok=false;}catch(e){ok=ok && e instanceof TypeError;}
+          }
+          ok=ok && wm.has(Symbol.iterator)===false && new WeakRef(Symbol.iterator).deref()===Symbol.iterator && WeakRef.length===1;
+          ok;
+        "#);
     }
     #[test]
     fn installed_species_size_brands_and_upsert_metadata_are_genuine() {
