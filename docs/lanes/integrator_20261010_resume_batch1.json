@@ -1,0 +1,78 @@
+{
+ "schema": 1,
+ "ticket": "resume-batch1",
+ "date": "2026-10-10",
+ "published_base": "ee2786a463f8e5d5975b6c58f3c0bdc5cee44f14",
+ "gated_source_commit": "12f868852cc20b4d11c6386dcd61e43b5ef5582c",
+ "tickets": [
+  "315136ff1 native completion-marker diagnostics (tooling)",
+  "3a2e71da3 structured WPT failure reader (tooling)",
+  "12f868852 text: generic families and installed-face catalogue"
+ ],
+ "excluded": [
+  {
+   "commit": "a5f43625a",
+   "reason": "its own native-storage-failed-baseline-tests failed in setUpClass twice (controlled native failure lost actual exit1); kept on lane/failed-engine-baseline-ready"
+  }
+ ],
+ "workspace": {
+  "nextest": {
+   "passed": 5535,
+   "failed": 0,
+   "skipped": 17
+  },
+  "doctests": {
+   "passed": 39,
+   "failed": 0
+  },
+  "note": "first attempt exited before tests on a box below the storage admission threshold; clean rerun on a fresh box"
+ },
+ "test262": {
+  "shards": 16,
+  "timeout_seconds": 60,
+  "summary": {
+   "files": {
+    "fail": 485,
+    "pass": 52922,
+    "skipped": 294,
+    "unsupported": 171
+   },
+   "variants": {
+    "fail": 956,
+    "pass": 101622,
+    "unsupported": 340
+   }
+  },
+  "lost_files": 0,
+  "lost_variants": 0,
+  "baseline": "t262-d2ed4177-resume-tooling-20261010 (same pass set as published 5480caec)",
+  "result_sha256": "f9c50b9cb1a85c7799e8d1a5a45bde018f6265337234dd6f5fe2a0683998b6f7",
+  "shard_sha256": {
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-0/shard-0.compact.json": "cf89522401879fd6c5c144e3acbfcfb92e1150c9725353b8cb5f8fffbcb4e25c",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-0/shard-12.compact.json": "147ad0bcdb035006548840d5dd4860c6f0027714ac4e6cfa1b0ca8c476886f51",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-0/shard-4.compact.json": "12820fe14ab2434ddcb86a5e8278ae707683208f3d6d18d07ef501894a0b076e",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-0/shard-8.compact.json": "383181c1c5b5b30ed5ff547b75fc523223e55671dbbd9eedc3b9626236dce10b",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-1/shard-1.compact.json": "0c40582b55fc65c7c4d9dc60ac2a20f6216b700bf605bde06c6c73dfd3838c5a",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-1/shard-13.compact.json": "f2133c2868928ef95d7619e659e3dd46c12d55d1284c10ed7265bbf3b60cb763",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-1/shard-5.compact.json": "8a0f7d27494d46abf546dc0b4552a98ece8a8ca7ae5af5985affc65c43cb374e",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-1/shard-9.compact.json": "8ebd7c867f9e0b1e4eab47ee9bacfd818487410e3b013cc23b0f683f83e7eaa4",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-2/shard-10.compact.json": "3d1821720b81bf960a76e7015a9e80a45dfef81f7c817854f8fc3228750985a7",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-2/shard-14.compact.json": "a6f7c48e3004cdb8f1bf51a9a805a9f42c0133b24f7fc2da08f202f55051d53e",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-2/shard-2.compact.json": "6fd1235d4ea53999099a7b5460477307d996b240c2e795fa7804efc40700d00a",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-2/shard-6.compact.json": "e86e94beb64ec6d8d7afd7358fc54220ef64f932a5e7b6bb43234c320e171cc0",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-3/shard-11.compact.json": "a827ce5f31453869e7c1b9a2d9dcbdaa0142ef4c91b11d0d1b059383fdcf0700",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-3/shard-15.compact.json": "9ec80d5e8d2090c5f3fac02bb0b832a20495224e0727fbb73ea90648c9648f0d",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-3/shard-3.compact.json": "231f308a92fba0d6e24dfd23322fc1353944dc29aed04acb25171c57956fc0c9",
+   "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/resume-batch1-20261010-20261010T185321-1791658401995077000/pool-3/shard-7.compact.json": "b127823ab5e9e05d3a6c6e8f098494de3e32da892ec1f92d6547dc2ca6216ab4"
+  }
+ },
+ "lane_corpus": {
+  "css-fonts": {
+   "before_pass": 26,
+   "after_pass": 29,
+   "total": 32,
+   "lost": 0,
+   "evidence": "docs/lanes/text_font_catalogue/"
+  }
+ }
+}
