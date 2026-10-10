@@ -317,6 +317,8 @@ fn parse_features(value: &str) -> Result<Vec<FeatureSetting>, String> {
 }
 
 pub(super) struct PageFontLoader<'a> {
+    /// Immutable installed-face snapshot owned by this page TextSystem build.
+    pub installed_catalogue: Option<&'a InstalledFontCatalogue>,
     pub stylesheet_url: &'a str,
     pub document_url: &'a str,
     pub warnings: Vec<String>,
@@ -426,6 +428,18 @@ impl PageFontLoader<'_> {
 }
 
 impl FontFaceLoader for PageFontLoader<'_> {
+    fn load_local_face(&mut self, name: &str, max_bytes: usize) -> Result<Option<amazing_text_provider::InstalledFontFace>, TextError> {
+        // Keep the existing pinned orientation fixture's lookup precedence.
+        let lower = name.trim().to_ascii_lowercase();
+        if lower == "csshworientationtest" { return Ok(None); }
+        #[cfg(not(target_os = "windows"))]
+        if let Some(catalogue) = self.installed_catalogue {
+            if let Some(face) = catalogue.local_face(&lower) {
+                if face.original_bytes().len() <= max_bytes { return Ok(Some(face.clone())); }
+            }
+        }
+        Ok(None)
+    }
     fn load_local(&mut self, name: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, TextError> {
         let lower = name.trim().to_ascii_lowercase();
         if lower == "csshworientationtest" {
@@ -436,6 +450,11 @@ impl FontFaceLoader for PageFontLoader<'_> {
                     .into_owned()
             });
             return Ok(file.and_then(|path| super::load_resource(&path, max_bytes).ok()));
+        }
+        #[cfg(not(target_os = "windows"))]
+        if let Some(catalogue) = self.installed_catalogue {
+            return Ok(catalogue.local_face(&lower).filter(|face| face.original_bytes().len() <= max_bytes)
+                .map(|face| face.original_bytes().to_vec()));
         }
         let file = local_font_path(&lower);
         Ok(file.and_then(|path| super::load_resource(&path, max_bytes).ok()))
@@ -476,7 +495,8 @@ fn local_font_path(lower_name: &str) -> Option<String> {
         "emoji" => FontBucket::Emoji,
         _ => return None,
     };
-    best_installed_face(&faces, bucket).and_then(|face| face.path.to_str().map(str::to_owned))
+    let generic = matches!(lower_name, "sans-serif" | "system-ui" | "ui-sans-serif" | "ui-rounded" | "serif" | "ui-serif" | "monospace" | "ui-monospace" | "emoji");
+    best_installed_face_with_policy(&faces, bucket, generic).and_then(|face| face.path.to_str().map(str::to_owned))
 }
 
 /// Which generic CSS family a scanned font file stands in for.
@@ -683,6 +703,32 @@ fn resolve_fontconfig_dir(attrs: &str, content: &str) -> Option<std::path::PathB
 struct InstalledLinuxFace {
     path: std::path::PathBuf,
     profile: amazing_text_provider::InstalledFontProfile,
+    resource: Option<amazing_text_provider::InstalledFontFace>,
+}
+
+/// One bounded filesystem snapshot, owned by the caller's TextSystem build.
+/// No global cache survives filesystem changes or unrelated pages.
+#[derive(Default, Debug)]
+pub(super) struct InstalledFontCatalogue {
+    #[cfg(not(target_os = "windows"))]
+    faces: Vec<InstalledLinuxFace>,
+}
+#[cfg(not(target_os = "windows"))]
+impl InstalledFontCatalogue {
+    fn local_face(&self, name: &str) -> Option<&amazing_text_provider::InstalledFontFace> {
+        let face = local_installed_face(&self.faces, name).or_else(|| {
+            let bucket = match name {
+                "arial" | "helvetica" | "sans-serif" | "system-ui" | "segoe ui" | "ui-sans-serif" | "ui-rounded" => FontBucket::Sans,
+                "times new roman" | "times" | "georgia" | "serif" | "ui-serif" => FontBucket::Serif,
+                "consolas" | "courier" | "courier new" | "monospace" | "ui-monospace" => FontBucket::Mono,
+                "emoji" => FontBucket::Emoji,
+                _ => return None,
+            };
+            let generic = matches!(name, "sans-serif" | "system-ui" | "ui-sans-serif" | "ui-rounded" | "serif" | "ui-serif" | "monospace" | "ui-monospace" | "emoji");
+            best_installed_face_with_policy(&self.faces, bucket, generic)
+        })?;
+        face.resource.as_ref()
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -698,8 +744,16 @@ fn read_installed_font(path: &std::path::Path) -> Option<Vec<u8>> {
 
 #[cfg(not(target_os = "windows"))]
 fn installed_linux_faces() -> Vec<InstalledLinuxFace> {
+    discover_linux_catalogue().faces
+}
+#[cfg(not(target_os = "windows"))]
+fn discover_linux_catalogue() -> InstalledFontCatalogue {
     let mut paths = Vec::new();
     for root in linux_font_roots() { collect_font_files(&root, 0, &mut paths); }
+    catalogue_from_paths(paths)
+}
+#[cfg(not(target_os = "windows"))]
+fn catalogue_from_paths(mut paths: Vec<std::path::PathBuf>) -> InstalledFontCatalogue {
     paths.sort(); paths.dedup();
     let mut faces = Vec::new();
     let mut inspected = 0usize;
@@ -715,11 +769,18 @@ fn installed_linux_faces() -> Vec<InstalledLinuxFace> {
         if bytes.len() != size { continue; }
         let format = if bytes.starts_with(b"ttcf") { amazing_text_provider::FontFormat::Collection }
             else { amazing_text_provider::FontFormat::OpenType };
-        let Ok(profile) = amazing_text_provider::inspect_installed_font(format, &bytes) else { continue; };
-        if profile.families.is_empty() { continue; }
-        faces.push(InstalledLinuxFace { path, profile });
+        // Duplicate physical bytes (copies or hardlinks) share one validated
+        // snapshot. Equality is checked on complete bytes, never a path/hash.
+        let resource = if let Some(existing) = faces.iter().find_map(|face: &InstalledLinuxFace| {
+            face.resource.as_ref().filter(|resource| resource.original_bytes() == bytes.as_slice())
+        }) { existing.clone() } else {
+            let Ok(resource) = amazing_text_provider::InstalledFontFace::new(format, bytes) else { continue; };
+            resource
+        };
+        if resource.profile().families.is_empty() { continue; }
+        faces.push(InstalledLinuxFace { path, profile: resource.profile().clone(), resource: Some(resource) });
     }
-    faces
+    InstalledFontCatalogue { faces }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -747,15 +808,55 @@ fn family_installed_faces<'a>(faces: &'a [InstalledLinuxFace], primary: &Install
 
 #[cfg(not(target_os = "windows"))]
 fn best_installed_face(faces: &[InstalledLinuxFace], bucket: FontBucket) -> Option<&InstalledLinuxFace> {
+    best_installed_face_with_policy(faces, bucket, true)
+}
+#[cfg(not(target_os = "windows"))]
+fn best_installed_face_with_policy(faces: &[InstalledLinuxFace], bucket: FontBucket, prefer_classified: bool) -> Option<&InstalledLinuxFace> {
     const PREFERRED: [&str; 5] = ["dejavu", "liberation", "noto", "freefont", "free"];
     faces.iter().filter(|face| installed_bucket(&face.profile) == bucket).min_by_key(|face| {
         let preferred = face.profile.families.iter().filter_map(|family| {
             let family = family.to_ascii_lowercase();
             PREFERRED.iter().position(|preferred| family.contains(preferred))
         }).min().unwrap_or(PREFERRED.len());
-        (preferred, u8::from(face.profile.slant != amazing_text::FontSlant::Normal),
-            face.profile.weight.abs_diff(400), (face.profile.stretch - 100.0).abs() as u32)
+        // An unspecified native classification is a last-resort text face,
+        // not evidence that a specialised font is a Sans/UI design. Keep it
+        // available when no classified face is installed, but do not let a
+        // vendor-name or file-order tie displace a genuinely classified family.
+        let classified = match bucket {
+            FontBucket::Sans => face.profile.serif == Some(false),
+            FontBucket::Serif => face.profile.serif == Some(true),
+            FontBucket::Mono => face.profile.fixed_pitch,
+            FontBucket::Emoji => face.profile.color,
+        };
+        (u8::from(prefer_classified && !classified), preferred,
+            u8::from(face.profile.slant != amazing_text::FontSlant::Normal),
+            face.profile.weight.abs_diff(400), (face.profile.stretch - 100.0).abs().to_bits())
     })
+}
+
+
+#[cfg(not(target_os = "windows"))]
+fn installed_face_aliases(faces: &[InstalledLinuxFace]) -> std::collections::BTreeMap<std::path::PathBuf, Vec<&'static str>> {
+    let mut assigned = std::collections::BTreeMap::<std::path::PathBuf, Vec<&'static str>>::new();
+    // Generic/UI choice is native-classified. Existing common-name
+    // substitutions keep their prior physical-family policy: improving UI
+    // selection must not silently reassign an explicit named primary face.
+    for (bucket, aliases, classified) in [
+        (FontBucket::Sans, &["sans-serif", "system-ui", "ui-sans-serif", "ui-rounded"][..], true),
+        (FontBucket::Serif, &["serif", "ui-serif"][..], true),
+        (FontBucket::Mono, &["monospace", "ui-monospace"][..], true),
+        (FontBucket::Emoji, &["emoji"][..], true),
+        (FontBucket::Sans, &["Arial", "Helvetica"][..], false),
+        (FontBucket::Serif, &["Times", "Times New Roman", "Georgia"][..], false),
+        (FontBucket::Mono, &["Courier", "Courier New", "Consolas"][..], false),
+    ] {
+        let Some(primary) = best_installed_face_with_policy(faces, bucket, classified) else { continue; };
+        for face in family_installed_faces(faces, primary) {
+            let names = assigned.entry(face.path.clone()).or_default();
+            names.extend_from_slice(aliases);
+        }
+    }
+    assigned
 }
 
 
@@ -792,28 +893,20 @@ pub(super) fn register_system_face(
 /// resolves to zero faces on Linux and every glyph falls back to a
 /// full-coverage box (TEXT-17).
 #[cfg(not(target_os = "windows"))]
-pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::TextProvider) {
-    let faces = installed_linux_faces();
-    // Retain existing embedding aliases; style siblings come from actual
-    // WWS/typographic family records, never synthetic renamed fonts.
-    for (bucket, aliases) in [
-        (FontBucket::Sans, &["sans-serif", "system-ui", "ui-sans-serif", "ui-rounded", "Arial", "Helvetica"][..]),
-        (FontBucket::Serif, &["serif", "ui-serif", "Times", "Times New Roman", "Georgia"][..]),
-        (FontBucket::Mono, &["monospace", "ui-monospace", "Courier", "Courier New", "Consolas"][..]),
-        (FontBucket::Emoji, &["emoji"][..]),
-    ] {
-        let Some(primary) = best_installed_face(&faces, bucket) else { continue; };
-        for face in family_installed_faces(&faces, primary) {
-            let Some(bytes) = read_installed_font(&face.path) else { continue; };
-            let format = if bytes.starts_with(b"ttcf") { amazing_text_provider::FontFormat::Collection }
-                else { amazing_text_provider::FontFormat::OpenType };
-            // Revalidate the native profile from the bytes actually registered.
-            // A changed system file must not inherit stale discovered names.
-            if amazing_text_provider::inspect_installed_font(format, &bytes).ok().as_ref() != Some(&face.profile) { continue; }
-            // One native face serves all aliases and genuine family names;
-            // style siblings no longer duplicate font bytes per alias.
-            if let Err(amazing_text::TextError::ResourceLimit) = provider.register_installed_font_aliases(aliases, format, bytes) { return; }
-        }
+pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::TextProvider) -> InstalledFontCatalogue {
+    let catalogue = discover_linux_catalogue();
+    register_catalogue_faces(provider, &catalogue);
+    catalogue
+}
+#[cfg(not(target_os = "windows"))]
+fn register_catalogue_faces(provider: &mut amazing_text_provider::TextProvider, catalogue: &InstalledFontCatalogue) {
+    let aliases = installed_face_aliases(&catalogue.faces);
+    for face in &catalogue.faces {
+        let Some(aliases) = aliases.get(&face.path) else { continue; };
+        // The immutable handle owns the exact admitted bytes and profile.
+        // Both generic and named associations share this single registration.
+        let Some(resource) = &face.resource else { continue; };
+        if let Err(amazing_text::TextError::ResourceLimit) = provider.register_installed_face_aliases(aliases, resource) { return; }
     }
 }
 
@@ -822,7 +915,7 @@ mod installed_face_tests {
     use super::*;
     use amazing_text_provider::{FontDescriptorRange, InstalledFontProfile};
     fn face(path: &str, family: &str, weight: u16, slant: amazing_text::FontSlant, serif: Option<bool>, fixed: bool) -> InstalledLinuxFace {
-        InstalledLinuxFace {path:path.into(),profile:InstalledFontProfile {
+        InstalledLinuxFace {path:path.into(),resource:None,profile:InstalledFontProfile {
             families:vec![family.into()],full_names:vec![format!("{family} {weight}")],postscript_names:vec![format!("{family}-{weight}")],
             weight,stretch:100.0,slant,italic_angle:Some(0.0),fixed_pitch:fixed,family_class:None,serif,color:false,
             registered_axes:Vec::new(),weight_range:FontDescriptorRange::single(weight as f32),stretch_range:FontDescriptorRange::single(100.0),italic_range:None,oblique_range:None,
@@ -847,6 +940,55 @@ mod installed_face_tests {
         let sans=face("/fonts/Serif.ttf","Real Sans",400,amazing_text::FontSlant::Normal,Some(false),false);
         assert_eq!(installed_bucket(&mono.profile),FontBucket::Mono);assert_eq!(installed_bucket(&serif.profile),FontBucket::Serif);assert_eq!(installed_bucket(&sans.profile),FontBucket::Sans);
         assert_eq!(best_installed_face(&[mono],FontBucket::Emoji).map(|f|&f.path),None);
+    }
+    #[test]
+    fn generic_selection_prefers_authentic_classification_over_vendor_and_file_order() {
+        let unknown=face("/fonts/first.ttf","DejaVu Math TeX Gyre",400,amazing_text::FontSlant::Normal,None,false);
+        let regular=face("/fonts/last.ttf","Real Sans",400,amazing_text::FontSlant::Normal,Some(false),false);
+        let bold=face("/fonts/middle.ttf","Real Sans",700,amazing_text::FontSlant::Normal,Some(false),false);
+        let faces=vec![unknown,regular,bold];
+        let primary=best_installed_face(&faces,FontBucket::Sans).unwrap();
+        assert_eq!(primary.profile.families,["Real Sans"]);
+        assert_eq!(family_installed_faces(&faces,primary).len(),2);
+        let reversed=faces.into_iter().rev().collect::<Vec<_>>();
+        assert_eq!(best_installed_face(&reversed,FontBucket::Sans).unwrap().profile.weight,400);
+    }
+    #[test]
+    fn unknown_classification_remains_available_without_minting_names_or_styles() {
+        let unknown=face("/fonts/only.otf","Actual Unknown",400,amazing_text::FontSlant::Normal,None,false);
+        let faces=vec![unknown];
+        assert_eq!(best_installed_face(&faces,FontBucket::Sans).unwrap().profile.families,["Actual Unknown"]);
+        assert!(best_installed_face(&faces,FontBucket::Serif).is_none());
+        assert!(local_installed_face(&faces,".AppleSystemUIFont").is_none());
+        assert_eq!(family_installed_faces(&faces,&faces[0]).len(),1);
+    }
+    #[test]
+    fn generic_selection_preserves_fractional_width_distance_and_real_style() {
+        let mut a=face("/fonts/first.otf","Real Sans",400,amazing_text::FontSlant::Normal,Some(false),false);
+        let mut b=face("/fonts/last.otf","Real Sans",400,amazing_text::FontSlant::Normal,Some(false),false);
+        a.profile.stretch=99.5;b.profile.stretch=100.0;
+        let mut italic=b.clone();italic.path="/fonts/italic.otf".into();italic.profile.slant=amazing_text::FontSlant::Italic;
+        let faces=vec![a,italic,b];
+        assert_eq!(best_installed_face(&faces,FontBucket::Sans).unwrap().path,std::path::Path::new("/fonts/last.otf"));
+        assert_eq!(family_installed_faces(&faces,&faces[2]).len(),3);
+    }
+    #[test]
+    fn generic_choice_does_not_reassign_existing_explicit_named_substitutions() {
+        let faces=vec![face("/fonts/unknown.ttf","DejaVu Math TeX Gyre",400,amazing_text::FontSlant::Normal,None,false),
+            face("/fonts/sans.ttf","DejaVu Sans",400,amazing_text::FontSlant::Normal,Some(false),false),
+            face("/fonts/bold.ttf","DejaVu Sans",700,amazing_text::FontSlant::Normal,Some(false),false)];
+        let aliases=installed_face_aliases(&faces);
+        assert_eq!(aliases[&faces[0].path],["Arial","Helvetica"]);
+        for face in &faces[1..] { assert_eq!(aliases[&face.path],["sans-serif","system-ui","ui-sans-serif","ui-rounded"]); }
+        assert_eq!(best_installed_face(&faces,FontBucket::Sans).unwrap().path,faces[1].path);
+        assert_eq!(best_installed_face_with_policy(&faces,FontBucket::Sans,false).unwrap().path,faces[0].path);
+    }
+    #[test]
+    fn identical_named_and_generic_families_merge_aliases_for_each_actual_sibling() {
+        let faces=vec![face("/fonts/regular.ttf","DejaVu Serif",400,amazing_text::FontSlant::Normal,Some(true),false),
+            face("/fonts/bold.ttf","DejaVu Serif",700,amazing_text::FontSlant::Normal,Some(true),false)];
+        let aliases=installed_face_aliases(&faces);assert_eq!(aliases.len(),2);
+        for face in &faces {assert_eq!(aliases[&face.path],["serif","ui-serif","Times","Times New Roman","Georgia"]);}
     }
     #[test]
     fn local_lookup_matches_real_full_or_postscript_names_not_filename() {
@@ -1051,6 +1193,7 @@ mod tests {
         let document = format!("http://{address}/index.html");
         let mut cache = std::collections::HashMap::new();
         let mut loader = PageFontLoader {
+            installed_catalogue: None,
             stylesheet_url: &base,
             document_url: &document,
             warnings: Vec::new(),
@@ -1117,6 +1260,7 @@ mod tests {
         let document = format!("http://{address}/index.html");
         let mut cache = std::collections::HashMap::new();
         let mut loader = PageFontLoader {
+            installed_catalogue: None,
             stylesheet_url: &base,
             document_url: &document,
             warnings: Vec::new(),
@@ -1135,3 +1279,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "font_loader_catalogue_tests.rs"]
+mod installed_catalogue_tests;

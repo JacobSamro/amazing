@@ -37,7 +37,7 @@
                     bytes,
                 })
                 .unwrap_or_else(|error| panic!("{relative}: {error:?}"));
-            assert_eq!(provider.fonts[0].sfnt, decoded, "{relative}");
+            assert_eq!(provider.fonts[0].sfnt.as_ref(), decoded.as_slice(), "{relative}");
         }
     }
 

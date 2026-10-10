@@ -89,7 +89,7 @@ mod tests {
             weight: 400,
             stretch: 100,
             slant: FontSlant::Normal,
-            sfnt: Vec::new(),
+            sfnt: Vec::new().into(),
             author_face: None,
         }
     }
@@ -151,7 +151,7 @@ mod tests {
             weight: 400,
             stretch: 100,
             slant: FontSlant::Normal,
-            sfnt: Vec::new(),
+            sfnt: Vec::new().into(),
             author_face: Some(FontFaceMetadata {
                 declaration_order:0,
                 weight: FontDescriptorRange {

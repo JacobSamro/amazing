@@ -4,6 +4,7 @@ use crate::{FontFormat, FontDescriptorRange, FontStyleDescriptor, TextProvider, 
 use amazing_text::{FontKey, FontSlant, TextError, TextStyle};
 use harfrust::FontRef;
 use read_fonts::{Offset, TableProvider};
+use std::sync::Arc;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// Names and selection properties from the actual first face in a font file.
@@ -27,6 +28,29 @@ pub struct InstalledFontProfile {
     pub stretch_range: FontDescriptorRange,
     pub italic_range: Option<FontDescriptorRange>,
     pub oblique_range: Option<FontDescriptorRange>,
+}
+
+/// An immutable validated face snapshot. Cloning this handle shares the exact
+/// original bytes, decoded SFNT and native metadata; it never reopens a file.
+/// Only this constructor can mint a handle. Embeddings own its lifetime.
+#[derive(Clone, Debug)]
+pub struct InstalledFontFace {
+    pub(super) sfnt: Arc<[u8]>,
+    pub(super) metadata: Arc<InstalledFontProfile>,
+    original: Arc<[u8]>,
+}
+impl InstalledFontFace {
+    pub fn new(format: FontFormat, bytes: Vec<u8>) -> Result<Self, TextError> {
+        let decoded = decode_web_font_to_sfnt(format, &bytes)?;
+        let metadata = catch_unwind(AssertUnwindSafe(|| profile(&decoded)))
+            .map_err(|_| TextError::MalformedFont)??;
+        let same = decoded == bytes;
+        let sfnt: Arc<[u8]> = decoded.into();
+        let original = if same { sfnt.clone() } else { bytes.into() };
+        Ok(Self { sfnt, original, metadata: Arc::new(metadata) })
+    }
+    pub fn profile(&self) -> &InstalledFontProfile { &self.metadata }
+    pub fn original_bytes(&self) -> &[u8] { &self.original }
 }
 
 /// Validate bytes before reading native face metadata. Names do not establish
@@ -158,7 +182,14 @@ impl TextProvider {
     /// One native record owns the actual face bytes; its genuine family names
     /// and supplied platform aliases select that same record and font key.
     pub fn register_installed_font_aliases(&mut self, families: &[&str], format: FontFormat, bytes: Vec<u8>) -> Result<FontKey, TextError> {
-        let metadata = inspect_installed_font(format, &bytes)?;
+        let face = InstalledFontFace::new(format, bytes)?;
+        self.register_installed_face_aliases(families, &face)
+    }
+
+    /// Register an already validated immutable face without decoding or parsing
+    /// it again. Native metadata remains authoritative for installed selection.
+    pub fn register_installed_face_aliases(&mut self, families: &[&str], face: &InstalledFontFace) -> Result<FontKey, TextError> {
+        let metadata = face.profile();
         let family = match families.first() {
             Some(family) if !family.trim().is_empty() => family.trim(),
             Some(_) => return Err(TextError::InvalidStyle),
@@ -170,10 +201,11 @@ impl TextProvider {
             if alias.is_empty() { return Err(TextError::InvalidStyle); }
             aliases.insert(alias.to_ascii_lowercase());
         }
-        let key = self.register_web_font(WebFont { family: family.to_owned(), weight: metadata.weight,
-            stretch: metadata.stretch.round() as u16, slant: metadata.slant, format, bytes })?;
+        let font = WebFont { family: family.to_owned(), weight: metadata.weight,
+            stretch: metadata.stretch.round() as u16, slant: metadata.slant, format: FontFormat::OpenType, bytes: Vec::new() };
+        let key = self.store_font_bytes(font, face.sfnt.clone(), None)?;
         let font=self.fonts.iter_mut().find(|font| font.key==key).expect("newly allocated font");
-        font.installed_aliases=aliases; font.installed_face=Some(metadata);
+        font.installed_aliases=aliases; font.installed_face=Some(face.metadata.clone());
         Ok(key)
     }
 }

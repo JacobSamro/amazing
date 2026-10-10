@@ -166,3 +166,125 @@ fn native_face_aliases_share_actual_bytes_keys_and_family_selection() {
     assert_eq!(p.font_set_bytes,native_bytes);
     let count=p.fonts.len();assert!(p.register_installed_font_aliases(&["serif",""],FontFormat::OpenType,metadata_font(400,5,0,0.0,&[])).is_err());assert_eq!(p.fonts.len(),count);
 }
+
+#[test]
+fn immutable_installed_handle_shares_exact_bytes_and_metadata_without_reconstruction() {
+    let bytes=metadata_font(700,5,1,-12.0,&[(16,"Snapshot Family"),(4,"Snapshot Family Bold Italic"),(6,"SnapshotFamily-BoldItalic")]);
+    let face=InstalledFontFace::new(FontFormat::OpenType,bytes.clone()).unwrap();
+    let retained=face.clone();
+    assert_eq!(face.original_bytes(),bytes);
+    assert!(std::ptr::eq(face.profile(),retained.profile()));
+    assert_eq!(face.original_bytes().as_ptr(),retained.original_bytes().as_ptr());
+    assert_eq!(retained.profile().weight,700);assert_eq!(retained.profile().slant,FontSlant::Italic);
+    assert_eq!(retained.profile().postscript_names,["SnapshotFamily-BoldItalic"]);
+}
+
+#[test]
+fn repeated_installed_registration_shares_physical_storage_preserving_keys_and_budgets() {
+    let bytes=metadata_font(400,5,0,0.0,&[(16,"Snapshot Family")]);
+    let face=InstalledFontFace::new(FontFormat::OpenType,bytes.clone()).unwrap();
+    let mut provider=TextProvider::new();
+    let a=provider.register_installed_face_aliases(&["First"],&face).unwrap();
+    let b=provider.register_installed_face_aliases(&["Second"],&face.clone()).unwrap();
+    assert_ne!(a,b);assert_eq!(provider.fonts.len(),2);
+    assert!(std::sync::Arc::ptr_eq(&provider.fonts[0].sfnt,&provider.fonts[1].sfnt));
+    assert!(std::sync::Arc::ptr_eq(provider.fonts[0].installed_face.as_ref().unwrap(),provider.fonts[1].installed_face.as_ref().unwrap()));
+    assert_eq!(provider.font_set_bytes,bytes.len()*2); // original logical limit
+    for (family,key) in [("First",a),("Second",b)] {
+        let style=TextStyle{families:vec![family.into()],..TextStyle::default()};
+        let span=TextSpan{range:0..1,source:0,style,boundary_before:ShapingBoundary::Continue};
+        let shaped=provider.shape(Paragraph{text:"A",spans:&[span],sources:&[],bidi_scopes:&[],base_direction:Direction::LeftToRight}).unwrap();
+        assert!(shaped.runs.iter().all(|run|run.font==key));
+    }
+}
+
+#[test]
+fn identical_independent_bytes_share_sfnt_without_merging_native_metadata_or_author_descriptors() {
+    let bytes=metadata_font(700,5,1,-12.0,&[(16,"Physical Family")]);
+    let mut provider=TextProvider::new();
+    let a=provider.register_installed_font("Native",FontFormat::OpenType,bytes.clone()).unwrap();
+    let b=provider.register_web_font(WebFont{family:"Author".into(),weight:400,stretch:100,slant:FontSlant::Normal,format:FontFormat::OpenType,bytes}).unwrap();
+    assert_ne!(a,b);assert!(std::sync::Arc::ptr_eq(&provider.fonts[0].sfnt,&provider.fonts[1].sfnt));
+    assert!(provider.fonts[0].installed_face.is_some());assert!(provider.fonts[1].installed_face.is_none());
+    assert_eq!(provider.fonts[0].weight,700);assert_eq!(provider.fonts[1].weight,400);
+    assert_eq!(provider.fonts[1].slant,FontSlant::Normal);
+}
+
+#[test]
+fn cached_handle_does_not_bypass_invalid_aliases_or_existing_face_capacity() {
+    let face=InstalledFontFace::new(FontFormat::OpenType,metadata_font(400,5,0,0.0,&[(16,"Real Family")])).unwrap();
+    let mut provider=TextProvider::new();
+    assert!(matches!(provider.register_installed_face_aliases(&[""],&face),Err(TextError::InvalidStyle)));
+    assert!(matches!(provider.register_installed_face_aliases(&["First",""],&face),Err(TextError::InvalidStyle)));
+    assert!(provider.fonts.is_empty());assert_eq!(provider.generation(),0);
+    for _ in 0..MAX_FONT_FACES { provider.register_installed_face_aliases(&["Real"],&face).unwrap(); }
+    let generation=provider.generation();let budget=provider.font_set_bytes;
+    assert!(matches!(provider.register_installed_face_aliases(&["Real"],&face),Err(TextError::ResourceLimit)));
+    assert_eq!(provider.fonts.len(),MAX_FONT_FACES);assert_eq!(provider.generation(),generation);assert_eq!(provider.font_set_bytes,budget);
+}
+
+struct SnapshotLoader { face:InstalledFontFace, byte_calls:usize, url_calls:usize, resource_calls:usize, fail_first:bool }
+impl FontFaceLoader for SnapshotLoader {
+    fn load_local_face(&mut self,name:&str,_:usize)->Result<Option<InstalledFontFace>,TextError>{
+        self.resource_calls+=1;
+        if name=="missing" { if self.fail_first { return Err(TextError::MissingFont); }return Ok(None); }
+        Ok(Some(self.face.clone()))
+    }
+    fn load_local(&mut self,_:&str,_:usize)->Result<Option<Vec<u8>>,TextError>{self.byte_calls+=1;Ok(None)}
+    fn load_url(&mut self,_:FontFetchRequest<'_>)->Result<Option<Vec<u8>>,TextError>{self.url_calls+=1;Ok(None)}
+}
+#[test]
+fn local_resource_preserves_authored_descriptor_authority_and_source_order() {
+    let face=InstalledFontFace::new(FontFormat::OpenType,metadata_font(700,2,1,-12.0,&[(16,"Physical")])).unwrap();
+    let mut loader=SnapshotLoader{face,byte_calls:0,url_calls:0,resource_calls:0,fail_first:true};
+    let mut provider=TextProvider::new();
+    let descriptor=FontFaceDescriptor{family:"Author".into(),sources:vec![FontFaceSource::Local("".into()),FontFaceSource::Local("missing".into()),FontFaceSource::Local("real".into()),FontFaceSource::Url{url:"never".into(),formats:vec![],technologies:vec![]}],weight:FontDescriptorRange::single(400.0),..FontFaceDescriptor::default()};
+    let key=provider.register_font_face(descriptor,&mut loader).unwrap().unwrap();
+    assert_eq!((loader.resource_calls,loader.byte_calls,loader.url_calls),(2,0,0));
+    let font=provider.fonts.iter().find(|f|f.key==key).unwrap();
+    assert!(font.installed_face.is_none());assert_eq!(font.weight,400);assert_eq!(font.slant,FontSlant::Normal);
+    assert!(std::sync::Arc::ptr_eq(&font.sfnt,&loader.face.sfnt));
+    assert_eq!(provider.font_face_registrations()[0].family,"author");
+}
+
+#[test]
+fn immutable_resource_rejects_malformed_input_and_keeps_cross_provider_ownership() {
+    assert!(InstalledFontFace::new(FontFormat::OpenType,b"bad".to_vec()).is_err());
+    let face=InstalledFontFace::new(FontFormat::OpenType,metadata_font(400,5,0,0.0,&[(16,"Native")])).unwrap();
+    let mut a=TextProvider::new();let mut b=TextProvider::new();
+    a.register_installed_face_aliases(&["Native"],&face).unwrap();b.register_installed_face_aliases(&["Native"],&face).unwrap();
+    assert!(std::sync::Arc::ptr_eq(&a.fonts[0].sfnt,&b.fonts[0].sfnt));
+    drop(a);drop(face);
+    assert!(b.matching_font(&TextStyle{families:vec!["Native".into()],..TextStyle::default()},Some("A")).is_some());
+}
+
+#[test]
+fn cached_collection_keeps_the_original_first_face_policy_and_exact_container_bytes() {
+    let bytes=crate::tests::synthetic_ttc('A');
+    let face=InstalledFontFace::new(FontFormat::Collection,bytes.clone()).unwrap();
+    assert_eq!(face.original_bytes(),bytes);
+    let mut provider=TextProvider::new();let key=provider.register_installed_face_aliases(&["Collection"],&face).unwrap();
+    assert!(std::sync::Arc::ptr_eq(&provider.fonts[0].sfnt,&face.sfnt));
+    let style=TextStyle{families:vec!["Collection".into()],..TextStyle::default()};
+    assert_eq!(provider.fonts[provider.matching_font(&style,Some("A")).unwrap()].key,key);
+    assert!(provider.matching_font(&style,Some("B")).is_none());
+}
+
+#[test]
+fn earlier_pending_local_source_does_not_advance_to_later_cached_face() {
+    struct PendingLoader { face:InstalledFontFace, calls:Vec<String> }
+    impl FontFaceLoader for PendingLoader {
+        fn load_local_face(&mut self,name:&str,_:usize)->Result<Option<InstalledFontFace>,TextError>{
+            self.calls.push(format!("resource:{name}"));Ok((name=="ready").then(||self.face.clone()))
+        }
+        fn load_local(&mut self,_:&str,_:usize)->Result<Option<Vec<u8>>,TextError>{panic!("timed source must use native state")}
+        fn load_local_state(&mut self,name:&str,_:usize)->Result<FontSourceLoad,TextError>{self.calls.push(format!("state:{name}"));Ok(FontSourceLoad::Pending)}
+        fn load_url(&mut self,_:FontFetchRequest<'_>)->Result<Option<Vec<u8>>,TextError>{panic!("later URL must not run")}
+    }
+    let face=InstalledFontFace::new(FontFormat::OpenType,metadata_font(400,5,0,0.0,&[(16,"Ready")])).unwrap();
+    let mut loader=PendingLoader{face,calls:vec![]};let mut provider=TextProvider::new();
+    let descriptor=FontFaceDescriptor{family:"Author".into(),sources:vec![FontFaceSource::Local("pending".into()),FontFaceSource::Local("ready".into())],display:FontDisplay::Block,..FontFaceDescriptor::default()};
+    let timeline=FontDisplayTimeline::new(descriptor.clone());
+    assert!(provider.register_font_face_with_timeline(descriptor,&mut loader,&timeline,std::time::Duration::ZERO).unwrap().is_none());
+    assert_eq!(loader.calls,["resource:pending","state:pending"]);assert!(provider.fonts.is_empty());assert_eq!(provider.pending_font_loads(),1);
+}

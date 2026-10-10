@@ -102,7 +102,7 @@ pub(crate) fn load_page_text_from_sheets(sheets: &[(String, String)], page: &str
         provider: amazing_text_provider::TextProvider::new(),
         warnings: Vec::new(),
     };
-    register_system_text_faces(&mut text.provider);
+    let installed_catalogue = register_system_text_faces(&mut text.provider);
     let expanded = font_loader::expand_font_sheets(sheets, &mut text.warnings);
     // Shared across every @font-face rule on the page: real pages routinely
     // declare several icon-font aliases (Font Awesome 5/6 Free/Brands, plain
@@ -121,6 +121,7 @@ pub(crate) fn load_page_text_from_sheets(sheets: &[(String, String)], page: &str
                 }
             };
             let mut loader = font_loader::PageFontLoader {
+                installed_catalogue: Some(&installed_catalogue),
                 stylesheet_url,
                 document_url: page,
                 warnings: Vec::new(),
@@ -147,7 +148,7 @@ pub(crate) fn load_page_text_from_sheets(sheets: &[(String, String)], page: &str
     text
 }
 
-fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider) {
+fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider) -> font_loader::InstalledFontCatalogue {
     use amazing_text::FontSlant;
     use amazing_text_provider::{FontFormat, WebFont};
 
@@ -189,7 +190,9 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
     // filename, preferring well-known, broadly-hinted families so the
     // default look is stable across sandboxes with different font sets.
     #[cfg(not(target_os = "windows"))]
-    font_loader::register_linux_system_faces(provider);
+    let catalogue = font_loader::register_linux_system_faces(provider);
+    #[cfg(target_os = "windows")]
+    let catalogue = font_loader::InstalledFontCatalogue::default();
 
     // The pinned WPT render runner sets this root for its child process. The
     // CSSTest faces are installed fonts in upstream tests, not @font-face URLs.
@@ -225,6 +228,7 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
             });
         }
     }
+    catalogue
 }
 
 fn resolve_font_url(page: &str, source: &str) -> String {

@@ -8,7 +8,7 @@ mod font_matching;
 mod installed_font;
 #[cfg(test)]
 mod installed_font_tests;
-pub use installed_font::{InstalledFontProfile, inspect_installed_font};
+pub use installed_font::{InstalledFontFace, InstalledFontProfile, inspect_installed_font};
 mod font_relative_metrics;
 mod font_variant_synthesis;
 mod font_variations;
@@ -269,6 +269,9 @@ pub struct FontFetchRequest<'a> {
 #[derive(Debug)]
 pub enum FontSourceLoad { Pending, Failed, Ready(Vec<u8>) }
 pub trait FontFaceLoader {
+    /// Optional immutable installed-face snapshot supplied by the embedding.
+    /// The default keeps existing byte loaders and timed load states unchanged.
+    fn load_local_face(&mut self, _name: &str, _max_bytes: usize) -> Result<Option<InstalledFontFace>, TextError> { Ok(None) }
     fn load_local(&mut self, name: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, TextError>;
     fn load_url(&mut self, request: FontFetchRequest<'_>) -> Result<Option<Vec<u8>>, TextError>;
     fn load_local_state(&mut self,name:&str,max_bytes:usize)->Result<FontSourceLoad,TextError>{
@@ -297,13 +300,13 @@ struct FontFaceMetadata {
 #[derive(Debug)]
 struct FontRecord {
     installed_aliases: BTreeSet<String>,
-    installed_face: Option<InstalledFontProfile>,
+    installed_face: Option<std::sync::Arc<InstalledFontProfile>>,
     key: FontKey,
     family: String,
     weight: u16,
     stretch: u16,
     slant: FontSlant,
-    sfnt: Vec<u8>,
+    sfnt: std::sync::Arc<[u8]>,
     author_face: Option<FontFaceMetadata>,
 }
 
@@ -479,6 +482,26 @@ impl TextProvider {
                 .ok_or(TextError::ResourceLimit)?;
         }
         for source in descriptor.sources {
+            if let FontFaceSource::Local(name) = &source {
+                if name.trim().is_empty() { continue; }
+                let cached = match loader.load_local_face(name, MAX_COMPRESSED_FONT_BYTES) {
+                    Ok(face) => face,
+                    Err(_) => continue,
+                };
+                if let Some(face) = cached {
+                    let font = WebFont { family: family.clone(), weight: metadata.weight.min.round() as u16,
+                        stretch: metadata.stretch.min.round() as u16, slant: metadata.style.slant(),
+                        format: FontFormat::OpenType, bytes: Vec::new() };
+                    match self.store_font_bytes(font, face.sfnt.clone(), Some(metadata.clone())) {
+                        Ok(key) => {
+                            self.face_rules.push(FontFaceRegistration { family, display: metadata.display, key: Some(key) });
+                            return Ok(Some(key));
+                        }
+                        Err(TextError::ResourceLimit) => return Err(TextError::ResourceLimit),
+                        Err(_) => continue,
+                    }
+                }
+            }
             let (bytes, allowed_formats) = match source {
                 FontFaceSource::Local(name) => {
                     if name.trim().is_empty() {
@@ -595,6 +618,18 @@ impl TextProvider {
             return Err(TextError::InvalidStyle);
         }
         let decoded = decode_web_font_to_sfnt(font.format, &font.bytes)?;
+        self.store_font_bytes(font, decoded.into(), author_face)
+    }
+
+    fn store_font_bytes(&mut self, font: WebFont, decoded: std::sync::Arc<[u8]>, author_face: Option<FontFaceMetadata>) -> Result<FontKey, TextError> {
+        let family = font.family.trim();
+        if family.is_empty() || !(1..=1000).contains(&font.weight) || font.stretch == 0 || font.stretch > 1000 {
+            return Err(TextError::InvalidStyle);
+        }
+        // Existing logical per-face budgets are unchanged. Identical physical
+        // SFNT storage can be shared without merging descriptor/key identity.
+        let decoded = self.fonts.iter().find(|existing| std::sync::Arc::ptr_eq(&existing.sfnt, &decoded) || existing.sfnt.as_ref() == decoded.as_ref())
+            .map_or(decoded.clone(), |existing| existing.sfnt.clone());
         if self.fonts.len() >= MAX_FONT_FACES
             || self.font_set_bytes.saturating_add(decoded.len()) > MAX_FONT_SET_BYTES
         {

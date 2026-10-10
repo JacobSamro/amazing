@@ -2259,6 +2259,7 @@ fn load_page_text(css: &str, page: &str, sheets: &[(String, String)]) -> TextPro
             }
         };
         let mut loader = page_font_loader::PageFontLoader {
+            installed_catalogue: None,
             stylesheet_url,
             document_url: page,
             warnings: Vec::new(),

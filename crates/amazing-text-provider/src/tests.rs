@@ -78,7 +78,7 @@ pub(super) fn synthetic_font(mapped: char) -> Vec<u8> {
 /// same font bytes, with every table directory offset in the embedded
 /// font shifted by the header's length so they stay correct once the
 /// font no longer starts at byte 0 of the file.
-fn synthetic_ttc(mapped: char) -> Vec<u8> {
+pub(super) fn synthetic_ttc(mapped: char) -> Vec<u8> {
     let mut inner = synthetic_font(mapped);
     let header_len: u32 = 16; // tag(4) + version(4) + numFonts(4) + offsetTable[1](4)
     let table_count = u16::from_be_bytes(inner[4..6].try_into().unwrap()) as usize;
