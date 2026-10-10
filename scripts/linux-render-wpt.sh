@@ -33,7 +33,7 @@ PY
 run_side() {
  local source="$1" baseline="$2" side="${3:-after}" argq="" rc fetchrc=0 slug
  local side_tag="$TAG-$side"
- for arg in "${ARGS[@]}" "${SUBDIRS[@]}";do argq="$argq $(printf '%q' "$arg")";done
+ for arg in ${ARGS[@]+"${ARGS[@]}"} "${SUBDIRS[@]}";do argq="$argq $(printf '%q' "$arg")";done
  local cmd="tools=\$(mktemp -d /tmp/amazing-render-tools.XXXXXX) || exit 3
  python3 - \"\$tools\" '$HELPERS' <<'PY'
 import base64,json,pathlib,sys
