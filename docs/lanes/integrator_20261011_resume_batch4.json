@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "ticket": "resume-batch3-4",
+ "date": "2026-10-11",
+ "published_base": "321b460113ea4e2359bad77180047a066495390b",
+ "gated_source_commit": "a61c069bf115292543954c18f8b47cd58d42d87a",
+ "tickets": [
+  "a383beddd layout: Grid Lanes grid-axis item alignment",
+  "a61c069bf net: XHR streaming and receiving admission, WPT trickle fixture"
+ ],
+ "workspace": {
+  "nextest": {
+   "passed": 5561,
+   "failed": 0,
+   "skipped": 17
+  },
+  "doctests": {
+   "passed": 39,
+   "failed": 0
+  }
+ },
+ "test262": {
+  "shards": 16,
+  "timeout_seconds": 60,
+  "summary": {
+   "files": {
+    "fail": 424,
+    "pass": 52983,
+    "skipped": 294,
+    "unsupported": 171
+   },
+   "variants": {
+    "fail": 835,
+    "pass": 101743,
+    "unsupported": 340
+   }
+  },
+  "lost_files": 0,
+  "lost_variants": 0,
+  "baseline": "t262-0ce243d7-resume-batch2-20261011 (published 321b46011)",
+  "result_sha256": "7f26f6471edf3b9e0ee84d314fe0c7057d83ef60fc95af97d680e2ed64356a27",
+  "also": "a383beddd alone gated separately: 52983 files, zero lost"
+ },
+ "lane_corpus": {
+  "css-grid": {
+   "before_pass": 426,
+   "after_pass": 435,
+   "total": 945,
+   "lost": 0,
+   "evidence": "crates/amazing-layout/evidence/lanes-align/",
+   "scope_note": "source change is confined to layout_grid_lanes and layout_row_lanes; integrator multi-directory render sweep was not completed because the Boat API returned 502"
+  },
+  "wpt-xhr": {
+   "files_before": 44,
+   "files_after": 46,
+   "subtests_before": 166,
+   "subtests_after": 175,
+   "lost": 0
+  },
+  "wpt-fetch": {
+   "files": 34,
+   "subtests": 1306,
+   "lost": 0,
+   "evidence": "docs/lanes/net-xhr-streaming-current/evidence-compact.json"
+  }
+ }
+}
