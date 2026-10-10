@@ -1,0 +1,39 @@
+{
+ "base": "0ce364ee6ff786e00defb74dc04bb6bf825a4409",
+ "source": "77943af686df6e50c7822d109b9ed44672236468",
+ "counts": {
+  "crash": 0,
+  "error": 0,
+  "mismatch": 510,
+  "pass": 435,
+  "timeout": 0,
+  "unsupported": 0
+ },
+ "gained": [
+  "css__css-grid__grid-lanes__alignment__row-align-items-center-001.html",
+  "css__css-grid__grid-lanes__alignment__row-align-items-end-align-self-start-001.html",
+  "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-content-002.html",
+  "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-items-001.html",
+  "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-items-indefinite-size-001.html",
+  "css__css-grid__grid-lanes__alignment__row-grid-lanes-align-self-001.html",
+  "css__css-grid__grid-lanes__alignment__row-grid-lanes-align-self-003.html",
+  "css__css-grid__grid-lanes__alignment__row-overflow-alignment-001.html",
+  "css__css-grid__grid-lanes__baseline__row-grid-lanes-item-baseline-002.html"
+ ],
+ "lost": [],
+ "changed": [],
+ "workspace": {
+  "doctests": {
+   "failed": 0,
+   "ignored": 0,
+   "passed": 39
+  },
+  "nextest": {
+   "failed": 0,
+   "passed": 5535,
+   "skipped": 17
+  }
+ },
+ "raw_after_sha256": "a8f1be5669e6546372ea9287bb22de0dfef47f0dfcee8d289e6bd3c30b288ee1",
+ "raw_host_path": "/home/user/amazing/out/resume-layout/render-gate/render-20261010T205716-61853-after/77943af686df6e50c7822d109b9ed44672236468/css-css-grid.compact.json"
+}

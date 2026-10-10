@@ -2059,15 +2059,40 @@ pub(crate) fn layout_grid_lanes(
         it.border = values::resolve_borders(&it.style, it.font_size);
         let available = (area_w - it.margin.left.unwrap_or(0.0)
             - it.margin.right.unwrap_or(0.0) - h_chrome(it)).max(0.0);
+        // Grid Lanes 3 §alignment: the grid axis aligns each item inside its
+        // lane area with justify-self / justify-items; only `stretch` fills.
+        let mut justify = container_self_align(it, "justify-self").unwrap_or(spec.justify_items);
         let width = match crate::used_size::extent(it,"width",area_w) {
-            MaybeLen::Px(width) => width.max(0.0),
-            MaybeLen::Auto => available,
+            MaybeLen::Px(width) => {
+                if justify == ItemAlign::Stretch { justify = ItemAlign::Start; }
+                width.max(0.0)
+            }
+            MaybeLen::Auto if justify == ItemAlign::Stretch => available,
+            MaybeLen::Auto => (crate::flex::max_content_width(it, fonts) - h_chrome(it)).max(0.0)
+                .min(available),
         };
+        if spec.rtl {
+            justify = match justify {
+                ItemAlign::Start => ItemAlign::End,
+                ItemAlign::End => ItemAlign::Start,
+                other => other,
+            };
+        }
         crate::block::layout_block_with_used_content_size(it,0.0,0.0,area_w,fonts,None,
             crate::UsedContentSize{width:Some(width),height:None});
         let y = content_y + stack + it.margin.top.unwrap_or(0.0);
-        crate::flex::translate(it, x + it.margin.left.unwrap_or(0.0) - it.border_box.x,
-            y - it.border_box.y);
+        let (ml, mr) = (it.margin.left.unwrap_or(0.0), it.margin.right.unwrap_or(0.0));
+        let free = area_w - ml - mr - it.border_box.w;
+        let offset = if margin_is_auto(&it.style, "left") || margin_is_auto(&it.style, "right") {
+            ml
+        } else {
+            match justify {
+                ItemAlign::End => ml + free.max(0.0),
+                ItemAlign::Center => ml + (free / 2.0).max(0.0),
+                _ => ml,
+            }
+        };
+        crate::flex::translate(it, x + offset - it.border_box.x, y - it.border_box.y);
         let advance = outer_h(it).max(0.0) + spec.row_gap;
         for position in &mut running[start..start + span] {
             *position = stack + advance;
@@ -2197,7 +2222,9 @@ fn layout_row_lanes(
                 .min((content_w - h_chrome(it)).max(0.0)),
         };
         let mut used=crate::UsedContentSize{width:Some(width),height:None};
+        let align = container_self_align(it, "align-self").unwrap_or(spec.align_items);
         if height_is_auto(it) && row_baseline::preference(it, container).is_none()
+            && align == ItemAlign::Stretch
             && !margin_is_auto(&it.style, "top") && !margin_is_auto(&it.style, "bottom") {
             let margin = values::resolve_margins(&it.style, it.font_size, content_w);
             let padding = values::resolve_padding(&it.style, it.font_size, content_w);
@@ -2215,7 +2242,16 @@ fn layout_row_lanes(
             - margin.bottom.unwrap_or(0.0)).max(0.0);
         let auto_lead = if auto_top && auto_bottom { free * 0.5 }
             else if auto_top { free } else { 0.0 };
-        let y = area_y + margin.top.unwrap_or(0.0) + auto_lead;
+        let align_lead = if auto_top || auto_bottom || row_baseline::preference(it, container).is_some() {
+            0.0
+        } else {
+            match align {
+                ItemAlign::End => free,
+                ItemAlign::Center => free / 2.0,
+                _ => 0.0,
+            }
+        };
+        let y = area_y + margin.top.unwrap_or(0.0) + auto_lead + align_lead;
         crate::flex::translate(it, x - it.border_box.x, y - it.border_box.y);
         let outer_width = (it.border_box.w + margin.left.unwrap_or(0.0)
             + margin.right.unwrap_or(0.0)).max(0.0);
