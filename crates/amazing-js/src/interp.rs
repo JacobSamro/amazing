@@ -1942,6 +1942,7 @@ include!("builtins_temporal_calendar.rs");
 include!("builtins_temporal.rs");
 include!("builtins_temporal_arithmetic.rs");
 include!("builtins_temporal_duration.rs");
+include!("builtins_temporal_zoned.rs");
 include!("builtins_temporal_epoch.rs");
 include!("builtins_std_string.rs");
 include!("interp_math_sum.rs");

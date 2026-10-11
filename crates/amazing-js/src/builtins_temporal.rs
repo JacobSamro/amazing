@@ -416,8 +416,9 @@ fn std_temporal_calendar_from_value(i: &mut Interpreter, value: &JsValue) -> Res
     if std_temporal_iso_calendar(i, value).is_ok() { return Ok(()); }
     if let JsValue::Str(name) = value {
         if [StdTemporalKind::PlainDate, StdTemporalKind::PlainDateTime,
-            StdTemporalKind::PlainYearMonth, StdTemporalKind::PlainMonthDay]
-            .iter().any(|kind| std_temporal_parse(*kind, &name.to_utf8_lossy()).is_ok()) {
+            StdTemporalKind::PlainYearMonth, StdTemporalKind::PlainMonthDay, StdTemporalKind::PlainTime]
+            .iter().any(|kind| std_temporal_parse(*kind, &name.to_utf8_lossy()).is_ok())
+            || std_epoch_parse_syntax(&name.to_utf8_lossy(), StdEpochKind::Instant).is_ok() {
             return Ok(());
         }
     }
@@ -470,6 +471,14 @@ fn std_temporal_resolve_calendar_id_ex(i: &mut Interpreter, value: &JsValue, all
     let name = i.to_string(value)?;
     if let Some(canonical) = std_calendar_canonicalize(&name) { return Ok(canonical.to_string()); }
     if allow_iso_string_fallback && std_temporal_calendar_from_value(i, value).is_ok() {
+        // The calendar of an annotated ISO string is its [u-ca=...] value.
+        if let Some(start) = name.find("[u-ca=").or_else(|| name.find("[!u-ca=")) {
+            let rest = &name[start..];
+            let rest = &rest[rest.find('=').unwrap_or(0) + 1..];
+            if let Some(canonical) = rest.find(']').and_then(|end| std_calendar_canonicalize(&rest[..end])) {
+                return Ok(canonical.to_string());
+            }
+        }
         return Ok("iso8601".to_string());
     }
     Err(Throw::range_error("invalid Temporal calendar"))
@@ -1101,6 +1110,25 @@ fn std_temporal_parse_duration_wide(text: &str) -> Result<StdDuration, Throw> {
     Ok(values)
 }
 
+fn std_temporal_time_string_ambiguous(text: &str) -> bool {
+    let digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    let number = |part: &str| part.parse::<i64>().unwrap_or(0);
+    let bytes = text.as_bytes();
+    match bytes.len() {
+        6 if digits(text) => (1..=12).contains(&number(&text[4..])),
+        7 if bytes[4] == b'-' && digits(&text[..4]) && digits(&text[5..]) => (1..=12).contains(&number(&text[5..])),
+        5 if bytes[2] == b'-' && digits(&text[..2]) && digits(&text[3..]) => {
+            let (month, day) = (number(&text[..2]), number(&text[3..]));
+            (1..=12).contains(&month) && (1..=std_temporal_days_in_month(1972, month)).contains(&day)
+        }
+        4 if digits(text) => {
+            let (month, day) = (number(&text[..2]), number(&text[2..]));
+            (1..=12).contains(&month) && (1..=std_temporal_days_in_month(1972, month)).contains(&day)
+        }
+        _ => false,
+    }
+}
+
 fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<([i64; 10], String), Throw> {
     if kind == StdTemporalKind::Duration {
         // Unlike every other kind (validated below, after the match), a
@@ -1134,7 +1162,17 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<([i64; 10], S
     let mut values = [0; 10];
     match kind {
         StdTemporalKind::PlainTime => {
-            let time = if let Some((date, time)) = text.split_once('T').or_else(|| text.split_once('t')).or_else(|| text.split_once(' ')) {
+            let separated = text.split_once('T').or_else(|| text.split_once('t')).or_else(|| text.split_once(' '));
+            if let Some((date, _)) = separated {
+                // A space is not a substitute for the T designator on a
+                // bare time: it needs a date before it.
+                if date.is_empty() && !text.starts_with(['T', 't']) { return Err(invalid()); }
+            } else if std_temporal_time_string_ambiguous(text) {
+                // "2021-12", "1214", "12-14" also parse as a year-month or
+                // month-day, so a time must carry the T prefix.
+                return Err(invalid());
+            }
+            let time = if let Some((date, time)) = separated {
                 // The date prefix is discarded (PlainTime keeps only the
                 // time-of-day) but is still validated in full when present
                 // -- a syntactically-invalid or out-of-range discarded date
@@ -1342,7 +1380,9 @@ fn std_temporal_compare(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTempor
         // the parsed relativeTo would otherwise go unused.
         let options = std_reflect_arg(&args, 2);
         let relative = std_temporal_option_value(i, &options, "relativeTo")?;
-        let relative_base = std_temporal_resolve_relative_to(i, &relative)?;
+        let relative_full = std_temporal_resolve_relative_full(i, &relative)?;
+        let zoned = relative_full.as_ref().and_then(|r| r.zoned.clone());
+        let relative_base = relative_full.map(|r| r.fields);
         if left == right {
             // Identical Duration Records (spec step 5): equal even when a
             // calendar unit is non-zero and relativeTo was never resolved.
@@ -1354,6 +1394,9 @@ fn std_temporal_compare(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTempor
             // 86,400 seconds in ISO.
             let calendar = left[0..3].iter().chain(right[0..3].iter()).any(|v| *v != 0);
             match (calendar, relative_base) {
+                _ if zoned.is_some() && (calendar || left[3] != 0 || right[3] != 0) => {
+                    zr_compare(zoned.as_ref().unwrap(), &left, &right)?
+                }
                 (true, None) => return Err(Throw::range_error("calendar units require relativeTo")),
                 (true, Some(base)) => {
                     let total = |duration: &[i64; 10]| -> Result<i128, Throw> {
@@ -1426,6 +1469,7 @@ fn std_temporal_with_calendar(i: &mut Interpreter, this: JsValue, args: Vec<JsVa
         StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay) {
         return Err(Throw::type_error("incompatible Temporal receiver"));
     }
+    if std_reflect_arg(&args, 0).is_undefined() { return Err(Throw::type_error("withCalendar requires a calendar")); }
     let calendar = std_temporal_resolve_calendar_id(i, &std_reflect_arg(&args, 0))?;
     std_temporal_make_cal(i, data.kind, data.fields, calendar)
 }
@@ -1573,6 +1617,7 @@ fn std_temporal_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> R
         "dayOfWeek" => std_temporal_day_of_week(std_temporal_epoch_day(v[0], v[1], v[2])),
         "dayOfYear" => calendar_fields.map(|f| f.5)
             .unwrap_or_else(|| std_temporal_epoch_day(v[0], v[1], v[2]) - std_temporal_epoch_day(v[0], 1, 1) + 1),
+        "weekOfYear" | "yearOfWeek" if data.calendar != "iso8601" => return Ok(JsValue::Undefined),
         "weekOfYear" | "yearOfWeek" => {
             let day = std_temporal_epoch_day(v[0], v[1], v[2]);
             let week_year = if day < std_temporal_week_start(v[0]) { v[0] - 1 }
@@ -1633,6 +1678,14 @@ fn std_temporal_time_text_options(fields: &[i64; 10], digits: Option<usize>, min
 }
 
 fn std_temporal_string_precision(i: &mut Interpreter, option: &JsValue, allow_minute: bool) -> Result<(Option<usize>, bool, Option<i128>, String), Throw> {
+    std_temporal_string_precision_ex(i, option, allow_minute, None, None)
+}
+
+// `offset_slot`: ZonedDateTime.prototype.toString reads its `offset` option
+// between fractionalSecondDigits and roundingMode (alphabetical order).
+fn std_temporal_string_precision_ex(i: &mut Interpreter, option: &JsValue, allow_minute: bool,
+    mut offset_slot: Option<&mut String>,
+    after_reads: Option<&mut dyn FnMut(&mut Interpreter) -> Result<(), Throw>>) -> Result<(Option<usize>, bool, Option<i128>, String), Throw> {
     if !option.is_object() { return Ok((None, false, None, "trunc".to_string())); }
     let digits_value = i.get_prop(option, "fractionalSecondDigits")?;
     // GetOption dispatches on the ACTUAL type of the value: only a primitive
@@ -1655,12 +1708,17 @@ fn std_temporal_string_precision(i: &mut Interpreter, option: &JsValue, allow_mi
             if text == "auto" { None }
             else { return Err(Throw::range_error("invalid fractionalSecondDigits")); }
         };
+    if let Some(slot) = offset_slot.as_deref_mut() {
+        *slot = std_temporal_option_string(i, option, "offset")?.unwrap_or_else(|| "auto".to_string());
+    }
     let mode = std_temporal_option_string(i, option, "roundingMode")?
         .unwrap_or_else(|| "trunc".to_string());
+    let unit = std_temporal_option_string(i, option, "smallestUnit")?;
+    // Every option is read before any algorithmic validation runs.
+    if let Some(reads) = after_reads { reads(i)?; }
     if !std_temporal_round_mode_valid(&mode) {
         return Err(Throw::range_error("invalid roundingMode"));
     }
-    let unit = std_temporal_option_string(i, option, "smallestUnit")?;
     let minute_only = allow_minute && unit.as_deref().is_some_and(|name| name.strip_suffix('s').unwrap_or(name) == "minute");
     let step = if let Some(unit) = unit {
         let unit = unit.strip_suffix('s').unwrap_or(&unit);
@@ -1716,8 +1774,9 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
             let rounded = std_temporal_round_integer(std_temporal_time_ns(&v), step, &mode)?;
             std_temporal_set_time_ns(&mut v, rounded);
         } else if data.kind == StdTemporalKind::PlainDateTime {
-            let rounded = std_temporal_round_integer(std_temporal_epoch_ns(&v), step, &mode)?;
+            let rounded = std_temporal_round_as_if_positive(std_temporal_epoch_ns(&v), step, &mode)?;
             std_temporal_set_epoch_ns(&mut v, rounded)?;
+            std_temporal_validate(StdTemporalKind::PlainDateTime, &v)?;
         }
     }
     // ShowCalendar (spec): "auto" shows the calendar annotation whenever the

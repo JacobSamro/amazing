@@ -84,28 +84,36 @@ fn std_temporal_overflow(i: &mut Interpreter, option: JsValue) -> Result<bool, T
 // this that duplicated none of that validation -- see
 // docs/lanes/js-stdlib_TODO.md, JSS-temporal-port item 2.
 fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> Result<Option<[i64; 10]>, Throw> {
+    Ok(std_temporal_resolve_relative_full(i, relative)?.map(|r| r.fields))
+}
+
+fn std_temporal_resolve_relative_full(i: &mut Interpreter, relative: &JsValue) -> Result<Option<StdRelative>, Throw> {
     if relative.is_undefined() { return Ok(None); }
+    let plain = |fields: [i64; 10]| Ok(Some(StdRelative { fields, zoned: None }));
     if let Ok(data) = std_temporal_record(relative, None) {
         let mut fields = data.fields;
         return match data.kind {
-            StdTemporalKind::PlainDate => Ok(Some(fields)),
-            StdTemporalKind::PlainDateTime => { fields[3..9].fill(0); Ok(Some(fields)) }
+            StdTemporalKind::PlainDate => plain(fields),
+            StdTemporalKind::PlainDateTime => { fields[3..9].fill(0); plain(fields) }
             _ => Err(Throw::type_error("relativeTo must name a PlainDate, PlainDateTime, or ZonedDateTime")),
         };
     }
     if let Ok(data) = std_epoch_record(relative, Some(StdEpochKind::ZonedDateTime)) {
         let mut fields = std_epoch_local_fields(&data)?;
         fields[3..9].fill(0);
-        return Ok(Some(fields));
+        return Ok(Some(StdRelative { fields, zoned: Some(StdZonedRel {
+            epoch_ns: data.epoch_ns, zone: data.zone_id.clone(), calendar: data.calendar.clone() }) }));
     }
     match relative {
         JsValue::Str(text) => {
             let text = text.to_utf8_lossy();
             let (_, zone_annotation, _calendar_annotation) = std_epoch_validate_annotations(&text, true)?;
+            let mut zoned = None;
             let mut fields = if zone_annotation.is_some() {
-                let (epoch_ns, zone, _calendar) = std_epoch_parse(&text, StdEpochKind::ZonedDateTime, "reject", "compatible")?;
+                let (epoch_ns, zone, calendar) = std_epoch_parse(&text, StdEpochKind::ZonedDateTime, "reject", "compatible")?;
                 let mut f = [0i64; 10];
                 std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
+                zoned = Some(StdZonedRel { epoch_ns, zone, calendar });
                 f
             } else {
                 // No zone annotation: ToRelativeTemporalObject discards any
@@ -119,37 +127,33 @@ fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> 
                 std_temporal_parse(StdTemporalKind::PlainDate, &text)?.0
             };
             fields[3..9].fill(0);
-            Ok(Some(fields))
+            Ok(Some(StdRelative { fields, zoned }))
         }
         JsValue::Object(_) => {
+            // PrepareCalendarFields reads every field (conversion included) in
+            // alphabetical order before anything is resolved.
+            let relative = &std_temporal_relative_snapshot(i, relative)?;
             let time_zone = i.get_prop(relative, "timeZone")?;
+            let mut zoned = None;
             let mut fields = if !time_zone.is_undefined() {
-                let (epoch_ns, zone, _calendar) = std_epoch_from_value_with_options(i, relative.clone(), StdEpochKind::ZonedDateTime, JsValue::Undefined)?;
+                let (epoch_ns, zone, calendar) = std_epoch_from_value_with_options(i, relative.clone(), StdEpochKind::ZonedDateTime, JsValue::Undefined)?;
                 let mut f = [0i64; 10];
                 std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
+                zoned = Some(StdZonedRel { epoch_ns, zone, calendar });
                 f
             } else {
                 let (mut f, month, code, _calendar) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, relative)?;
                 std_temporal_bag_resolve_month(&mut f, month, code)?;
                 std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut f, false);
-                // ToRelativeTemporalObject reads hour..nanosecond (each
-                // still individually range/Infinity-checked by
-                // std_temporal_bag above) only to discard them --
-                // CalendarDateFromFields/CreateTemporalDate builds a
-                // PlainDate, not a PlainDateTime, so the final range check
-                // must use PlainDate's own hour-12-anchored
-                // ISODateWithinLimits, not PlainDateTime's midnight-anchored
-                // one: a date whose only valid representable instant is
-                // just after midnight (or just before, on the other end)
-                // is still a valid relativeTo PlainDate even though
-                // {..., hour: 0} (the field default) as an actual
-                // PlainDateTime would not be. Confirmed by
-                // relativeto-date-limits.js's minimum-date property bag.
+                // The final range check must use PlainDate's own hour-12-
+                // anchored ISODateWithinLimits, not PlainDateTime's
+                // midnight-anchored one (relativeto-date-limits.js's
+                // minimum-date property bag).
                 std_temporal_validate(StdTemporalKind::PlainDate, &f)?;
                 f
             };
             fields[3..9].fill(0);
-            Ok(Some(fields))
+            Ok(Some(StdRelative { fields, zoned }))
         }
         _ => Err(Throw::type_error("relativeTo must be a Temporal object, string, or property bag")),
     }
@@ -1128,7 +1132,10 @@ fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind,
             // coverage in this pinned corpus (13 files vs 4). See
             // docs/lanes/js-stdlib_TODO.md, JSS-temporal-port item 2.
             StdWithField::MonthCode => {
-                let text = i.to_string(&property)?;
+                // ToPrimitiveAndRequireString: an object is converted with a
+                // string hint, but a primitive that is not already a String
+                // (a Number, say) is a TypeError.
+                let text = std_epoch_string_field(i, property)?;
                 // ParseISOMonthCode's own grammar check (well-formed shape:
                 // "M" + 2 digits + optional "L") runs immediately, at
                 // monthCode's own alphabetical read position -- BEFORE any
@@ -1385,7 +1392,9 @@ fn std_temporal_unit_ns(name: &str) -> Option<i128> {
 }
 
 fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let fields = std_temporal_record(&this, Some(StdTemporalKind::Duration))?.fields;
+    let record = std_temporal_record(&this, Some(StdTemporalKind::Duration))?;
+    let fields = record.fields;
+    let wide = record.wide;
     let option = std_reflect_arg(&args, 0);
     if !option.is_object() && !matches!(option, JsValue::Str(_)) {
         return Err(Throw::type_error("total requires an options object or unit string"));
@@ -1400,7 +1409,9 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
     // offset must be internally consistent.
     let relative = if option.is_object() { std_temporal_option_value(i, &option, "relativeTo")? }
         else { JsValue::Undefined };
-    let base = std_temporal_resolve_relative_to(i, &relative)?;
+    let relative_full = std_temporal_resolve_relative_full(i, &relative)?;
+    let zoned = relative_full.as_ref().and_then(|r| r.zoned.clone());
+    let base = relative_full.map(|r| r.fields);
     let unit = if let JsValue::Str(value) = &option { value.to_utf8_lossy() }
         else { std_temporal_option_string(i, &option, "unit")?
             .ok_or_else(|| Throw::range_error("unit is required"))? };
@@ -1416,6 +1427,29 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
         || matches!(unit.as_str(), "year" | "years" | "month" | "months" | "week" | "weeks"))
         && base.is_none() {
         return Err(Throw::range_error("calendar units require relativeTo"));
+    }
+    if let Some(zone) = &zoned {
+        let singular = std_temporal_singular_unit(&unit);
+        if std_temporal_unit_rank(&singular).is_none() { return Err(Throw::range_error("invalid unit")); }
+        let mut date = [0i64; 10];
+        for k in 0..4 { date[k] = wide[k] as i64; }
+        return Ok(JsValue::num(zr_total(zone, &date, std_temporal_duration_clock_ns(&wide), &singular)?));
+    }
+    if let (None, Some(anchor)) = (&zoned, &base) {
+        if fields.iter().any(|v| *v != 0) {
+            let mut midnight = *anchor;
+            midnight[3..9].fill(0);
+            std_temporal_validate(StdTemporalKind::PlainDateTime, &midnight)?;
+            if matches!(unit.as_str(), "year" | "years" | "month" | "months" | "week" | "weeks" | "day" | "days") {
+                let day = std_temporal_epoch_day(anchor[0], anchor[1], anchor[2]) as i128
+                    + std_temporal_duration_time_ns(&fields).div_euclid(STD_TEMPORAL_NS_DAY)
+                    + fields[0].min(0).max(0) as i128;
+                let day = i64::try_from(day).map_err(|_| Throw::range_error("duration is out of range for relativeTo"))?;
+                let mut target = [0i64; 10];
+                (target[0], target[1], target[2]) = std_temporal_civil_from_epoch_day(day);
+                std_temporal_validate(StdTemporalKind::PlainDate, &target)?;
+            }
+        }
     }
     let total_ns = if fields[0] != 0 || fields[1] != 0 {
         let base = base.as_ref().unwrap();
@@ -1467,9 +1501,9 @@ fn std_temporal_total_calendar_unit(base: &[i64; 10], total_ns: i128, unit: &str
         let hi_ns = std_temporal_calendar_step_ns(base, unit_index, lo + 1)?;
         if hi_ns <= total_ns { lo += 1; continue; }
         if lo_ns == total_ns { return Ok(lo as f64); }
-        let numerator = (total_ns - lo_ns) as f64;
-        let denom = (hi_ns - lo_ns) as f64;
-        return Ok(lo as f64 + numerator / denom);
+        let numerator = total_ns - lo_ns;
+        let denom = hi_ns - lo_ns;
+        return Ok(std_temporal_exact_ratio(lo as i128 * denom + numerator, denom));
     }
     Err(Throw::range_error("Temporal calendar total did not converge"))
 }
@@ -1499,6 +1533,20 @@ fn std_temporal_round_integer(value: i128, increment: i128, mode: &str) -> Resul
         _ => return Err(Throw::range_error("invalid roundingMode")),
     };
     Ok(rounded)
+}
+
+// RoundNumberToIncrementAsIfPositive: Instant, PlainDateTime and time-of-day
+// rounding treat the value as a distance from the Big Bang (or midnight), so
+// the sign-relative modes map onto floor/ceil regardless of the actual sign.
+fn std_temporal_round_as_if_positive(value: i128, increment: i128, mode: &str) -> Result<i128, Throw> {
+    let mapped = match mode {
+        "trunc" => "floor",
+        "expand" => "ceil",
+        "halfTrunc" => "halfFloor",
+        "halfExpand" => "halfCeil",
+        other => other,
+    };
+    std_temporal_round_integer(value, increment, mapped)
 }
 
 // Unit "rank": 0 = year (coarsest) .. 9 = nanosecond (finest), matching the
@@ -1769,7 +1817,9 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], wide: Std
         std_temporal_option_string(i, option, "largestUnit")?.map(|u| std_temporal_singular_unit(&u))
     } else { None };
     let relative = if option.is_object() { std_temporal_option_value(i, option, "relativeTo")? } else { JsValue::Undefined };
-    let base = std_temporal_resolve_relative_to(i, &relative)?;
+    let relative_full = std_temporal_resolve_relative_full(i, &relative)?;
+    let zoned = relative_full.as_ref().and_then(|r| r.zoned.clone());
+    let base = relative_full.map(|r| r.fields);
     let (increment, mode) = if option.is_object() {
         let increment = std_temporal_property(i, option, "roundingIncrement")?.unwrap_or(1);
         let mode = std_temporal_option_string(i, option, "roundingMode")?.unwrap_or_else(|| "halfExpand".to_string());
@@ -1803,7 +1853,26 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], wide: Std
     // Time units additionally cannot exceed (or fail to evenly divide) the
     // next-largest unit, matching std_temporal_validate_rounding_increment.
     std_temporal_validate_rounding_increment(&smallest, increment)?;
+    if increment > 1 && largest != smallest && smallest_index <= 3 {
+        return Err(Throw::range_error("cannot round to an increment of a calendar unit while balancing to a larger unit"));
+    }
+    if let Some(zone) = &zoned {
+        let mut date = [0i64; 10];
+        for k in 0..4 { date[k] = wide[k] as i64; }
+        let target = zr_add(zone, zone.epoch_ns, &date, std_temporal_duration_clock_ns(&wide))?;
+        let (diff_date, diff_time) = zr_difference_rounded(zone, zone.epoch_ns, target, &largest, increment, &smallest, &mode)?;
+        return std_temporal_make_duration(i, zr_duration_fields(&diff_date, diff_time, &largest));
+    }
 
+    if zoned.is_none() {
+        if let Some(anchor) = &base {
+            if fields.iter().any(|v| *v != 0) {
+                let mut midnight = *anchor;
+                midnight[3..9].fill(0);
+                std_temporal_validate(StdTemporalKind::PlainDateTime, &midnight)?;
+            }
+        }
+    }
     let needs_calendar = smallest_index <= 2 || largest_index <= 2
         || fields[0] != 0 || fields[1] != 0 || fields[2] != 0;
     if !needs_calendar {
@@ -1900,8 +1969,9 @@ fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
             std_temporal_set_time_ns(&mut fields, rounded);
         }
         StdTemporalKind::PlainDateTime => {
-            let rounded = std_temporal_round_integer(std_temporal_epoch_ns(&fields), step, &mode)?;
+            let rounded = std_temporal_round_as_if_positive(std_temporal_epoch_ns(&fields), step, &mode)?;
             std_temporal_set_epoch_ns(&mut fields, rounded)?;
+            std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
         }
         _ => return Err(Throw::type_error("incompatible Temporal receiver")),
     }
