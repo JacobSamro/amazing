@@ -23,6 +23,9 @@ pub struct InstalledFontProfile {
     pub family_class: Option<i16>,
     pub serif: Option<bool>,
     pub color: bool,
+    /// Exact native OS/2 range bits, never inferred from family/file names.
+    pub unicode_ranges: [u32; 4],
+    pub code_page_ranges: Option<[u32; 2]>,
     pub registered_axes: Vec<[u8; 4]>,
     pub weight_range: FontDescriptorRange,
     pub stretch_range: FontDescriptorRange,
@@ -137,6 +140,8 @@ fn profile(sfnt: &[u8]) -> Result<InstalledFontProfile, TextError> {
         family_class: os2.as_ref().map(|t| t.s_family_class()),
         serif: os2.as_ref().and_then(|t| serif_class(t.s_family_class(), t.panose_10())),
         color: crate::emoji_presentation::has_color_glyph_tables(sfnt),
+        unicode_ranges: os2.as_ref().map_or([0; 4], |t| [t.ul_unicode_range_1(), t.ul_unicode_range_2(), t.ul_unicode_range_3(), t.ul_unicode_range_4()]),
+        code_page_ranges: os2.as_ref().and_then(|t| Some([t.ul_code_page_range_1()?, t.ul_code_page_range_2()?])),
     })
 }
 

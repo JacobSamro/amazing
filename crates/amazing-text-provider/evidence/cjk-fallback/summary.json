@@ -1,0 +1,68 @@
+{
+ "base": "8c69cc89120ced6ab09cbc3f3a5fc21f86613c2f",
+ "source": "039fb6ed7c3305dc6dbb57b59e4b2f221bde97d3",
+ "pre_squash_source_note": "tip of lane/text-cjk-work before squash",
+ "workspace": {
+  "before": {
+   "nextest_pass": 5561,
+   "fail": 0,
+   "doctests": 39
+  },
+  "after": {
+   "nextest_pass": 5575,
+   "fail": 0,
+   "doctests": 39
+  }
+ },
+ "css-css-ruby": {
+  "counts": {
+   "crash": 0,
+   "error": 0,
+   "mismatch": 15,
+   "pass": 52,
+   "timeout": 0,
+   "unsupported": 0
+  },
+  "gained": [],
+  "lost": [],
+  "changed": [],
+  "compact_sha256": "df88fb5071c14c65d36f810d4872802da294337b70f1a432b7ef8b3b2b1a6661"
+ },
+ "css-css-text": {
+  "counts": {
+   "crash": 0,
+   "error": 0,
+   "mismatch": 201,
+   "pass": 244,
+   "timeout": 0,
+   "unsupported": 0
+  },
+  "gained": [
+   "css__css-text__line-break__line-break-anywhere-001.html",
+   "css__css-text__text-transform__text-transform-capitalize-031.html",
+   "css__css-text__text-transform__text-transform-capitalize-034.html",
+   "css__css-text__text-transform__text-transform-multiple-001.html",
+   "css__css-text__text-transform__text-transform-tailoring-004.html",
+   "css__css-text__text-transform__text-transform-upperlower-032.html",
+   "css__css-text__writing-system__writing-system-text-transform-001.html"
+  ],
+  "lost": [],
+  "changed": [],
+  "compact_sha256": "c43aad14156b207949527fc3242cca3f414e3be935aa54dfd0df5ca2d2d64ec7"
+ },
+ "css-css-fonts": {
+  "counts": {
+   "crash": 0,
+   "error": 0,
+   "mismatch": 3,
+   "pass": 29,
+   "timeout": 0,
+   "unsupported": 0
+  },
+  "gained": [],
+  "lost": [],
+  "changed": [],
+  "compact_sha256": "29b786c1cff8026f607ebf8bdd9b738418c992f01c882e0e3a35d5684c08effd"
+ },
+ "raw_location": "Boat bx_qzskq2df ~/amazing/out/resume-cjk2/render-gate/{c7,c8}-{before,after}"
+}

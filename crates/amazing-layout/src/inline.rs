@@ -2322,15 +2322,20 @@ fn ruby_edge_space(word: &ShapedWord, start: bool) -> (f32, bool) {
     let mut total = 0.0;
     let mut consumed = 0usize;
     let mut visit = |offset: usize, c: char| {
+        let bracket = (start && "（「『【〖〔〈《〘〚〝［｛｟".contains(c))
+            || (!start && "）」』】〗〕〉》〙〛〞〟］｝｠".contains(c));
         let fraction = if c.is_whitespace() { 1.0 }
             else if c == '・' { 0.25 }
-            else if (start && "（「『【〖〔〈《〘〚〝［｛｟".contains(c))
-                || (!start && "）」』】〗〕〉》〙〛〞〟］｝｠".contains(c)) { 0.5 }
+            else if bracket { 0.5 }
             else { 0.0 };
         if fraction == 0.0 { return false; }
         let absolute = word.range.end - word.text.len() + offset;
-        total += word.glyphs.iter().filter(|g| g.cluster.start <= absolute && absolute < g.cluster.end)
-            .map(|g| inline_advance(g.writing_mode, g.advance_x, g.advance_y)).sum::<f32>() * fraction;
+        let advance = word.glyphs.iter().filter(|g| g.cluster.start <= absolute && absolute < g.cluster.end)
+            .map(|g| inline_advance(g.writing_mode, g.advance_x, g.advance_y)).sum::<f32>();
+        // A full-width bracket is blank on its outer half-em. A font whose
+        // bracket glyph is proportional (narrower than 1em) has no more blank
+        // than its own advance, so credit min(half an em, advance).
+        total += if bracket { (word.font_size * 0.5).min(advance) } else { advance * fraction };
         consumed += 1;
         fraction == 1.0
     };

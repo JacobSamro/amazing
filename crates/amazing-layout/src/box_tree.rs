@@ -885,6 +885,16 @@ fn text_for_white_space(
     source: NodeIdx,
     max_mappings: usize,
 ) -> (String, Vec<TextSourceMapping>) {
+    let (text, mappings) = text_for_white_space_untransformed(text, style, source, max_mappings);
+    crate::text_transform_apply::transform_prepared_text(text, mappings, style)
+}
+
+fn text_for_white_space_untransformed(
+    text: &str,
+    style: &ComputedStyle,
+    source: NodeIdx,
+    max_mappings: usize,
+) -> (String, Vec<TextSourceMapping>) {
     match style.get("white-space").unwrap_or("normal") {
         value
             if value.eq_ignore_ascii_case("pre")

@@ -6,6 +6,10 @@ mod font_display;
 mod font_display_provider;
 mod font_matching;
 mod installed_font;
+mod installed_font_fallback;
+#[cfg(test)]
+mod installed_font_fallback_tests;
+pub use installed_font_fallback::RegisteredFontFace;
 #[cfg(test)]
 mod installed_font_tests;
 pub use installed_font::{InstalledFontFace, InstalledFontProfile, inspect_installed_font};

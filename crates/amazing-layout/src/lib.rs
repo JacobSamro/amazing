@@ -70,6 +70,7 @@
 
 pub mod block;
 mod containment;
+mod text_transform_apply;
 mod resolved_geometry;
 #[cfg(test)]
 mod resolved_geometry_tests;

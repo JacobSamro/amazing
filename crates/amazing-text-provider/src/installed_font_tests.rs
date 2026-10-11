@@ -5,7 +5,7 @@ use crate::installed_font::inspect_installed_font;
 fn be16(value: u16) -> [u8;2] { value.to_be_bytes() }
 fn be32(value: u32) -> [u8;4] { value.to_be_bytes() }
 
-fn metadata_font(weight: u16, width: u16, selection: u16, angle: f32, names: &[(u16,&str)]) -> Vec<u8> {
+pub(super) fn metadata_font(weight: u16, width: u16, selection: u16, angle: f32, names: &[(u16,&str)]) -> Vec<u8> {
     let original = crate::tests::synthetic_font('A');
     let count = u16::from_be_bytes(original[4..6].try_into().unwrap()) as usize;
     let mut tables: Vec<([u8;4],Vec<u8>)> = (0..count).map(|i| {

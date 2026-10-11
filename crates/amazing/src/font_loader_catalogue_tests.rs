@@ -3,7 +3,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT: AtomicU64 = AtomicU64::new(0);
-fn directory() -> std::path::PathBuf {
+pub(super) fn directory() -> std::path::PathBuf {
     let p = std::env::temp_dir().join(format!(
         "amazing-face-snapshot-{}-{}",
         std::process::id(),
@@ -12,14 +12,14 @@ fn directory() -> std::path::PathBuf {
     std::fs::create_dir(&p).unwrap();
     p
 }
-fn checksum(bytes: &[u8]) -> u32 {
+pub(super) fn checksum(bytes: &[u8]) -> u32 {
     bytes.chunks(4).fold(0u32, |sum, chunk| {
         let mut part = [0; 4];
         part[..chunk.len()].copy_from_slice(chunk);
         sum.wrapping_add(u32::from_be_bytes(part))
     })
 }
-fn font() -> Vec<u8> {
+pub(super) fn font() -> Vec<u8> {
     let original = include_bytes!("../tests/fixtures/font-metrics-space.ttf");
     let count = u16::from_be_bytes(original[4..6].try_into().unwrap()) as usize;
     let mut tables: Vec<([u8; 4], Vec<u8>)> = (0..count)

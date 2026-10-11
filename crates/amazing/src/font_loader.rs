@@ -901,12 +901,29 @@ pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::
 #[cfg(not(target_os = "windows"))]
 fn register_catalogue_faces(provider: &mut amazing_text_provider::TextProvider, catalogue: &InstalledFontCatalogue) {
     let aliases = installed_face_aliases(&catalogue.faces);
+    let mut registered = std::collections::BTreeSet::new();
     for face in &catalogue.faces {
         let Some(aliases) = aliases.get(&face.path) else { continue; };
         // The immutable handle owns the exact admitted bytes and profile.
         // Both generic and named associations share this single registration.
         let Some(resource) = &face.resource else { continue; };
         if let Err(amazing_text::TextError::ResourceLimit) = provider.register_installed_face_aliases(aliases, resource) { return; }
+        registered.insert((resource.original_bytes().as_ptr() as usize, resource.original_bytes().len()));
+    }
+    // Native faces that do not serve a selected generic/name role still belong
+    // to the installed fallback catalogue. Give them only their genuine names;
+    // never assign invented generic aliases or replace selected registrations.
+    let mut unused = catalogue.faces.iter().filter(|face| !aliases.contains_key(&face.path)).collect::<Vec<_>>();
+    // Preserve selected families first; bounded fallback capacity prefers native
+    // CJK coverage before other unused faces. Stable path order breaks ties.
+    unused.sort_by_key(|face| !face.profile.declares_cjk_support());
+    // Leave provider headroom for author @font-face registrations (provider cap 256).
+    const FALLBACK_FACE_BUDGET: usize = 192;
+    for face in unused {
+        if registered.len() >= FALLBACK_FACE_BUDGET { break; }
+        let Some(resource) = &face.resource else { continue; };
+        if !registered.insert((resource.original_bytes().as_ptr() as usize, resource.original_bytes().len())) { continue; }
+        if let Err(amazing_text::TextError::ResourceLimit) = provider.register_installed_face_aliases(&[], resource) { return; }
     }
 }
 
@@ -917,7 +934,7 @@ mod installed_face_tests {
     fn face(path: &str, family: &str, weight: u16, slant: amazing_text::FontSlant, serif: Option<bool>, fixed: bool) -> InstalledLinuxFace {
         InstalledLinuxFace {path:path.into(),resource:None,profile:InstalledFontProfile {
             families:vec![family.into()],full_names:vec![format!("{family} {weight}")],postscript_names:vec![format!("{family}-{weight}")],
-            weight,stretch:100.0,slant,italic_angle:Some(0.0),fixed_pitch:fixed,family_class:None,serif,color:false,
+            weight,stretch:100.0,slant,italic_angle:Some(0.0),fixed_pitch:fixed,family_class:None,serif,color:false,unicode_ranges:[0;4],code_page_ranges:None,
             registered_axes:Vec::new(),weight_range:FontDescriptorRange::single(weight as f32),stretch_range:FontDescriptorRange::single(100.0),italic_range:None,oblique_range:None,
         }}
     }
@@ -1283,3 +1300,7 @@ mod tests {
 #[cfg(all(test, not(target_os = "windows")))]
 #[path = "font_loader_catalogue_tests.rs"]
 mod installed_catalogue_tests;
+
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "font_loader_fallback_tests.rs"]
+mod installed_fallback_tests;

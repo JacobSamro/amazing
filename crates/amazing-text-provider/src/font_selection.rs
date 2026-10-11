@@ -57,9 +57,17 @@ impl TextProvider {
             if private_use && is_generic_family(family) {
                 continue;
             }
+            let generic_declared = is_generic_family(family);
             let family = unquote_family(family);
             let family = family.to_ascii_lowercase();
             let author_only = self.author_families.contains(&family);
+            // A generic may be composite for the content language. This is a
+            // platform preference over genuine installed faces, after earlier
+            // declared families; actual cmap coverage remains mandatory.
+            if !author_only && generic_declared
+                && style.language.as_deref().is_some_and(super::installed_font_fallback::japanese_language)
+                && let Some(index) = self.matching_native_fallback(style, text, require_space, presentation, Some(&family), true)
+            { return Some(index); }
             let mut best_rank = None;
             let mut candidates = Vec::new();
             for (index, font) in self.fonts.iter().enumerate() {
@@ -103,6 +111,11 @@ impl TextProvider {
         // dedicated "emoji" alias first, ahead of the plain-text generics, so
         // it prefers a colour-capable face over a monochrome one when both
         // are installed.
+        // CSS Fonts 4: when every declared family fails, the UA default font is
+        // chosen for the content language, exactly like a declared generic.
+        if style.language.as_deref().is_some_and(super::installed_font_fallback::japanese_language)
+            && let Some(index) = self.matching_native_fallback(style, text, require_space, presentation, Some("serif"), true)
+        { return Some(index); }
         let mut generics: Vec<&str> = Vec::new();
         if presentation == Some(EmojiPresentation::Emoji) {
             generics.push("emoji");
@@ -121,7 +134,7 @@ impl TextProvider {
                 })
                 .min_by_key(|(_, font)| font_matching::rank(style, font))
                 .map(|(index, _)| index)
-        })
+        }).or_else(|| self.matching_native_fallback(style, text, require_space, presentation, None, false))
     }
 
     pub(super) fn itemize_font_spans(

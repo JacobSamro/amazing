@@ -122,6 +122,9 @@ pub enum Hyphens {
     Auto,
 }
 
+mod text_transform_map;
+pub use text_transform_map::map_text_transform;
+
 /// CSS Text Module `text-transform`'s case keyword. Mutually exclusive with
 /// itself (only one of `capitalize`/`uppercase`/`lowercase` can be set at a
 /// time), but independent of, and combinable with, `full-width` and

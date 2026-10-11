@@ -1,0 +1,11 @@
+# Genuine installed fallback
+
+Source-only independent successor to frozen catalogue1da; recorded published origin a077a0455. No gate/readiness claim. Root grants the whole registered-key metadata/native unused-face fallback area; original32 font and67 Ruby selectors remain unchanged.
+
+A borrowed registered_font_face view reads the exact provider record, configured family and immutable native profile; FontKey0 has no native face. Caller must use the provider that minted the key, not treat integer keys as global identity. Native OS/2 Unicode/code-page fields are retained exactly. They influence a platform language preference only; matching still requires actual cmap coverage, presentation, style and visibility. Current CSS Fonts4 permits generic families to be composite for content language. Japanese generics may use genuinely admitted Japanese-supporting faces; earlier named families and authored rules retain priority, quoted names do not acquire a generic-language role. Existing PUA no-system-fallback policy remains.
+
+Selected generic/named registrations stay first. Other admitted native faces retain only genuine names, and duplicate immutable snapshots do not add duplicate fallback keys. Native CJK coverage declarations receive priority within the existing bounded fallback capacity; file8MiB, discovery128MiB and provider64MiB/256face limits are unchanged. Missing oversized/nonfirst TTC faces remain explicit unsupported availability, not fabricated aliases/glyphs/metrics.
+
+Eight provider groups and three driver groups cover actual key identity, provider locality, native-vs-author distinction, Japanese metadata preference/real coverage, named/quoted/author priority, native style/PUA/shape semantics, caps, actual file registration/duplicate identity/selected stability and strict oversized-file rejection. Test metadata wraps existing font fixtures without production metric changes. Current Ruby diagnostic exact serif/languageja identifies proportional row5 Glyph3455/3456; no normalization is added. Real glyph/face identity and installed Ruby outcomes await actual bulk qualification.
+
+Primary sources: https://www.w3.org/TR/css-fonts-4/ and https://learn.microsoft.com/typography/opentype/spec/os2 . Original implementation over current native architecture, no port/dependency.

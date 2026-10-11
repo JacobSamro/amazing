@@ -33,13 +33,7 @@ pub fn apply_text_transform(text: &str, transform: TextTransform) -> String {
         out = full_width(&out);
     }
     if transform.full_size_kana {
-        // `full-size-kana` (halfwidth Katakana -> fullwidth Katakana /
-        // combining voicing marks -> precomposed dakuten/handakuten) is not
-        // implemented yet: it needs a verified Unicode mapping table this
-        // lane has not built and no pinned WPT case in the current
-        // css-text mismatch cluster exercises it. Left as a no-op rather
-        // than risk a fabricated table; revisit if a pinned case needs it.
-        let _ = &out;
+        out = full_size_kana(&out);
     }
     out
 }
@@ -159,6 +153,13 @@ fn full_width(text: &str) -> String {
         .collect()
 }
 
+fn full_size_kana(text: &str) -> String {
+    amazing_text::map_text_transform(
+        text,
+        TextTransform { full_size_kana: true, ..TextTransform::default() },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +171,12 @@ mod tests {
             full_width: false,
             full_size_kana: false,
         }
+    }
+
+    #[test]
+    fn full_size_kana_maps_small_kana_only() {
+        let transform = TextTransform { case: TextTransformCase::None, full_width: false, full_size_kana: true };
+        assert_eq!(apply_text_transform("ぁっゕゖァッㇰｯあA", transform), "あつかけアツクﾂあA");
     }
 
     #[test]
