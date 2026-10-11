@@ -147,6 +147,11 @@ pub(crate) fn invoke<H: BindingHost>(
         | O::NamedNodeMapRemoveNamedItem | O::NamedNodeMapRemoveNamedItemNS) {
         map_element(host, &receiver)?
     } else { element(host, &receiver)? };
+    // Setter receiver custody precedes both name and value coercion.
+    let mutation_receiver = if matches!(op, O::ElementSetAttribute | O::ElementSetAttributeNS) {
+        let key = host.node_object_key(element);
+        Some((key, host.capture_dom(key.arena)?))
+    } else { None };
     if op == O::ElementAttributes {
         return host.wrap_platform_object(host.node_platform_key(element), InterfaceBrand::NAMED_NODE_MAP);
     }
@@ -235,21 +240,23 @@ pub(crate) fn invoke<H: BindingHost>(
         if qualified && !amazing_dom::Dom::is_valid_attribute_name(&name) {
             return host.with_dom::<H::Value>(|_| Err(DomError::InvalidCharacterError));
         }
-        let display = String::from_utf16_lossy(&units);
-        let existing = if qualified { named(host, element, None, &name, true)? } else { None };
-        let attr = host.with_dom(|dom| {
+        let (key, arena) = mutation_receiver.as_ref().expect("Attribute setter captured its receiver");
+        host.with_captured_dom(arena, |dom| {
+            if dom.node_generation(element) != Some(key.generation) { return Err(DomError::InvalidStateError); }
+            let existing = if qualified {
+                let attributes = dom.attribute_nodes(element)?;
+                attributes.into_iter().find(|attr| dom.attr_snapshot(*attr)
+                    .is_ok_and(|snapshot| qualified_match(&snapshot, &name)))
+            } else { None };
             if let Some(attr) = existing {
                 let snapshot = dom.attr_snapshot(attr)?;
-                dom.set_attribute_ns(element, snapshot.namespace_uri.as_deref(), &snapshot.local_name, &display)?;
-                return Ok(attr);
+                dom.set_attribute_ns_units(element, snapshot.namespace_uri.as_deref(), &snapshot.local_name, units)
+            } else if qualified {
+                dom.set_attribute_ns_units(element, None, &name, units)
+            } else {
+                dom.set_attribute_qualified_ns_units(element, uri.as_deref(), &name, units)
             }
-            if qualified { dom.set_attribute(element, &name, &display)?; }
-            else { dom.set_attribute_qualified_ns(element, uri.as_deref(), &name, &display)?; }
-            let (local, uri) = if qualified { (name.as_str(), None) }
-                else { (name.rsplit(':').next().unwrap(), uri.as_deref()) };
-            dom.get_attribute_node(element, uri, local).ok_or(DomError::InvalidStateError)
         })?;
-        host.with_dom(|dom| dom.store_attr_value_units(attr, units))?;
         return Ok(host.undefined());
     }
     if matches!(op, O::ElementRemoveAttribute | O::ElementRemoveAttributeNS

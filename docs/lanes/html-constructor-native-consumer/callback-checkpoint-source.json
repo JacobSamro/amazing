@@ -1,0 +1,21 @@
+{
+  "status": "SOURCE_ONLY_UNBUILT",
+  "preserved_source": "563f4a75e373634c3a032d73a2e3f9a342965eaf",
+  "recorded_base": "95a143c6d442a6eab360b95fddcb61ecd739dcf8",
+  "microtask_producer": "62013a1a729f1ab5dd7a1339e08b9675836751b4",
+  "original_wpt_oracles_changed": false,
+  "new_unrun_checkpoint_oracle_corrected": "callback error is reported, not parser-aborting Throw",
+  "files": {
+    "crates/amazing-js/src/interp_scheduled_microtask_inspection.rs": "cb324e3f9455077039f11627f90d8043ca91216b101726d12947ffd8577dd3a8",
+    "crates/amazing-js/src/interp.rs": "88e87c39ba8832eaebe23be8ba96ae85942b49903d730ca6404483e54b1d9ab1",
+    "crates/amazing/src/runtime_host_html/parser_checkpoint.rs": "33423193cbbcd681a5812407064d96f26ad1739db464a03d306e0e9e3ff42e2b",
+    "crates/amazing/src/runtime_host_html_constructor.rs": "ad2172ec19714f48e74cd16fb7abec1062892da9eab50ff0704991fb1d3d7272",
+    "crates/amazing/src/runtime_host_html_constructor_tests.rs": "50512cf5fe727794cb216ae7ee18f198f437ae56b5615a338e1af132f1dffb8e"
+  },
+  "gate": "No allocation: actual baseline own runner1 diagnosis required; all old controls remain.",
+  "retained_global_controls": [
+    "actual child callback after iframe removal",
+    "parent-created bound child target",
+    "revoked callback Proxy reporting and later FIFO continuation"
+  ]
+}

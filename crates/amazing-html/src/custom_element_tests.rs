@@ -10,24 +10,52 @@ use crate::{parse, parse_fragment, parse_with_custom_element_host, ParserConstru
 #[derive(Default)]
 struct Trace { calls: Vec<(String, NodeIdx, Option<String>, CustomElementState)>, fail: Option<String> }
 struct MockHost(Rc<RefCell<Trace>>);
+fn mock_create(dom: &mut Dom, request: ParserConstruction, mut construct: impl FnMut(&mut Dom, NodeIdx, usize) -> bool)
+    -> Result<amazing_dom::render_mutation::NodeGeneration, amazing_dom::DomError> {
+    use amazing_dom::custom_elements::{ElementCreationPlan as Plan, CustomElementCreationCompletion as Completion};
+    let plan = dom.prepare_custom_element_creation(request.document, Some("http://www.w3.org/1999/xhtml"), None,
+        &request.local_name, request.is_value.as_deref(), true)?;
+    let selected = match plan {
+        Plan::Element(owner) => Ok(owner),
+        Plan::Upgrade { element, definition, .. } => {
+            dom.begin_custom_element_upgrade(element.node, definition)?;
+            let success = construct(dom, element.node, definition);
+            // The fixture's actual super consumes the existing upgrade stack.
+            let _ = dom.finish_custom_element_upgrade(element.node, definition, success);
+            Ok(element)
+        }
+        Plan::Autonomous(context) => {
+            let cap = dom.prepare_html_constructor_in_document(context.document(), context.document(), context.definition(), context.constructor())?;
+            let owner = cap.element(); dom.consume_html_constructor(cap)?;
+            let returned = construct(dom, owner.node, context.definition()).then_some(owner);
+            match dom.complete_custom_element_creation(context, returned)? {
+                Completion::Created(owner) => Ok(owner),
+                Completion::Failed(failure) => dom.finish_custom_element_creation_failure(failure),
+            }
+        }
+    }?;
+    for (name, value) in request.attributes { dom.set_attribute(selected.node, &name, &value)?; }
+    Ok(selected)
+}
 impl ParserCustomElementHost for MockHost {
-    fn construct(&mut self, dom: &mut Dom, request: ParserConstruction) -> bool {
-        assert_eq!(request.document, NodeIdx(0));
-        assert_eq!(request.namespace, Namespace::Html);
-        assert_eq!(dom.name(request.element), Some(request.local_name.as_str()));
-        assert_eq!(dom.get(request.element).parent, None);
-        assert_eq!(dom.custom_element_state(request.element), CustomElementState::Precustomized);
-        assert_eq!(dom.custom_element_definition_of(request.element), Some(request.definition));
-        let attribute = dom.get_attribute_ns(request.element, None, "data-k").map(str::to_owned);
-        assert!(dom.children(request.element).next().is_none());
-        let fail = self.0.borrow().fail.as_deref() == Some(request.local_name.as_str());
-        self.0.borrow_mut().calls.push((request.local_name, request.element, attribute,
-            dom.custom_element_state(request.element)));
-        if fail { return false; }
-        assert_eq!(dom.custom_element_super(request.definition), Ok(request.element));
-        true
+    fn create(&mut self, dom: &mut Dom, request: ParserConstruction)
+        -> Result<amazing_dom::render_mutation::NodeGeneration, amazing_dom::DomError> {
+        let local = request.local_name.clone();
+        mock_create(dom, request, |dom, element, definition| {
+            assert_eq!(dom.name(element), Some(local.as_str()));
+            assert_eq!(dom.get(element).parent, None);
+            assert_eq!(dom.custom_element_definition_of(element), Some(definition));
+            let attribute = dom.get_attribute_ns(element, None, "data-k").map(str::to_owned);
+            assert!(dom.children(element).next().is_none());
+            let state = dom.custom_element_state(element);
+            self.0.borrow_mut().calls.push((local.clone(), element, attribute, state));
+            let fail = self.0.borrow().fail.as_deref() == Some(local.as_str());
+            if state == CustomElementState::Precustomized { assert_eq!(dom.custom_element_super(definition), Ok(element)); }
+            !fail
+        })
     }
 }
+
 fn define(dom: &mut Dom, name: &str, local: &str, constructor: u64) -> usize {
     let mut definition = CustomElementDefinition::new(NodeIdx(0), name.into(), local.into(), CallbackId(constructor));
     definition.callbacks.connected = Some(CallbackId(constructor + 100));
@@ -41,7 +69,7 @@ fn host(trace: &Rc<RefCell<Trace>>) -> Box<dyn ParserCustomElementHost> {
 }
 fn element(dom: &Dom, name: &str) -> NodeIdx {
     (0..dom.node_count()).map(|n| NodeIdx(n as u32))
-        .find(|&idx| dom.name(idx) == Some(name)).unwrap()
+        .find(|&idx| dom.name(idx) == Some(name) && dom.get(idx).parent.is_some()).unwrap()
 }
 
 #[test]
@@ -59,8 +87,8 @@ fn defined_nested_elements_construct_before_children_with_attributes_and_reactio
     let card = element(&dom, "x-card");
     let leaf = element(&dom, "x-leaf");
     assert_eq!(trace.borrow().calls, vec![
-        ("x-card".into(), card, None, CustomElementState::Precustomized),
-        ("x-leaf".into(), leaf, None, CustomElementState::Precustomized),
+        ("x-card".into(), card, None, CustomElementState::Custom),
+        ("x-leaf".into(), leaf, None, CustomElementState::Custom),
     ]);
     assert_eq!(dom.custom_element_state(card), CustomElementState::Custom);
     assert_eq!(dom.custom_element_state(leaf), CustomElementState::Custom);
@@ -68,10 +96,10 @@ fn defined_nested_elements_construct_before_children_with_attributes_and_reactio
     assert_eq!(dom.custom_element_definition_of(leaf), Some(leaf_def));
     assert_eq!(dom.take_custom_element_reactions(), vec![
         CustomElementReaction::AttributeChanged { element: card, callback: CallbackId(301),
-            name: "data-k".into(), old_value: None, new_value: Some("outer".into()), namespace: None },
+            name: "data-k".into(), old_value: None, new_value: Some("outer".encode_utf16().collect()), namespace: None },
         CustomElementReaction::Connected { element: card, callback: CallbackId(101) },
         CustomElementReaction::AttributeChanged { element: leaf, callback: CallbackId(302),
-            name: "data-k".into(), old_value: None, new_value: Some("inner".into()), namespace: None },
+            name: "data-k".into(), old_value: None, new_value: Some("inner".encode_utf16().collect()), namespace: None },
         CustomElementReaction::Connected { element: leaf, callback: CallbackId(102) },
     ]);
     dom.detach(card);
@@ -157,20 +185,36 @@ fn ordinary_parse_and_fragment_remain_unchanged() {
 fn host_can_mutate_dom_during_constructor_without_a_parser_borrow() {
     struct MutatingHost;
     impl ParserCustomElementHost for MutatingHost {
-        fn construct(&mut self, dom: &mut Dom, request: ParserConstruction) -> bool {
-            dom.set_attribute(request.element, "constructed", "yes").unwrap();
-            let scratch = dom.create_element(NodeIdx(0), "aside");
-            dom.detach(scratch);
-            assert_eq!(dom.custom_element_super(request.definition), Ok(request.element));
-            true
+        fn create(&mut self, dom: &mut Dom, request: ParserConstruction)
+            -> Result<amazing_dom::render_mutation::NodeGeneration, amazing_dom::DomError> {
+            mock_create(dom, request, |dom, element, definition| {
+                dom.set_attribute(element, "constructed", "yes").unwrap();
+                let scratch = dom.create_element(NodeIdx(0), "aside");
+                dom.detach(scratch);
+                if dom.custom_element_state(element) == CustomElementState::Precustomized {
+                    assert_eq!(dom.custom_element_super(definition), Ok(element));
+                }
+                true
+            })
         }
     }
     let mut dom = Dom::new();
     define(&mut dom, "x-edit", "x-edit", 20);
     let dom = parse_with_custom_element_host("<x-edit></x-edit>", dom, Box::new(MutatingHost));
-    let edited = element(&dom, "x-edit");
-    assert_eq!(dom.get_attribute_ns(edited, None, "constructed"), Some("yes"));
-    assert_eq!(dom.custom_element_state(edited), CustomElementState::Custom);
+    let selected = element(&dom, "x-edit");
+    let held = (0..dom.node_count()).map(|n| NodeIdx(n as u32)).find(|&n|
+        dom.name(n) == Some("x-edit") && dom.get_attribute_ns(n, None, "constructed") == Some("yes")).unwrap();
+    assert_ne!(held, selected);
+    assert_eq!(dom.get_attribute_ns(held, None, "constructed"), Some("yes"));
+    assert_eq!(dom.custom_element_state(held), CustomElementState::Custom);
+    assert_eq!(dom.custom_element_state(selected), CustomElementState::Failed);
+    assert!(dom.get_attribute_ns(selected, None, "constructed").is_none());
+    // The same authored mutation succeeds for a genuine customized upgrade.
+    let mut dom = Dom::new(); define(&mut dom, "x-edit-div", "div", 21);
+    let dom = parse_with_custom_element_host("<div is=x-edit-div></div>", dom, Box::new(MutatingHost));
+    let selected = element(&dom, "div");
+    assert_eq!(dom.get_attribute_ns(selected, None, "constructed"), Some("yes"));
+    assert_eq!(dom.custom_element_state(selected), CustomElementState::Custom);
 }
 
 #[test]
@@ -202,9 +246,52 @@ fn streamed_constructor_runs_before_token_attributes_and_children() {
     let mut dom = parser.finish();
     let card = element(&dom, "x-card");
     assert_eq!(trace.borrow().calls, vec![("x-card".into(), card, None,
-        CustomElementState::Precustomized)]);
+        CustomElementState::Custom)]);
     assert_eq!(dom.get_attribute_ns(card, None, "data-k"), Some("value"));
     assert!(dom.dump(NodeIdx(0)).contains("<span>"));
     assert!(matches!(dom.take_custom_element_reactions().as_slice(),
         [CustomElementReaction::AttributeChanged { .. }, CustomElementReaction::Connected { .. }]));
+}
+
+#[test]
+fn scoped_creation_releases_shared_parser_borrow_and_retains_terminal_failure() {
+    struct Reject { parser: Rc<RefCell<crate::ResumableParser>>, calls: usize }
+    impl crate::ParserElementCreationHost for Reject {
+        fn create(&mut self, _: &mut Dom, request: crate::ParserElementCreation)
+            -> Result<amazing_dom::render_mutation::NodeGeneration, amazing_dom::DomError> {
+            assert_eq!(request.local_name, "x-rejected");
+            // The actual persistent parser borrow is absent at this callback.
+            assert!(self.parser.try_borrow_mut().is_ok());
+            self.calls += 1;
+            Err(amazing_dom::DomError::InvalidStateError)
+        }
+    }
+    let parser = Rc::new(RefCell::new(crate::ResumableParser::new(Dom::new())));
+    parser.borrow_mut().push_source("<body><x-rejected></x-rejected><p>never</p>");
+    let mut host = Reject { parser: parser.clone(), calls: 0 };
+    assert_eq!(crate::ResumableParser::run_with_creation_host(&parser, &mut host), Err(amazing_dom::DomError::InvalidStateError));
+    assert_eq!(crate::ResumableParser::run_with_creation_host(&parser, &mut host), Err(amazing_dom::DomError::InvalidStateError));
+    assert_eq!(host.calls, 1);
+    assert!(!parser.borrow().dom().dump(NodeIdx(0)).contains("never"));
+}
+
+#[test]
+fn retired_scoped_parser_restores_actual_frame_without_consuming_later_tokens() {
+    struct Retire { parser: Rc<RefCell<crate::ResumableParser>> }
+    impl crate::ParserElementCreationHost for Retire {
+        fn create(&mut self, dom: &mut Dom, request: crate::ParserElementCreation)
+            -> Result<amazing_dom::render_mutation::NodeGeneration, amazing_dom::DomError> {
+            let node = mock_create(dom, request, |_, _, _| true)?;
+            assert!(!self.parser.borrow().execution_frame_available());
+            self.parser.borrow_mut().abort();
+            Ok(node)
+        }
+    }
+    let parser = Rc::new(RefCell::new(crate::ResumableParser::new(Dom::new())));
+    parser.borrow_mut().push_source("<body><x-retired></x-retired><p>later input</p>");
+    let mut host = Retire { parser: parser.clone() };
+    assert_eq!(crate::ResumableParser::run_with_creation_host(&parser, &mut host), Ok(crate::ParseSignal::Aborted));
+    assert!(parser.borrow().execution_frame_available());
+    assert!(!parser.borrow().dom().dump(NodeIdx(0)).contains("later input"));
+    assert_eq!(crate::ResumableParser::run_with_creation_host(&parser, &mut host), Ok(crate::ParseSignal::Aborted));
 }

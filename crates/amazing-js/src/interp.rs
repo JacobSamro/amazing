@@ -1977,6 +1977,7 @@ include!("interp_module_bytes.rs");
 include!("interp_module_source.rs");
 include!("interp_module_source_tests.rs");
 include!("interp_execution_contexts.rs");
+include!("interp_scheduled_microtask_inspection.rs");
 #[cfg(test)]
 #[path = "interp_execution_contexts_tests.rs"]
 mod execution_contexts_tests;

@@ -2,6 +2,27 @@
 use crate::host::{BindingHost, Operation as O};
 use amazing_dom::{Dom, DomError, Namespace, NodeIdx, NodeKind};
 
+/// Original native receiver custody retained across author conversions.
+pub(crate) struct ElementCapture<T> { pub node: NodeIdx, pub generation: u64, pub arena: T }
+pub(crate) fn capture_element<H: BindingHost>(host: &mut H, receiver: &H::Value)
+    -> Result<ElementCapture<H::DomCapture>, H::Error> {
+    let key = host.platform_object(receiver, crate::host::InterfaceBrand::NODE)
+        .ok_or_else(|| host.type_error("Expected an Element"))?;
+    let node = NodeIdx(u32::try_from(key.slot).map_err(|_| host.type_error("Invalid element slot"))?);
+    let arena = host.capture_dom(key.arena)?;
+    let capture = ElementCapture { node, generation: key.generation, arena };
+    with_element(host, &capture, |_| Ok(()))?;
+    Ok(capture)
+}
+pub(crate) fn with_element<H: BindingHost, R>(host: &mut H, capture: &ElementCapture<H::DomCapture>,
+    callback: impl FnOnce(&mut Dom) -> Result<R, DomError>) -> Result<R, H::Error> {
+    host.with_captured_dom(&capture.arena, |dom| {
+        if dom.node_generation(capture.node) != Some(capture.generation) { return Err(DomError::InvalidStateError); }
+        if !matches!(dom.get(capture.node).kind, NodeKind::Element { .. }) { return Err(DomError::TypeError); }
+        callback(dom)
+    })
+}
+
 pub(crate) fn handles(op: O) -> bool { matches!(op,
     O::ElementId | O::ElementSetId | O::HTMLTitle | O::HTMLSetTitle |
     O::HTMLLang | O::HTMLSetLang | O::HTMLDir | O::HTMLSetDir |
@@ -41,9 +62,7 @@ pub(crate) fn value(dom: &Dom, node: NodeIdx, name: &str) -> Vec<u16> {
     dom.attribute_utf16(node, name).unwrap_or_default()
 }
 pub(crate) fn set(dom: &mut Dom, node: NodeIdx, name: &str, units: Vec<u16>) -> Result<(), DomError> {
-    if dom.get_attribute_ns(node, None, name).is_none() { dom.set_attribute(node, name, "")?; }
-    let attr = dom.get_attribute_node(node, None, name).ok_or(DomError::InvalidStateError)?;
-    dom.set_attr_value(attr, units)
+    dom.set_attribute_ns_units(node, None, name, units)
 }
 fn default_tab_index(dom: &Dom, node: NodeIdx) -> i32 {
     let name = dom.name(node).unwrap_or("");
@@ -66,9 +85,10 @@ fn translation_enabled(dom: &Dom, mut node: NodeIdx) -> bool {
     }
 }
 pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H::Value]) -> Result<H::Value, H::Error> {
-    let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected an Element"))?;
+    let capture = capture_element(host, &receiver)?;
+    let node = capture.node;
     let html_only = !matches!(op, O::ElementId | O::ElementSetId);
-    host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Element { namespace: Namespace::Html, .. }) ||
+    with_element(host, &capture, |dom| if matches!(dom.get(node).kind, NodeKind::Element { namespace: Namespace::Html, .. }) ||
         (!html_only && matches!(dom.get(node).kind, NodeKind::Element { .. })) { Ok(()) } else { Err(DomError::TypeError) })?;
     let name = match op {
         O::ElementId | O::ElementSetId => "id",
@@ -84,7 +104,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
     if matches!(op, O::ElementSetId | O::HTMLSetTitle | O::HTMLSetLang | O::HTMLSetDir | O::HTMLSetAccessKey) {
         let arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let units = host.to_dom_string(arg)?;
-        host.with_dom(|dom| set(dom, node, name, units))?;
+        with_element(host, &capture, |dom| set(dom, node, name, units))?;
         return Ok(host.undefined());
     }
     if op == O::HTMLSetHidden {
@@ -92,40 +112,40 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         let string = host.string_units(arg);
         let until_found = string.as_ref().is_some_and(|s| ascii_lower(s) == "until-found".encode_utf16().collect::<Vec<_>>());
         let hidden = until_found || host.to_boolean(arg);
-        host.with_dom(|dom| if until_found { set(dom, node, name, "until-found".encode_utf16().collect()) }
+        with_element(host, &capture, |dom| if until_found { set(dom, node, name, "until-found".encode_utf16().collect()) }
             else if hidden { set(dom, node, name, Vec::new()) } else { dom.remove_attribute(node, name) })?;
         return Ok(host.undefined());
     }
     if op == O::HTMLSetTranslate {
         let arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let value = if host.to_boolean(arg) { "yes" } else { "no" };
-        host.with_dom(|dom| set(dom, node, name, value.encode_utf16().collect()))?;
+        with_element(host, &capture, |dom| set(dom, node, name, value.encode_utf16().collect()))?;
         return Ok(host.undefined());
     }
     if op == O::HTMLSetTabIndex {
         let arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let number = host.to_number(arg)?;
         let signed = if number.is_finite() { let modulo = number.trunc().rem_euclid(4_294_967_296.0) as u32; modulo as i32 } else { 0 };
-        host.with_dom(|dom| set(dom, node, name, signed.to_string().encode_utf16().collect()))?;
+        with_element(host, &capture, |dom| set(dom, node, name, signed.to_string().encode_utf16().collect()))?;
         return Ok(host.undefined());
     }
     if op == O::HTMLTranslate {
-        let enabled = host.with_dom(|dom| Ok(translation_enabled(dom, node)))?;
+        let enabled = with_element(host, &capture, |dom| Ok(translation_enabled(dom, node)))?;
         return Ok(host.boolean(enabled));
     }
     if op == O::HTMLTabIndex {
-        let index = host.with_dom(|dom| Ok(dom.attribute_utf16(node, "tabindex").and_then(|v| signed_long(&v))
+        let index = with_element(host, &capture, |dom| Ok(dom.attribute_utf16(node, "tabindex").and_then(|v| signed_long(&v))
             .unwrap_or_else(|| default_tab_index(dom, node))))?;
         return Ok(host.number(f64::from(index)));
     }
     if op == O::HTMLHidden {
-        let state = host.with_dom(|dom| Ok(dom.attribute_utf16(node, "hidden")))?;
+        let state = with_element(host, &capture, |dom| Ok(dom.attribute_utf16(node, "hidden")))?;
         if state.as_ref().is_some_and(|s| ascii_lower(s) == "until-found".encode_utf16().collect::<Vec<_>>()) {
             return host.string(&"until-found".encode_utf16().collect::<Vec<_>>());
         }
         return Ok(host.boolean(state.is_some()));
     }
-    let mut units = host.with_dom(|dom| Ok(value(dom, node, name)))?;
+    let mut units = with_element(host, &capture, |dom| Ok(value(dom, node, name)))?;
     if op == O::HTMLDir { units = keyword(&units, &["ltr", "rtl", "auto"]).unwrap_or_default(); }
     host.string(&units)
 }

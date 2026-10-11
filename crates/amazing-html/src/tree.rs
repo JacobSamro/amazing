@@ -140,31 +140,39 @@ enum FmtEntry {
     },
 }
 
-/// A parser-created element whose definition existed when its start tag was
-/// processed. The element already has the token's attributes but is detached.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParserConstruction {
-    pub document: NodeIdx,
-    pub element: NodeIdx,
+/// The public embedding callback now consumes authentic token creation inputs
+/// and returns the genuinely selected node, rather than a preallocated seed.
+pub type ParserConstruction = ParserElementCreation;
+pub use ParserElementCreationHost as ParserCustomElementHost;
+
+/// Actual token creation inputs, before attributes, children or insertion.
+#[derive(Clone, Debug)]
+pub struct ParserElementCreation {
+    pub document: amazing_dom::render_mutation::NodeGeneration,
     pub namespace: Namespace,
     pub local_name: String,
-    pub definition: usize,
-    pub constructor: CallbackId,
+    pub is_value: Option<Vec<u16>>,
+    pub attributes: Vec<(String, String)>,
+    pub fragment: bool,
 }
-
-/// Embedding callback for synchronous custom-element construction. The host
-/// calls `Dom::custom_element_super` when its constructor executes `super()`
-/// and returns true only if construction returned this same element. It may
-/// mutate the supplied DOM; the parser retains no borrow into the DOM across
-/// this call. Constructor exceptions are reported by the host and return false.
-pub trait ParserCustomElementHost {
-    fn construct(&mut self, dom: &mut Dom, request: ParserConstruction) -> bool;
+/// Borrowed shipping bridge. Its returned node belongs to this same parser
+/// arena after the embedding's genuine native mirror/completion checkpoint.
+pub trait ParserElementCreationHost {
+    fn create(&mut self, dom: &mut Dom, request: ParserElementCreation)
+        -> Result<amazing_dom::render_mutation::NodeGeneration, amazing_dom::DomError>;
+    /// Invoke the exact insertion queue before subsequent tree actions. The
+    /// default is the explicit non-script native embedding checkpoint.
+    fn inserted(&mut self, frame: &mut TreeBuilder<'_>, queue: amazing_dom::custom_elements::CustomElementReactionFrame)
+        -> Result<(), amazing_dom::DomError> {
+        frame.dom.custom_element_defer_reaction_frame(queue)
+    }
 }
 
 /// Tree-construction state machine producing a [`Dom`].
-pub struct TreeBuilder {
+pub struct TreeBuilder<'host> {
     dom: Dom,
     custom_element_host: Option<Box<dyn ParserCustomElementHost>>,
+    borrowed_creation_host: Option<&'host mut dyn ParserElementCreationHost>,
     mode: Mode,
     scripting_mode: ScriptingMode,
     /// Return mode for "text" (the "original insertion mode").
@@ -318,13 +326,124 @@ pub fn is_javascript_mime_type(value: &str) -> bool {
     )
 }
 
-impl Default for TreeBuilder {
+impl Default for TreeBuilder<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TreeBuilder {
+impl<'host> TreeBuilder<'host> {
+    pub(crate) fn borrow_creation_host<'a>(self, host: &'a mut dyn ParserElementCreationHost) -> TreeBuilder<'a> {
+        TreeBuilder {
+            dom: self.dom,
+            mode: self.mode,
+            scripting_mode: self.scripting_mode,
+            orig_mode: self.orig_mode,
+            table_text_return_mode: self.table_text_return_mode,
+            pending_table_text: self.pending_table_text,
+            open: self.open,
+            head: self.head,
+            form: self.form,
+            frameset_ok: self.frameset_ok,
+            document_mode: self.document_mode,
+            mode_locked: self.mode_locked,
+            skip_next_lf: self.skip_next_lf,
+            foster: self.foster,
+            fmt: self.fmt,
+            template_modes: self.template_modes,
+            shadow_templates: self.shadow_templates,
+            allow_declarative_shadow_roots: self.allow_declarative_shadow_roots,
+            fragment: self.fragment,
+            fragment_context: self.fragment_context,
+            fragment_context_namespace: self.fragment_context_namespace,
+            fragment_actual_context: self.fragment_actual_context,
+            fragment_context_attrs: self.fragment_context_attrs,
+            pending_script: self.pending_script,
+            script_events: self.script_events,
+            custom_element_host: self.custom_element_host,
+            borrowed_creation_host: Some(host),
+        }
+    }
+    pub(crate) fn release_creation_host(self) -> TreeBuilder<'static> {
+        TreeBuilder {
+            dom: self.dom,
+            mode: self.mode,
+            scripting_mode: self.scripting_mode,
+            orig_mode: self.orig_mode,
+            table_text_return_mode: self.table_text_return_mode,
+            pending_table_text: self.pending_table_text,
+            open: self.open,
+            head: self.head,
+            form: self.form,
+            frameset_ok: self.frameset_ok,
+            document_mode: self.document_mode,
+            mode_locked: self.mode_locked,
+            skip_next_lf: self.skip_next_lf,
+            foster: self.foster,
+            fmt: self.fmt,
+            template_modes: self.template_modes,
+            shadow_templates: self.shadow_templates,
+            allow_declarative_shadow_roots: self.allow_declarative_shadow_roots,
+            fragment: self.fragment,
+            fragment_context: self.fragment_context,
+            fragment_context_namespace: self.fragment_context_namespace,
+            fragment_actual_context: self.fragment_actual_context,
+            fragment_context_attrs: self.fragment_context_attrs,
+            pending_script: self.pending_script,
+            script_events: self.script_events,
+            custom_element_host: self.custom_element_host,
+            borrowed_creation_host: None,
+        }
+    }
+
+    /// Publish this exact execution frame during a reentrant insertion
+    /// callback. The vacant Rust shell is never registered or used as a DOM.
+    pub fn take_execution_frame(&mut self) -> TreeBuilder<'static> {
+        std::mem::replace(self, Self::new()).release_creation_host()
+    }
+    pub fn restore_execution_frame(&mut self, detached: TreeBuilder<'static>) {
+        *self = TreeBuilder {
+            dom: detached.dom,
+            mode: detached.mode,
+            scripting_mode: detached.scripting_mode,
+            orig_mode: detached.orig_mode,
+            table_text_return_mode: detached.table_text_return_mode,
+            pending_table_text: detached.pending_table_text,
+            open: detached.open,
+            head: detached.head,
+            form: detached.form,
+            frameset_ok: detached.frameset_ok,
+            document_mode: detached.document_mode,
+            mode_locked: detached.mode_locked,
+            skip_next_lf: detached.skip_next_lf,
+            foster: detached.foster,
+            fmt: detached.fmt,
+            template_modes: detached.template_modes,
+            shadow_templates: detached.shadow_templates,
+            allow_declarative_shadow_roots: detached.allow_declarative_shadow_roots,
+            fragment: detached.fragment,
+            fragment_context: detached.fragment_context,
+            fragment_context_namespace: detached.fragment_context_namespace,
+            fragment_actual_context: detached.fragment_actual_context,
+            fragment_context_attrs: detached.fragment_context_attrs,
+            pending_script: detached.pending_script,
+            script_events: detached.script_events,
+            custom_element_host: detached.custom_element_host,
+            borrowed_creation_host: None,
+        };
+    }
+    fn invoke_insertion_frame(&mut self, queue: amazing_dom::custom_elements::CustomElementReactionFrame)
+        -> Result<(), amazing_dom::DomError> {
+        if let Some(host) = self.borrowed_creation_host.take() {
+            let result = host.inserted(self, queue);
+            self.borrowed_creation_host = Some(host);
+            result
+        } else if let Some(mut host) = self.custom_element_host.take() {
+            let result = host.inserted(self, queue);
+            self.custom_element_host = Some(host);
+            result
+        } else { self.dom.custom_element_defer_reaction_frame(queue) }
+    }
     pub fn new() -> Self {
         let mut dom = Dom::new();
         dom.set_document_scripting_enabled(NodeIdx(0), true).expect("parser root is a document");
@@ -332,6 +451,7 @@ impl TreeBuilder {
         Self {
             dom,
             custom_element_host: None,
+            borrowed_creation_host: None,
             mode: Mode::Initial,
             scripting_mode: ScriptingMode::Enabled,
             orig_mode: Mode::Initial,
@@ -431,7 +551,7 @@ impl TreeBuilder {
     }
 
     /// Processes ONE token.
-    pub fn feed(&mut self, tok: Token) {
+    pub fn feed(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         let tok = if self.skip_next_lf {
             self.skip_next_lf = false;
             match tok {
@@ -441,8 +561,9 @@ impl TreeBuilder {
         } else {
             tok
         };
-        self.process_token(tok);
+        self.process_token(tok)?;
         self.foster = false;
+        Ok(())
     }
 
     /// Returns the finished tree, consuming the builder.
@@ -458,12 +579,12 @@ impl TreeBuilder {
 
     // ---- token routing ----
 
-    fn process_token(&mut self, tok: Token) {
+    fn process_token(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         // Pending table text must flush before every non-character token,
         // including the non-HTML processing-instruction extension below.
         if self.mode == Mode::InTableText {
-            self.in_table_text(tok);
-            return;
+            self.in_table_text(tok)?;
+            return Ok(());
         }
         if let Token::ProcessingInstruction { target, data } = &tok {
             let (parent, before) = match self.mode {
@@ -477,21 +598,22 @@ impl TreeBuilder {
                 _ => self.insertion_place(),
             };
             self.processing_instruction_into(parent, before, target, data);
-            return;
+            return Ok(());
         }
         if self.should_process_in_foreign_content(&tok) {
-            self.in_foreign_content(tok);
-            return;
+            self.in_foreign_content(tok)?;
+            return Ok(());
         }
-        self.process_token_in_html(tok);
+        self.process_token_in_html(tok)?;
+        Ok(())
     }
 
-    fn process_token_in_html(&mut self, tok: Token) {
+    fn process_token_in_html(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         if self.mode != Mode::Text && self.mode != Mode::InTableText {
             if tok == Token::Eof && self.stack_has("template") {
                 self.close_template();
-                self.process_token_in_html(tok);
-                return;
+                self.process_token_in_html(tok)?;
+                return Ok(());
             }
             // §13.2.6: only the modes that actually redirect a `template`
             // tag to "in head" rules (directly, or by cascading through "in
@@ -518,12 +640,12 @@ impl TreeBuilder {
             ) {
                 match &tok {
                     Token::StartTag { name, attrs, .. } if name == "template" => {
-                        self.start_template(attrs.clone());
-                        return;
+                        self.start_template(attrs.clone())?;
+                        return Ok(());
                     },
                     Token::EndTag { name } if name == "template" => {
                         self.close_template();
-                        return;
+                        return Ok(());
                     },
                     _ => {},
                 }
@@ -539,27 +661,27 @@ impl TreeBuilder {
             _ => None,
         };
         match self.mode {
-            Mode::Initial => self.initial(tok),
-            Mode::BeforeHtml => self.before_html(tok),
-            Mode::BeforeHead => self.before_head(tok),
-            Mode::InHead => self.in_head(tok),
-            Mode::InHeadNoscript => self.in_head_noscript(tok),
-            Mode::InTemplate => self.in_template(tok),
-            Mode::AfterHead => self.after_head(tok),
-            Mode::InBody => self.in_body(tok),
-            Mode::Text => self.text_mode(tok),
-            Mode::InTable => self.in_table(tok),
+            Mode::Initial => self.initial(tok)?,
+            Mode::BeforeHtml => self.before_html(tok)?,
+            Mode::BeforeHead => self.before_head(tok)?,
+            Mode::InHead => self.in_head(tok)?,
+            Mode::InHeadNoscript => self.in_head_noscript(tok)?,
+            Mode::InTemplate => self.in_template(tok)?,
+            Mode::AfterHead => self.after_head(tok)?,
+            Mode::InBody => self.in_body(tok)?,
+            Mode::Text => self.text_mode(tok)?,
+            Mode::InTable => self.in_table(tok)?,
             Mode::InTableText => unreachable!("handled before token routing"),
-            Mode::InTableBody => self.in_table_body(tok),
-            Mode::InRow => self.in_row(tok),
-            Mode::InCell => self.in_cell(tok),
-            Mode::InCaption => self.in_caption(tok),
-            Mode::InColumnGroup => self.in_column_group(tok),
-            Mode::InFrameset => self.in_frameset(tok),
-            Mode::AfterFrameset => self.after_frameset(tok),
-            Mode::AfterAfterFrameset => self.after_after_frameset(tok),
-            Mode::AfterBody => self.after_body(tok),
-            Mode::AfterAfterBody => self.after_after_body(tok),
+            Mode::InTableBody => self.in_table_body(tok)?,
+            Mode::InRow => self.in_row(tok)?,
+            Mode::InCell => self.in_cell(tok)?,
+            Mode::InCaption => self.in_caption(tok)?,
+            Mode::InColumnGroup => self.in_column_group(tok)?,
+            Mode::InFrameset => self.in_frameset(tok)?,
+            Mode::AfterFrameset => self.after_frameset(tok)?,
+            Mode::AfterAfterFrameset => self.after_after_frameset(tok)?,
+            Mode::AfterBody => self.after_body(tok)?,
+            Mode::AfterAfterBody => self.after_after_body(tok)?,
         }
         if let Some((namespace, name)) = self_closing_foreign_root {
             if self.current().is_some_and(|current| {
@@ -568,7 +690,8 @@ impl TreeBuilder {
             }) {
                 self.open.pop();
             }
-        }
+        };
+        Ok(())
     }
 
     // ---- small queries ----
@@ -810,7 +933,7 @@ impl TreeBuilder {
         name: &str,
         mut attrs: Vec<(String, String)>,
         namespace: Namespace,
-    ) -> NodeIdx {
+    ) -> Result<NodeIdx, amazing_dom::DomError> {
         let local_name = if namespace == Namespace::Svg {
             Self::adjusted_svg_tag_name(name)
         } else {
@@ -847,9 +970,9 @@ impl TreeBuilder {
             self.dom.set_attribute_expanded(idx, Some(uri), prefix, local_name, &value)
                 .expect("foreign attribute table has valid expanded identities");
         }
-        self.insert_parser_element(parent, before, idx);
+        self.insert_parser_element(parent, before, idx)?;
         self.open.push(idx);
-        idx
+        Ok(idx)
     }
 
     /// Generic scope walk (§13.2.4.3): scan top-down; terminate on a match
@@ -920,15 +1043,21 @@ impl TreeBuilder {
 
     /// Parser insertion silently drops an element after a script has made
     /// its target full or cyclic, rather than surfacing a DOM exception.
-    fn insert_parser_element(&mut self, parent: NodeIdx, before: Option<NodeIdx>, node: NodeIdx) {
+    fn insert_parser_element(&mut self, parent: NodeIdx, before: Option<NodeIdx>, node: NodeIdx) -> Result<(), amazing_dom::DomError> {
         if self.dom.get(node).parent.is_some()
             || self.dom.is_host_including_inclusive_ancestor(node, parent)
             || (matches!(self.dom.get(parent).kind, NodeKind::Document)
                 && self.dom.document_element(parent).ok().flatten().is_some())
             || before.is_some_and(|child| self.dom.get(child).parent != Some(parent)) {
-            return;
+            return Ok(());
         }
+        if !self.fragment { self.dom.custom_element_push_reaction_frame(); }
         self.dom.attach_before(parent, before, node);
+        if !self.fragment {
+            let queue = self.dom.custom_element_pop_isolated_reaction_frame()?;
+            self.invoke_insertion_frame(queue)?;
+        }
+        Ok(())
     }
 
     /// Appropriate insertion location `(parent, before-sibling)`. Honours
@@ -1010,66 +1139,73 @@ impl TreeBuilder {
         &mut self,
         name: &str,
         attrs: Vec<(String, String)>,
-    ) -> NodeIdx {
+    ) -> Result<NodeIdx, amazing_dom::DomError> {
         self.create_parser_element(name, attrs, true)
     }
 
-    fn create_parser_element(&mut self, name: &str, attrs: Vec<(String, String)>, insert: bool) -> NodeIdx {
+    fn create_parser_element(&mut self, name: &str, attrs: Vec<(String, String)>, insert: bool) -> Result<NodeIdx, amazing_dom::DomError> {
         let (parent, before) = self.insertion_place();
         let document = self.dom.owner_document(parent).unwrap_or(NodeIdx(0));
         let is_name = attrs.iter().find(|(name, _)| name == "is").map(|(_, value)| value.clone());
+        let sanitized_custom = (Dom::valid_custom_element_name(name) || is_name.is_some())
+            && self.inside_safe_patch_template();
+        if sanitized_custom {
+            // Dropped by the safe sanitizer: a detached plain element whose
+            // subtree never reaches the document. No definition is consulted.
+            let idx = self.alloc_element(name, Vec::new(), document);
+            for (name, value) in attrs {
+                self.dom.set_attribute(idx, &name, &value).expect("parser attribute");
+            }
+            return Ok(idx);
+        }
+        if (Dom::valid_custom_element_name(name) || is_name.is_some())
+            && (self.borrowed_creation_host.is_some() || self.custom_element_host.is_some()) {
+            let document = amazing_dom::render_mutation::NodeGeneration { node: document,
+                generation: self.dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidStateError)? };
+            let request = ParserElementCreation { document, namespace: Namespace::Html,
+                local_name: name.to_owned(), is_value: is_name.as_deref().map(|value| value.encode_utf16().collect()),
+                attributes: attrs, fragment: self.fragment };
+            let host: &mut dyn ParserElementCreationHost = if let Some(host) = self.borrowed_creation_host.as_mut() {
+                &mut **host
+            } else { &mut **self.custom_element_host.as_mut().expect("creation host checked") };
+            let selected = host.create(&mut self.dom, request)?;
+            if self.dom.node_generation(selected.node) != Some(selected.generation) { return Err(amazing_dom::DomError::InvalidStateError); }
+            if insert { self.insert_parser_element(parent, before, selected.node)?; }
+            return Ok(selected.node);
+        }
         let idx = self.alloc_element(name, Vec::new(), document);
-        // The registry is owned by DOM. A missing host or definition keeps the
-        // ordinary parser path, leaving an undefined element upgradeable later.
-        let definition = if self.custom_element_host.is_some() {
-            self.dom.custom_element_definitions(document).into_iter()
-                .find(|(_, definition)| definition.local_name == name
-                    && (definition.name == name || is_name.as_deref() == Some(definition.name.as_str())))
-                .map(|(id, _)| id)
-        } else {
-            None
-        };
-        let construction = definition.and_then(|definition| {
-            self.dom.begin_custom_element_upgrade(idx, definition).ok().map(|constructor| {
-                let request = ParserConstruction {
-                    document, element: idx, namespace: Namespace::Html,
-                    local_name: name.to_owned(), definition, constructor,
-                };
-                let constructed = self.custom_element_host.as_mut().expect("host checked")
-                    .construct(&mut self.dom, request);
-                (definition, constructed)
-            })
-        });
+        // The token supplies the immutable creation is value. This UTF-8
+        // tokenizer already decoded the input; encode its actual units once.
+        // Later content-attribute edits never redefine this native slot.
+        let is_units = is_name.as_deref().map(|value| value.encode_utf16().collect::<Vec<_>>());
+        let generation = self.dom.node_generation(idx).expect("new parser element");
+        self.dom.initialize_custom_element_is_value(idx, generation, is_units.as_deref())
+            .expect("new parser creation is value");
         for (name, value) in attrs {
             self.dom.set_attribute(idx, &name, &value).expect("parser attribute");
         }
-        if let Some((definition, constructed)) = construction {
-            // Initial attribute reactions precede connected reactions, and
-            // both precede insertion of the token's children.
-            let _ = self.dom.finish_custom_element_upgrade(idx, definition, constructed);
-        }
-        if insert { self.insert_parser_element(parent, before, idx); }
+        if insert { self.insert_parser_element(parent, before, idx)?; }
         // With no host, a preexisting definition remains eligible for a
         // later DOM-14 upgrade. With no definition this is a no-op.
-        if construction.is_none() { self.dom.queue_custom_element_upgrade(idx); }
-        idx
+        self.dom.queue_custom_element_upgrade(idx);
+        Ok(idx)
     }
 
     fn insert_and_push(
         &mut self,
         name: &str,
         attrs: Vec<(String, String)>,
-    ) -> NodeIdx {
-        let idx = self.insert_element(name, attrs);
+    ) -> Result<NodeIdx, amazing_dom::DomError> {
+        let idx = self.insert_element(name, attrs)?;
         self.open.push(idx);
-        idx
+        Ok(idx)
     }
 
     fn insert_void(
         &mut self,
         name: &str,
         attrs: Vec<(String, String)>,
-    ) -> NodeIdx {
+    ) -> Result<NodeIdx, amazing_dom::DomError> {
         debug_assert!(VOID_ELEMENTS.contains(&name));
         self.insert_element(name, attrs)
     }
@@ -1150,10 +1286,11 @@ impl TreeBuilder {
         &mut self,
         name: &str,
         attrs: Vec<(String, String)>,
-    ) {
-        self.insert_and_push(name, attrs);
+    ) -> Result<(), amazing_dom::DomError> {
+        self.insert_and_push(name, attrs)?;
         self.orig_mode = self.mode;
         self.mode = Mode::Text;
+        Ok(())
     }
 
     // ---- stack surgery ----
@@ -1308,16 +1445,16 @@ impl TreeBuilder {
     /// entries whose element is on the open-element stack act as barriers;
     /// everything after the deepest barrier is cloned afresh at the current
     /// insertion point and its entry re-pointed at the clone.
-    fn reconstruct(&mut self) {
+    fn reconstruct(&mut self) -> Result<(), amazing_dom::DomError> {
         if self.fmt.is_empty() {
-            return;
+            return Ok(());
         }
         let barrier_at_top = match &self.fmt[self.fmt.len() - 1] {
             FmtEntry::Marker => true,
             FmtEntry::Element { idx, .. } => self.stack_contains(*idx),
         };
         if barrier_at_top {
-            return;
+            return Ok(());
         }
         // Rewind: walk back while the previous entry is neither a marker nor
         // on the stack; `start` ends at the first entry needing recreation.
@@ -1342,41 +1479,42 @@ impl TreeBuilder {
             };
             // Recreated elements join the stack of open elements, so the
             // next token nests inside the youngest of them.
-            let idx = self.insert_and_push(&name, attrs);
+            let idx = self.insert_and_push(&name, attrs)?;
             if let FmtEntry::Element { idx: slot, .. } = &mut self.fmt[i] {
                 *slot = idx;
             }
             i += 1;
-        }
+        };
+        Ok(())
     }
 
     // ---- adoption agency (§13.2.6.5) ----
 
     /// Runs the spec-bounded outer loop (at most eight reparenting passes).
-    fn adoption_agency(&mut self, subject: &str) {
+    fn adoption_agency(&mut self, subject: &str) -> Result<(), amazing_dom::DomError> {
         // Current node is the subject yet absent from the fmt list: pop it.
         if let Some(cur) = self.current() {
             let is_subject = self.dom.name(cur) == Some(subject);
             if is_subject && self.fmt_pos_by_idx(cur).is_none() {
                 self.open.pop();
-                return;
+                return Ok(());
             }
         }
         for _outer in 0..8 {
             let Some(fe_fmt_pos) = self.fmt_pos_last_named(subject) else {
                 self.any_other_end_tag(subject);
-                return;
+                return Ok(());
             };
             let fe_idx = self.fmt_idx_at(fe_fmt_pos);
 
             let Some(fe_stack_pos) = self.open.iter().position(|&i| i == fe_idx)
             else {
                 self.fmt.remove(fe_fmt_pos);
-                return;
+                return Ok(());
             };
 
             if !self.has_in_scope(subject) {
-                return;
+                return Ok(());
             }
 
             // Furthest block: topmost special-category element below fe.
@@ -1394,7 +1532,7 @@ impl TreeBuilder {
                     }
                 }
                 self.fmt.remove(fe_fmt_pos);
-                return;
+                return Ok(());
             };
 
             // ---- one reparenting pass ----
@@ -1482,7 +1620,7 @@ impl TreeBuilder {
             // full rather than erroring; `last_node` is left detached.
             self.dom.detach(last_node);
             let (parent, before) = self.adjusted_insertion_place_for(common);
-            self.insert_parser_element(parent, before, last_node);
+            self.insert_parser_element(parent, before, last_node)?;
 
             // Clone the formatting element; adopt furthest block's children.
             let (fname, fattrs) = self.elem_name_attrs(fe_idx);
@@ -1520,7 +1658,8 @@ impl TreeBuilder {
                 .unwrap_or(self.open.len());
             self.open.insert(fb_now.saturating_add(1), fe_clone);
 
-        }
+        };
+        Ok(())
     }
 
     /// "Any other end tag": walk the stack top-down; on the first name match
@@ -1543,21 +1682,24 @@ impl TreeBuilder {
 
     // ---- implied structure synthesis ----
 
-    fn implied_html(&mut self) {
-        self.insert_and_push("html", Vec::new());
+    fn implied_html(&mut self) -> Result<(), amazing_dom::DomError> {
+        self.insert_and_push("html", Vec::new())?;
         self.mode = Mode::BeforeHead;
+        Ok(())
     }
 
-    fn implied_head(&mut self) {
-        let idx = self.insert_and_push("head", Vec::new());
+    fn implied_head(&mut self) -> Result<(), amazing_dom::DomError> {
+        let idx = self.insert_and_push("head", Vec::new())?;
         self.head = Some(idx);
         self.mode = Mode::InHead;
+        Ok(())
     }
 
-    fn implied_body(&mut self) {
-        self.insert_and_push("body", Vec::new());
+    fn implied_body(&mut self) -> Result<(), amazing_dom::DomError> {
+        self.insert_and_push("body", Vec::new())?;
         self.frameset_ok = true;
         self.mode = Mode::InBody;
+        Ok(())
     }
 
     /// Close an open `p` in button scope, if any.
@@ -1663,7 +1805,7 @@ impl TreeBuilder {
 
     // ---- insertion modes ----
 
-    fn initial(&mut self, tok: Token) {
+    fn initial(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Doctype { name, public_id, system_id, force_quirks } => {
                 if !self.mode_locked {
@@ -1686,24 +1828,25 @@ impl TreeBuilder {
                 if !data.chars().all(is_ws_char) {
                     if !self.mode_locked { self.set_document_mode(doctype::DocumentMode::Quirks); }
                     self.mode = Mode::BeforeHtml;
-                    self.before_html(Token::Characters(data));
+                    self.before_html(Token::Characters(data))?;
                 }
             },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
             other => {
                 if !self.mode_locked { self.set_document_mode(doctype::DocumentMode::Quirks); }
                 self.mode = Mode::BeforeHtml;
-                self.before_html(other);
+                self.before_html(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn before_html(&mut self, tok: Token) {
+    fn before_html(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 if !data.chars().all(is_ws_char) {
-                    self.implied_html();
-                    self.before_head(Token::Characters(data));
+                    self.implied_html()?;
+                    self.before_head(Token::Characters(data))?;
                 }
             },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
@@ -1711,31 +1854,32 @@ impl TreeBuilder {
             Token::StartTag { ref name, attrs, self_closing: _ }
                 if name == "html" =>
             {
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
                 self.mode = Mode::BeforeHead;
             },
             Token::EndTag { ref name }
                 if matches!(name.as_str(), "head" | "body" | "html" | "br") =>
             {
-                self.implied_html();
-                self.before_head(Token::EndTag { name: name.clone() });
+                self.implied_html()?;
+                self.before_head(Token::EndTag { name: name.clone() })?;
             },
             other => {
-                self.implied_html();
-                self.before_head(other);
+                self.implied_html()?;
+                self.before_head(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn before_head(&mut self, tok: Token) {
+    fn before_head(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 let first_non_whitespace = data
                     .char_indices()
                     .find_map(|(index, c)| (!is_ws_char(c)).then_some(index));
                 if let Some(index) = first_non_whitespace {
-                    self.implied_head();
-                    self.in_head(Token::Characters(data[index..].to_owned()));
+                    self.implied_head()?;
+                    self.in_head(Token::Characters(data[index..].to_owned()))?;
                 }
             },
             Token::Comment(data) => self.insert_comment_here(&data),
@@ -1743,15 +1887,15 @@ impl TreeBuilder {
             Token::StartTag { ref name, attrs, self_closing: _ }
                 if name == "head" =>
             {
-                let idx = self.insert_and_push(name, attrs);
+                let idx = self.insert_and_push(name, attrs)?;
                 self.head = Some(idx);
                 self.mode = Mode::InHead;
             },
             Token::EndTag { ref name }
                 if matches!(name.as_str(), "head" | "body" | "html" | "br") =>
             {
-                self.implied_head();
-                self.in_head(Token::EndTag { name: name.clone() });
+                self.implied_head()?;
+                self.in_head(Token::EndTag { name: name.clone() })?;
             },
             // §13.2.6.4.3 "before head", "any other end tag": parse error,
             // ignore the token -- this must NOT fall into the catch-all
@@ -1763,10 +1907,11 @@ impl TreeBuilder {
             // (html5lib tests19.dat case 2: `<html></p><!--foo-->`).
             Token::EndTag { .. } => {},
             other => {
-                self.implied_head();
-                self.in_head(other);
+                self.implied_head()?;
+                self.in_head(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
     fn leave_head(&mut self) {
@@ -1778,7 +1923,7 @@ impl TreeBuilder {
         self.mode = Mode::AfterHead;
     }
 
-    fn start_template(&mut self, attrs: Vec<(String, String)>) {
+    fn start_template(&mut self, attrs: Vec<(String, String)>) -> Result<(), amazing_dom::DomError> {
         let mode = attrs.iter().find(|(name, _)| name == "shadowrootmode")
             .and_then(|(_, value)| match value.to_ascii_lowercase().as_str() {
                 "open" => Some(ShadowMode::Open), "closed" => Some(ShadowMode::Closed), _ => None,
@@ -1811,23 +1956,24 @@ impl TreeBuilder {
                 self.dom.document_body(document).ok().flatten()) == Some(scope) {
                 self.dom.get(scope).parent.unwrap_or(scope)
             } else { scope };
-            let template = self.create_parser_element("template", attrs, false);
+            let template = self.create_parser_element("template", attrs, false)?;
             self.open.push(template);
             if !self.prepare_content_patching(scope, template) {
                 self.open.pop();
                 let (parent, before) = self.insertion_place();
-                self.insert_parser_element(parent, before, template);
+                self.insert_parser_element(parent, before, template)?;
                 self.open.push(template);
             }
             template
         } else {
-            self.insert_and_push("template", attrs)
+            self.insert_and_push("template", attrs)?
         };
         self.dom.ensure_template_contents(template).expect("HTML template contents");
         self.fmt.push(FmtEntry::Marker);
         self.frameset_ok = false;
         self.mode = Mode::InTemplate;
         self.template_modes.push(Mode::InTemplate);
+        Ok(())
     }
 
     fn close_template(&mut self) {
@@ -1843,11 +1989,11 @@ impl TreeBuilder {
         self.reset_insertion_mode();
     }
 
-    fn in_template(&mut self, tok: Token) {
+    fn in_template(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match &tok {
-            Token::Characters(_) | Token::Comment(_) | Token::Doctype { .. } => self.in_body(tok),
+            Token::Characters(_) | Token::Comment(_) | Token::Doctype { .. } => self.in_body(tok)?,
             Token::StartTag { name, .. } if matches!(name.as_str(),
-                "base" | "basefont" | "bgsound" | "link" | "meta" | "noframes" | "script" | "style" | "title") => self.in_head(tok),
+                "base" | "basefont" | "bgsound" | "link" | "meta" | "noframes" | "script" | "style" | "title") => self.in_head(tok)?,
             Token::StartTag { name, .. } => {
                 let next = match name.as_str() {
                     "caption" | "colgroup" | "tbody" | "tfoot" | "thead" => Mode::InTable,
@@ -1858,15 +2004,16 @@ impl TreeBuilder {
                 };
                 *self.template_modes.last_mut().expect("template mode") = next;
                 self.mode = next;
-                self.process_token(tok);
+                self.process_token(tok)?;
             },
             Token::EndTag { .. } => {},
             Token::Eof => {},
             Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
-        }
+        };
+        Ok(())
     }
 
-    fn in_head(&mut self, tok: Token) {
+    fn in_head(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 let first_non_whitespace = data
@@ -1877,7 +2024,7 @@ impl TreeBuilder {
                         self.insert_text(&data[..index]);
                     }
                     self.leave_head();
-                    self.after_head(Token::Characters(data[index..].to_owned()));
+                    self.after_head(Token::Characters(data[index..].to_owned()))?;
                 } else {
                     self.insert_text(&data);
                 }
@@ -1887,16 +2034,16 @@ impl TreeBuilder {
             Token::StartTag { ref name, attrs, self_closing } => {
                 match name.as_str() {
                     "base" | "basefont" | "bgsound" | "link" | "meta" => {
-                        self.insert_void(name, attrs);
+                        self.insert_void(name, attrs)?;
                     },
                     "noscript" if self.scripting_mode == ScriptingMode::Disabled => {
-                        self.insert_and_push(name, attrs);
+                        self.insert_and_push(name, attrs)?;
                         self.mode = Mode::InHeadNoscript;
                     },
                     "title" | "noframes" | "style" | "script" | "noscript" => {
-                        self.start_generic_text_element(name, attrs);
+                        self.start_generic_text_element(name, attrs)?;
                     },
-                    "template" => self.start_template(attrs),
+                    "template" => self.start_template(attrs)?,
                     "head" => {},
                     _ => {
                         self.leave_head();
@@ -1904,7 +2051,7 @@ impl TreeBuilder {
                             name: name.clone(),
                             attrs,
                             self_closing,
-                        });
+                        })?;
                     },
                 }
             },
@@ -1912,26 +2059,27 @@ impl TreeBuilder {
                 "head" => self.leave_head(),
                 "body" | "html" | "br" => {
                     self.leave_head();
-                    self.after_head(Token::EndTag { name: name.clone() });
+                    self.after_head(Token::EndTag { name: name.clone() })?;
                 },
                 "template" => self.close_template(),
                 _ => {},
             },
             other => {
                 self.leave_head();
-                self.after_head(other);
+                self.after_head(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn after_head(&mut self, tok: Token) {
+    fn after_head(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 if data.chars().all(is_ws_char) {
                     self.insert_text(&data);
                 } else {
-                    self.implied_body();
-                    self.in_body(Token::Characters(data));
+                    self.implied_body()?;
+                    self.in_body(Token::Characters(data))?;
                 }
             },
             Token::Comment(data) => self.insert_comment_here(&data),
@@ -1939,12 +2087,12 @@ impl TreeBuilder {
             Token::StartTag { ref name, attrs, self_closing } => {
                 match name.as_str() {
                     "body" => {
-                        self.insert_and_push(name, attrs);
+                        self.insert_and_push(name, attrs)?;
                         self.frameset_ok = false;
                         self.mode = Mode::InBody;
                     },
                     "frameset" => {
-                        self.insert_and_push("frameset", attrs);
+                        self.insert_and_push("frameset", attrs)?;
                         self.mode = Mode::InFrameset;
                     },
                     "base" | "basefont" | "bgsound" | "link" | "meta"
@@ -1955,7 +2103,7 @@ impl TreeBuilder {
                                 name: name.clone(),
                                 attrs,
                                 self_closing,
-                            });
+                            })?;
                             if let Some(position) =
                                 self.open.iter().position(|&node| node == head)
                             {
@@ -1964,41 +2112,43 @@ impl TreeBuilder {
                         }
                     },
                     _ => {
-                        self.implied_body();
+                        self.implied_body()?;
                         self.in_body(Token::StartTag {
                             name: name.clone(),
                             attrs,
                             self_closing,
-                        });
+                        })?;
                     },
                 }
             },
             Token::EndTag { ref name }
                 if matches!(name.as_str(), "body" | "html" | "br") =>
             {
-                self.implied_body();
-                self.in_body(Token::EndTag { name: name.clone() });
+                self.implied_body()?;
+                self.in_body(Token::EndTag { name: name.clone() })?;
             },
             Token::EndTag { .. } => {},
             other => {
-                self.implied_body();
-                self.in_body(other);
+                self.implied_body()?;
+                self.in_body(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn in_body(&mut self, tok: Token) {
+    fn in_body(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
-            Token::Characters(data) => self.in_body_characters(&data),
+            Token::Characters(data) => self.in_body_characters(&data)?,
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
             Token::StartTag { name, attrs, self_closing: _ } => {
-                self.in_body_start_tag(&name, attrs)
+                self.in_body_start_tag(&name, attrs)?
             },
-            Token::EndTag { name } => self.in_body_end_tag(&name),
+            Token::EndTag { name } => self.in_body_end_tag(&name)?,
             Token::Eof => {},
             Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
-        }
+        };
+        Ok(())
     }
 
     /// "In body" ignores a character token that is U+0000 NULL outright (§13.2.6.4.7):
@@ -2007,23 +2157,24 @@ impl TreeBuilder {
     /// data/plaintext replace it with U+FFFD there), so this mode must drop any
     /// embedded NUL from a batched character run before deciding what to do with
     /// the rest of it.
-    fn in_body_characters(&mut self, data: &str) {
+    fn in_body_characters(&mut self, data: &str) -> Result<(), amazing_dom::DomError> {
         if data.is_empty() {
-            return;
+            return Ok(());
         }
         let owned = data.contains('\0').then(|| data.chars().filter(|&c| c != '\0').collect::<String>());
         let text = owned.as_deref().unwrap_or(data);
         if text.is_empty() {
-            return;
+            return Ok(());
         }
-        self.reconstruct();
+        self.reconstruct()?;
         if text.chars().any(|c| !is_ws_char(c)) {
             self.frameset_ok = false;
         }
         self.insert_text(text);
+        Ok(())
     }
 
-    fn in_body_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) {
+    fn in_body_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) -> Result<(), amazing_dom::DomError> {
         match name {
             // §13.2.6.4.7 "in body", start tag `html`: if a `template` is on
             // the stack of open elements, ignore the token outright instead
@@ -2044,7 +2195,7 @@ impl TreeBuilder {
                     name: name.to_owned(),
                     attrs,
                     self_closing: false,
-                });
+                })?;
             },
             // §13.2.6.4.7 "in body", start tag `body`: ignore the token
             // entirely (including leaving `frameset_ok` untouched) unless a
@@ -2072,11 +2223,11 @@ impl TreeBuilder {
                     || self.dom.name(self.open[1]) != Some("body")
                     || !self.frameset_ok
                 {
-                    return;
+                    return Ok(());
                 }
                 self.dom.detach(self.open[1]);
                 self.open.truncate(1);
-                self.insert_and_push("frameset", attrs);
+                self.insert_and_push("frameset", attrs)?;
                 self.mode = Mode::InFrameset;
             },
             "address" | "article" | "aside" | "blockquote" | "center"
@@ -2085,7 +2236,7 @@ impl TreeBuilder {
             | "main" | "menu" | "nav" | "ol" | "p" | "search" | "section" | "summary"
             | "ul" => {
                 self.close_p_element();
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
             },
             "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
                 self.close_p_element();
@@ -2097,30 +2248,30 @@ impl TreeBuilder {
                         self.open.pop();
                     }
                 }
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
             },
             "pre" | "listing" => {
                 self.close_p_element();
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
                 self.skip_next_lf = true;
                 self.frameset_ok = false;
             },
             "form" => {
-                self.start_form(attrs);
+                self.start_form(attrs)?;
             },
             "li" => {
                 self.frameset_ok = false;
                 self.close_list_item_like(&["li"]);
-                self.insert_and_push("li", attrs);
+                self.insert_and_push("li", attrs)?;
             },
             "dd" | "dt" => {
                 self.frameset_ok = false;
                 self.close_list_item_like(&["dd", "dt"]);
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
             },
             "plaintext" => {
                 self.close_p_element();
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
                 self.frameset_ok = false;
             },
             "button" => {
@@ -2128,14 +2279,14 @@ impl TreeBuilder {
                     self.generate_implied_end_tags(None);
                     self.pop_until("button");
                 }
-                self.reconstruct();
-                self.insert_and_push("button", attrs);
+                self.reconstruct()?;
+                self.insert_and_push("button", attrs)?;
                 self.frameset_ok = false;
             },
             "a" => {
                 if let Some(old_pos) = self.fmt_pos_last_named("a") {
                     let old_anchor = self.fmt_idx_at(old_pos);
-                    self.adoption_agency("a");
+                    self.adoption_agency("a")?;
                     if let Some(position) = self.fmt_pos_by_idx(old_anchor) {
                         self.fmt.remove(position);
                     }
@@ -2147,46 +2298,46 @@ impl TreeBuilder {
                         self.open.remove(position);
                     }
                 }
-                self.reconstruct();
-                let idx = self.insert_and_push("a", attrs.clone());
+                self.reconstruct()?;
+                let idx = self.insert_and_push("a", attrs.clone())?;
                 self.push_fmt(idx, "a".to_owned(), attrs);
             },
             "b" | "big" | "code" | "em" | "font" | "i" | "s" | "small"
             | "strike" | "strong" | "tt" | "u" => {
-                self.reconstruct();
+                self.reconstruct()?;
                 let owned = name.to_owned();
-                let idx = self.insert_and_push(name, attrs.clone());
+                let idx = self.insert_and_push(name, attrs.clone())?;
                 self.push_fmt(idx, owned, attrs);
             },
             "nobr" => {
-                self.reconstruct();
+                self.reconstruct()?;
                 if self.has_in_button_scope("nobr") {
-                    self.adoption_agency("nobr");
-                    self.reconstruct();
+                    self.adoption_agency("nobr")?;
+                    self.reconstruct()?;
                 }
-                let idx = self.insert_and_push("nobr", attrs.clone());
+                let idx = self.insert_and_push("nobr", attrs.clone())?;
                 self.push_fmt(idx, "nobr".to_owned(), attrs);
             },
             "applet" | "marquee" | "object" => {
-                self.reconstruct();
-                self.insert_and_push(name, attrs);
+                self.reconstruct()?;
+                self.insert_and_push(name, attrs)?;
                 self.fmt.push(FmtEntry::Marker);
                 self.frameset_ok = false;
             },
             "table" => {
                 if self.document_mode != doctype::DocumentMode::Quirks { self.close_p_element(); }
-                self.insert_and_push("table", attrs);
+                self.insert_and_push("table", attrs)?;
                 self.frameset_ok = false;
                 self.mode = Mode::InTable;
             },
             "area" | "br" | "embed" | "img" | "keygen" | "wbr" => {
-                self.reconstruct();
-                self.insert_void(name, attrs);
+                self.reconstruct()?;
+                self.insert_void(name, attrs)?;
                 self.frameset_ok = false;
             },
             "input" => {
                 if self.fragment && self.fragment_context.as_deref() == Some("select") {
-                    return;
+                    return Ok(());
                 }
                 if self.has_in_scope("select") {
                     self.pop_until("select");
@@ -2195,8 +2346,8 @@ impl TreeBuilder {
                 let hidden = attrs.iter().any(|(attr, value)| {
                     attr == "type" && value.eq_ignore_ascii_case("hidden")
                 });
-                self.reconstruct();
-                self.insert_void("input", attrs);
+                self.reconstruct()?;
+                self.insert_void("input", attrs)?;
                 if !hidden {
                     self.frameset_ok = false;
                 }
@@ -2206,19 +2357,19 @@ impl TreeBuilder {
                 if self.has_in_scope("select") {
                     self.generate_implied_end_tags(None);
                 }
-                self.insert_void("hr", attrs);
+                self.insert_void("hr", attrs)?;
                 self.frameset_ok = false;
             },
             "image" => {
                 // Parse-error alias rewritten to img (§13.2.6.4.7).
-                self.in_body_start_tag("img", attrs);
+                self.in_body_start_tag("img", attrs)?;
             },
             "param" | "source" | "track" => {
-                self.insert_void(name, attrs);
+                self.insert_void(name, attrs)?;
             },
             "textarea" => {
                 self.close_p_element();
-                self.insert_and_push("textarea", attrs);
+                self.insert_and_push("textarea", attrs)?;
                 self.skip_next_lf = true;
                 self.frameset_ok = false;
                 self.orig_mode = Mode::InBody;
@@ -2226,7 +2377,7 @@ impl TreeBuilder {
             },
             "xmp" => {
                 self.close_p_element();
-                self.insert_and_push("xmp", attrs);
+                self.insert_and_push("xmp", attrs)?;
                 self.skip_next_lf = true;
                 self.frameset_ok = false;
                 self.orig_mode = Mode::InBody;
@@ -2234,22 +2385,22 @@ impl TreeBuilder {
             },
             "iframe" => {
                 self.frameset_ok = false;
-                self.start_generic_text_element("iframe", attrs);
+                self.start_generic_text_element("iframe", attrs)?;
             },
-            "noembed" => self.start_generic_text_element("noembed", attrs),
+            "noembed" => self.start_generic_text_element("noembed", attrs)?,
             "noscript" if self.scripting_mode == ScriptingMode::Enabled => {
-                self.start_generic_text_element("noscript", attrs);
+                self.start_generic_text_element("noscript", attrs)?;
             },
             "select" => {
                 if self.fragment && self.fragment_context.as_deref() == Some("select") {
-                    return;
+                    return Ok(());
                 }
                 if self.has_in_scope("select") {
                     self.pop_until("select");
                     self.reset_insertion_mode();
                 } else {
-                    self.reconstruct();
-                    self.insert_and_push("select", attrs);
+                    self.reconstruct()?;
+                    self.insert_and_push("select", attrs)?;
                     self.frameset_ok = false;
                 }
             },
@@ -2262,8 +2413,8 @@ impl TreeBuilder {
                 {
                     self.open.pop();
                 }
-                self.reconstruct();
-                self.insert_and_push("option", attrs);
+                self.reconstruct()?;
+                self.insert_and_push("option", attrs)?;
             },
             "optgroup" => {
                 if self.has_in_scope("select") {
@@ -2274,33 +2425,34 @@ impl TreeBuilder {
                 {
                     self.open.pop();
                 }
-                self.reconstruct();
-                self.insert_and_push("optgroup", attrs);
+                self.reconstruct()?;
+                self.insert_and_push("optgroup", attrs)?;
             },
             "rb" | "rtc" => {
                 self.generate_implied_end_tags(None);
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
             },
             "rp" | "rt" => {
                 self.generate_implied_end_tags(Some("rtc"));
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
             },
             "math" | "svg" => {
-                self.reconstruct();
+                self.reconstruct()?;
                 let namespace = if name == "svg" {
                     Namespace::Svg
                 } else {
                     Namespace::MathMl
                 };
-                self.insert_foreign_element(name, attrs, namespace);
+                self.insert_foreign_element(name, attrs, namespace)?;
             },
             "caption" | "col" | "colgroup" | "frame" | "head" | "tbody"
             | "td" | "tfoot" | "th" | "thead" | "tr" => {},
             _ => {
-                self.reconstruct();
-                self.insert_and_push(name, attrs);
+                self.reconstruct()?;
+                self.insert_and_push(name, attrs)?;
             },
-        }
+        };
+        Ok(())
     }
 
     fn end_body(&mut self) {
@@ -2311,25 +2463,25 @@ impl TreeBuilder {
         self.mode = Mode::AfterBody;
     }
 
-    fn in_body_end_tag(&mut self, name: &str) {
+    fn in_body_end_tag(&mut self, name: &str) -> Result<(), amazing_dom::DomError> {
         match name {
             "body" => self.end_body(),
             "html" => {
                 self.end_body();
                 if self.mode == Mode::AfterBody {
                     let n = name.to_owned();
-                    self.after_body(Token::EndTag { name: n });
+                    self.after_body(Token::EndTag { name: n })?;
                 }
             },
-            n if FORMATTING_ELEMENTS.contains(&n) => self.adoption_agency(n),
+            n if FORMATTING_ELEMENTS.contains(&n) => self.adoption_agency(n)?,
             "br" => {
                 // Parse error: </br> behaves like a <br> start tag.
-                self.in_body_start_tag("br", Vec::new());
+                self.in_body_start_tag("br", Vec::new())?;
             },
             "p" => {
                 if !self.has_in_button_scope("p") {
                     // Synthesize an empty p (not pushed), then close it.
-                    let _ = self.insert_element("p", Vec::new());
+                    let _ = self.insert_element("p", Vec::new())?;
                 }
                 self.close_p_element();
             },
@@ -2405,10 +2557,11 @@ impl TreeBuilder {
             "caption" | "table" | "td" | "th" | "tr" | "colgroup" | "tbody"
             | "tfoot" | "thead" => self.any_other_end_tag(name),
             _ => self.any_other_end_tag(name),
-        }
+        };
+        Ok(())
     }
 
-    fn text_mode(&mut self, tok: Token) {
+    fn text_mode(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => self.insert_text(&data),
             Token::EndTag { name } => {
@@ -2451,13 +2604,14 @@ impl TreeBuilder {
             Token::Eof => {
                 self.open.pop();
                 self.mode = self.orig_mode;
-                self.process_token(Token::Eof);
+                self.process_token(Token::Eof)?;
             },
             _ => {},
-        }
+        };
+        Ok(())
     }
 
-    fn in_frameset(&mut self, tok: Token) {
+    fn in_frameset(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 let whitespace: String = data.chars().filter(|&c| is_ws_char(c)).collect();
@@ -2467,18 +2621,18 @@ impl TreeBuilder {
             Token::Doctype { .. } => {},
             Token::StartTag { name, attrs, self_closing: _ } => {
                 match name.as_str() {
-                    "html" => self.in_body_start_tag("html", attrs),
+                    "html" => self.in_body_start_tag("html", attrs)?,
                     "frameset" => {
-                        self.insert_and_push("frameset", attrs);
+                        self.insert_and_push("frameset", attrs)?;
                     },
                     "frame" => {
-                        self.insert_void("frame", attrs);
+                        self.insert_void("frame", attrs)?;
                     },
                     "noframes" => self.in_head(Token::StartTag {
                         name,
                         attrs,
                         self_closing: false,
-                    }),
+                    })?,
                     _ => {},
                 }
             },
@@ -2498,10 +2652,11 @@ impl TreeBuilder {
             },
             Token::Eof => {},
             _ => {},
-        }
+        };
+        Ok(())
     }
 
-    fn after_frameset(&mut self, tok: Token) {
+    fn after_frameset(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 let whitespace: String = data.chars().filter(|&c| is_ws_char(c)).collect();
@@ -2512,7 +2667,7 @@ impl TreeBuilder {
             Token::StartTag { name, attrs, self_closing: _ }
                 if name == "html" =>
             {
-                self.in_body_start_tag("html", attrs)
+                self.in_body_start_tag("html", attrs)?
             },
             Token::StartTag { name, attrs, self_closing: _ }
                 if name == "noframes" =>
@@ -2521,27 +2676,28 @@ impl TreeBuilder {
                     name,
                     attrs,
                     self_closing: false,
-                })
+                })?
             },
             Token::EndTag { name } if name == "html" => {
                 self.mode = Mode::AfterAfterFrameset;
             },
             Token::Eof => {},
             _ => {},
-        }
+        };
+        Ok(())
     }
 
-    fn after_after_frameset(&mut self, tok: Token) {
+    fn after_after_frameset(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) if data.chars().all(is_ws_char) => {
-                self.in_body(Token::Characters(data));
+                self.in_body(Token::Characters(data))?;
             },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
             Token::Doctype { .. } => {},
             Token::StartTag { name, attrs, self_closing: _ }
                 if name == "html" =>
             {
-                self.in_body_start_tag("html", attrs)
+                self.in_body_start_tag("html", attrs)?
             },
             Token::StartTag { name, attrs, self_closing: _ }
                 if name == "noframes" =>
@@ -2550,17 +2706,18 @@ impl TreeBuilder {
                     name,
                     attrs,
                     self_closing: false,
-                })
+                })?
             },
             Token::Eof => {},
             _ => {},
-        }
+        };
+        Ok(())
     }
 
-    fn after_body(&mut self, tok: Token) {
+    fn after_body(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) if data.chars().all(is_ws_char) => {
-                self.in_body(Token::Characters(data));
+                self.in_body(Token::Characters(data))?;
             },
             Token::Comment(data) => {
                 if let Some(&html) = self.open.first() {
@@ -2569,33 +2726,35 @@ impl TreeBuilder {
             },
             Token::Doctype { .. } | Token::Eof => {},
             Token::StartTag { name, attrs, self_closing } if name == "html" => {
-                self.in_body(Token::StartTag { name, attrs, self_closing });
+                self.in_body(Token::StartTag { name, attrs, self_closing })?;
             },
             Token::EndTag { ref name } if name == "html" => {
                 self.mode = Mode::AfterAfterBody;
             },
             other => {
                 self.mode = Mode::InBody;
-                self.in_body(other);
+                self.in_body(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn after_after_body(&mut self, tok: Token) {
+    fn after_after_body(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) if data.chars().all(is_ws_char) => {
-                self.in_body(Token::Characters(data));
+                self.in_body(Token::Characters(data))?;
             },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
             Token::Doctype { .. } | Token::Eof => {},
             Token::StartTag { name, attrs, self_closing } if name == "html" => {
-                self.in_body(Token::StartTag { name, attrs, self_closing });
+                self.in_body(Token::StartTag { name, attrs, self_closing })?;
             },
             other => {
                 self.mode = Mode::InBody;
-                self.in_body(other);
+                self.in_body(other)?;
             },
-        }
+        };
+        Ok(())
     }
 }
 
@@ -2603,16 +2762,20 @@ impl TreeBuilder {
 /// `pub(crate)`: also used by `resumable::ResumableParser`'s own token-at-a-
 /// time driving loop.
 pub(crate) fn feed_with_tokenizer_feedback(
-    builder: &mut TreeBuilder,
+    builder: &mut TreeBuilder<'_>,
     tokenizer: &mut Tokenizer,
     tok: Token,
-) -> bool {
+) -> Result<bool, amazing_dom::DomError> {
     let eof = tok == Token::Eof;
     let start_name = match &tok {
         Token::StartTag { name, .. } => Some(name.clone()),
         _ => None,
     };
-    builder.feed(tok);
+    builder.feed(tok)?;
+    finish_tokenizer_feedback(builder, tokenizer, start_name);
+    Ok(eof)
+}
+pub(crate) fn finish_tokenizer_feedback(builder: &TreeBuilder<'_>, tokenizer: &mut Tokenizer, start_name: Option<String>) {
     tokenizer.set_allow_cdata(
         builder.adjusted_current_namespace().is_some_and(|namespace| namespace != Namespace::Html)
     );
@@ -2626,7 +2789,6 @@ pub(crate) fn feed_with_tokenizer_feedback(
             tokenizer.enter_text_element(&name);
         }
     }
-    eof
 }
 
 /// Incremental HTML parser for already-decoded text chunks.
@@ -2635,7 +2797,7 @@ pub(crate) fn feed_with_tokenizer_feedback(
 /// already consumed is released after each call; an unfinished tag, comment,
 /// doctype, or character reference can remain buffered until it is resolved.
 pub struct IncrementalParser {
-    builder: TreeBuilder,
+    builder: TreeBuilder<'static>,
     tokenizer: Tokenizer,
     pending_cr: bool,
 }
@@ -2700,7 +2862,7 @@ impl IncrementalParser {
 
     fn drive(&mut self) {
         while let Some(tok) = self.tokenizer.next_available() {
-            if feed_with_tokenizer_feedback(&mut self.builder, &mut self.tokenizer, tok) {
+            if feed_with_tokenizer_feedback(&mut self.builder, &mut self.tokenizer, tok).expect("offline native tree construction") {
                 break;
             }
         }
@@ -2724,7 +2886,7 @@ pub(crate) fn build_with_document_policy(src: &str, scripting_mode: ScriptingMod
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     loop {
         let tok = tokenizer.next_token();
-        let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok);
+        let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok).expect("offline native tree construction");
         if eof {
             break;
         }
@@ -2744,7 +2906,7 @@ pub fn build_with_custom_element_host(
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     loop {
         let tok = tokenizer.next_token();
-        if feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok) {
+        if feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok).expect("offline native tree construction") {
             break;
         }
     }
@@ -2846,7 +3008,7 @@ pub(crate) fn build_fragment_with_context(
     Ok(run_fragment(builder, src, &context.local_name, namespace, scripting_mode))
 }
 
-fn run_fragment(mut builder: TreeBuilder, src: &str, context: &str, namespace: Namespace,
+fn run_fragment(mut builder: TreeBuilder<'_>, src: &str, context: &str, namespace: Namespace,
     scripting_mode: ScriptingMode) -> Dom {
     builder.insert_and_push("html", Vec::new());
     builder.mode = if namespace == Namespace::Html { fragment_insertion_mode(context) } else { Mode::InBody };
@@ -2864,7 +3026,7 @@ fn run_fragment(mut builder: TreeBuilder, src: &str, context: &str, namespace: N
     }
     loop {
         let tok = tokenizer.next_token();
-        let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok);
+        let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok).expect("offline native tree construction");
         if eof {
             break;
         }

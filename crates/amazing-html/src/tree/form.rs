@@ -4,7 +4,7 @@
 //! Complete in-body form start/end rules, including template-local forms.
 use super::*;
 
-impl TreeBuilder {
+impl TreeBuilder<'_> {
     /// HTML §13.2.4.4: a template fragment context also means parsing
     /// template contents even though it is absent from the open stack.
     fn parsing_template_contents(&self) -> bool {
@@ -12,13 +12,14 @@ impl TreeBuilder {
             && self.fragment_context.as_deref() == Some("template"))
     }
 
-    pub(super) fn start_form(&mut self, attrs: Vec<(String, String)>) {
+    pub(super) fn start_form(&mut self, attrs: Vec<(String, String)>) -> Result<(), amazing_dom::DomError> {
         let in_template = self.parsing_template_contents();
-        if self.form.is_some() && !in_template { return; }
+        if self.form.is_some() && !in_template { return Ok(()); }
         self.close_p_element();
-        let element = self.insert_element("form", attrs);
+        let element = self.insert_element("form", attrs)?;
         self.open.push(element);
-        if !in_template { self.form = Some(element); }
+        if !in_template { self.form = Some(element); };
+        Ok(())
     }
 
     pub(super) fn end_form(&mut self) {
@@ -36,10 +37,11 @@ impl TreeBuilder {
         }
     }
 
-    pub(super) fn insert_table_form(&mut self, attrs: Vec<(String, String)>) {
+    pub(super) fn insert_table_form(&mut self, attrs: Vec<(String, String)>) -> Result<(), amazing_dom::DomError> {
         let in_template = self.parsing_template_contents();
-        if self.form.is_some() && !in_template { return; }
-        let element = self.insert_element("form", attrs);
-        if !in_template { self.form = Some(element); }
+        if self.form.is_some() && !in_template { return Ok(()); }
+        let element = self.insert_element("form", attrs)?;
+        if !in_template { self.form = Some(element); };
+        Ok(())
     }
 }

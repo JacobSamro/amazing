@@ -113,6 +113,12 @@ impl Dom {
                     self.local_name(node).expect("element name").to_owned()
                 } else { self.qualified_name(node).expect("element name") };
                 append(out, "<"); append(out, &name);
+                if self.get_attribute_ns(node, None, "is").is_none() {
+                    if let Ok(Some(value)) = self.custom_element_is_value(node) {
+                        append(out, " is=\""); escape(out, value, true, false); append(out, "\"");
+                    }
+                }
+
                 for attr in self.attributes_expanded(node).expect("element attributes") {
                     let name = match attr.namespace_uri {
                         None => attr.local_name.to_owned(),
@@ -215,6 +221,7 @@ impl Dom {
             NodeKind::Element { .. } => {
                 let created = self.create_element_expanded_in(document, source.namespace_uri(node),
                     source.prefix(node), source.local_name(node).unwrap())?;
+                self.copy_custom_element_is_value(source, node, created)?;
                 for attr in source.attributes_expanded(node).unwrap() {
                     self.set_attribute_expanded(created, attr.namespace_uri, attr.prefix,
                         attr.local_name, attr.value)?;
@@ -369,6 +376,20 @@ impl IncrementalDocumentImport {
         self.map.get(&source_node).copied()
     }
 
+    /// Mirror an actual detached constructor result through this SAME relation.
+    /// The returned identity is generation-fenced in both native arenas; this
+    /// is not clone/import and does not copy registration authority.
+    pub fn reverse_sync_node(&mut self, source: &mut Dom, dest: &Dom,
+        node: crate::render_mutation::NodeGeneration) -> Result<crate::render_mutation::NodeGeneration, DomError> {
+        self.validate_mappings(source, dest)?;
+        if dest.node_generation(node.node) != Some(node.generation) { return Err(DomError::InvalidStateError); }
+        let mapped = self.mirror_dest_node(source, dest, node.node)?.ok_or(DomError::InvalidStateError)?;
+        self.reverse_sync_children(source, dest, node.node, mapped)?;
+        self.reverse_sync_special_containers(source, dest, node.node)?;
+        Ok(source.render_handle(mapped))
+    }
+
+
     /// Imports every source node not yet copied since the last call,
     /// preserving previously imported nodes' destination identity. Safe to
     /// call repeatedly (at every parser pause, and once more after `Eof`);
@@ -465,6 +486,7 @@ impl IncrementalDocumentImport {
                     &value[prefix..value.len()-suffix])?;
             }
         } else if matches!(source.get(s).kind, NodeKind::Element { .. }) {
+            dest.copy_custom_element_is_value(source, s, d)?;
             let attributes = source.attributes_expanded(s).unwrap();
             let removed: Vec<_> = dest.attributes_expanded(d).ok_or(DomError::InvalidNodeTypeError)?
                 .into_iter().filter(|old| !attributes.iter().any(|a|

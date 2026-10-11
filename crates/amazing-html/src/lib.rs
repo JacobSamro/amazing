@@ -47,7 +47,7 @@ pub mod xml_encoding;
 pub mod xml_resources;
 mod xml_text_declaration;
 pub use tree::IncrementalParser;
-pub use tree::{is_javascript_mime_type, strip_ascii_whitespace, ParserConstruction, ParserCustomElementHost, ScriptMode};
+pub use tree::{is_javascript_mime_type, strip_ascii_whitespace, ParserConstruction, ParserCustomElementHost, ParserElementCreation, ParserElementCreationHost, TreeBuilder, ScriptMode};
 pub use resumable::{ParseSignal, ResumableParser};
 pub use byte_stream::IncrementalByteParser;
 pub use xml::{parse_xml, parse_xml_fragment, XmlFragmentContext, XmlError, XmlErrorKind};

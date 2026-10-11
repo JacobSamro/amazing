@@ -41,9 +41,8 @@ impl Dom {
     pub fn set_attr_value(&mut self, attr: NodeIdx, units: Vec<u16>) -> Result<(), DomError> {
         let snapshot = self.attr_snapshot(attr)?;
         if let Some(element) = snapshot.owner_element {
-            let display = String::from_utf16_lossy(&units);
-            self.set_attribute_expanded(element, snapshot.namespace_uri.as_deref(),
-                snapshot.prefix.as_deref(), &snapshot.local_name, &display)?;
+            self.set_attribute_ns_units(element, snapshot.namespace_uri.as_deref(),
+                &snapshot.local_name, units.clone())?;
         }
         if let NodeKind::Attr { value, .. } = &mut self.nodes[attr.0 as usize].kind { *value = units; }
         Ok(())
@@ -94,12 +93,15 @@ impl Dom {
         if snapshot.owner_element.is_some_and(|owner| owner != element) { return Err(DomError::InUseAttributeError); }
         let old = self.get_attribute_node(element, snapshot.namespace_uri.as_deref(), &snapshot.local_name);
         if old == Some(attr) { return Ok(old); }
+        let old_units = old.map(|old| self.attr_snapshot(old).map(|snapshot| snapshot.value)).transpose()?;
         self.set_subtree_document(attr, self.get(element).owner_document);
-        let display = String::from_utf16_lossy(&snapshot.value);
-        self.set_attribute_expanded(element, snapshot.namespace_uri.as_deref(), snapshot.prefix.as_deref(),
-            &snapshot.local_name, &display)?;
+        self.set_attribute_expanded_units(element, snapshot.namespace_uri.as_deref(), snapshot.prefix.as_deref(),
+            &snapshot.local_name, snapshot.value.clone())?;
         if let Some(old) = old {
-            if let NodeKind::Attr { owner_element, .. } = &mut self.nodes[old.0 as usize].kind { *owner_element = None; }
+            if let NodeKind::Attr { owner_element, value, .. } = &mut self.nodes[old.0 as usize].kind {
+                *owner_element = None;
+                *value = old_units.unwrap();
+            }
         }
         if let NodeKind::Attr { owner_element, .. } = &mut self.nodes[attr.0 as usize].kind { *owner_element = Some(element); }
         Ok(old)

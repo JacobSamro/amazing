@@ -38,6 +38,13 @@ impl RuntimeBindingHost<'_> {
         Ok(())
     }
 
+    fn check_dynamic_markup_insertion(&mut self, document: NodeIdx) -> Result<(), Throw> {
+        if self.html_parser_creation_is_active(document) {
+            return Err(self.document_exception("InvalidStateError", "Parser constructor prohibits dynamic markup insertion")?);
+        }
+        Ok(())
+    }
+
     pub(in super::super) fn document_open(&mut self, receiver: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
         let document = self.document_receiver_node(&receiver)?;
         for value in args.iter().take(if args.len() >= 3 { 3 } else { 2 }) {
@@ -52,13 +59,9 @@ impl RuntimeBindingHost<'_> {
             return Err(self.document_exception("NotSupportedError", "Document window-opening overload is unavailable")?);
         }
         self.check_write_document(document)?;
+        self.check_dynamic_markup_insertion(document)?;
         self.check_document_open_origin(document)?;
-        let ignore = {
-            let state = self.state.borrow();
-            state.frames.document_write_sessions.get(&document)
-                .map_or_else(|| state.active_parsers.contains_key(&document)
-                    || state.write_insertion_points.contains_key(&document), |session| session.script_depth > 0)
-        };
+        let ignore = RuntimeBindings { state: self.state.clone() }.parser_script_nesting(document) > 0;
         if !ignore { self.reopen_document(document)?; }
         Ok(receiver)
     }
@@ -92,6 +95,7 @@ impl RuntimeBindingHost<'_> {
         // WebIDL argument conversion precedes the HTML method algorithm,
         // including its XML-document InvalidStateError check.
         self.check_write_document(document)?;
+        self.check_dynamic_markup_insertion(document)?;
         if newline { text.push('\n'); }
         if !self.state.borrow().active_parsers.contains_key(&document) {
             self.reopen_document(document)?;
@@ -201,7 +205,12 @@ impl RuntimeBindingHost<'_> {
                     bindings.queue_ready_parser_script(crate::cmd::js::HtmlParserScript {
                         script: script.clone(), mode, session: lifecycle }, &text, &final_url)
                 }
-                Some((text, final_url)) => bindings.execute_document_script(js, &script, &text, &final_url),
+                Some((text, final_url)) => {
+                    let _scope = if mode == amazing_html::ScriptMode::Blocking {
+                        Some(bindings.enter_parser_blocking_script(lifecycle)?)
+                    } else { None };
+                    bindings.execute_document_script(js, &script, &text, &final_url)
+                },
                 None if script.kind == crate::cmd::js::ScriptKind::Module =>
                     bindings.finish_module_script(js, &script, None, &script_url, false),
                 None => Ok(()),
@@ -223,11 +232,33 @@ impl RuntimeBindingHost<'_> {
         parser: &Rc<RefCell<amazing_html::ResumableParser>>, text: &str) -> Result<(), Throw> {
         parser.borrow_mut().begin_write(text);
         loop {
+            // Validate the original associated realm while the native arena
+            // is still installed; a root graft physically hands that arena to
+            // the parser, leaving no Document in the temporary host shell.
+            // A Document with no browsing context (a clone, or one made by
+            // DOMParser) has no realm, so no custom element definition can
+            // be looked up: it parses with the plain native tree builder.
+            let (realm, import) = {
+                let state = self.state.borrow();
+                let realm = state.realm_documents.iter().find_map(|(realm, (node, generation))|
+                    (*node == document && state.host.borrow().dom.node_generation(document) == Some(*generation)).then_some(*realm));
+                (realm, state.frames.parser_imports.get(&document).cloned())
+            };
             if let Err(error) = self.graft_document_parser(document, parser, true) {
                 parser.borrow_mut().end_write();
                 return Err(error);
             }
-            let script = parser.borrow_mut().run_write();
+            let script = if let Some(realm) = realm {
+                let bindings = RuntimeBindings { state: self.state.clone() };
+                let mut creation = super::html_constructor::HtmlParserCreationHost { js: self.js, bindings, realm, import, parser: parser.clone() };
+                match amazing_html::ResumableParser::run_write_with_creation_host(parser, &mut creation) {
+                    Ok(script) => script,
+                    Err(error) => return Err(throw_dom_error(self, error)),
+                }
+            } else {
+                parser.borrow_mut().run_write()
+            };
+            if parser.borrow().is_aborted() { return Ok(()); }
             if let Err(error) = self.graft_document_parser(document, parser, false) {
                 if script.is_some() { parser.borrow_mut().end_write(); }
                 return Err(error);
@@ -339,13 +370,24 @@ impl RuntimeBindingHost<'_> {
                 .is_some_and(|session| host.dom.node_generation(document) == Some(session.generation))
         };
         if !valid { return Err(Throw::type_error("Stale Document parser")); }
+        // A constructor owns the tree frame until it returns. close() records
+        // EOF now; the outer written-input entry will consume it after restore.
+        if !parser.borrow().execution_frame_available() { return Ok(()); }
         let bindings = RuntimeBindings { state: self.state.clone() };
         loop {
             if !bindings.parser_session_current(lifecycle) { return Ok(()); }
             self.graft_document_parser(document, &parser, true)?;
-            let signal = parser.borrow_mut().run();
+            let import = self.state.borrow().frames.parser_imports.get(&document).cloned();
+            let signal = {
+                let mut creation = super::html_constructor::HtmlParserCreationHost {
+                    js: self.js, bindings: bindings.clone(), realm: lifecycle.realm, import, parser: parser.clone(),
+                };
+                amazing_html::ResumableParser::run_with_creation_host(&parser, &mut creation)
+            }.map_err(|error| throw_dom_error(self, error))?;
+            if signal == amazing_html::ParseSignal::Aborted { return Ok(()); }
             self.graft_document_parser(document, &parser, false)?;
             match signal {
+                amazing_html::ParseSignal::Aborted => return Ok(()),
                 amazing_html::ParseSignal::Eof => break,
                 amazing_html::ParseSignal::Script(node) => self.run_written_script(document, node)?,
             }

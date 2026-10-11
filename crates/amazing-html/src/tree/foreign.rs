@@ -21,7 +21,7 @@ const FOREIGN_BREAKOUT_START_TAGS: &[&str] = &[
     "strike", "sub", "sup", "table", "tt", "u", "ul", "var",
 ];
 
-impl TreeBuilder {
+impl TreeBuilder<'_> {
     fn is_mathml_text_integration_point_ns(namespace: Namespace, name: &str) -> bool {
         namespace == Namespace::MathMl && matches!(name, "mi" | "mo" | "mn" | "ms" | "mtext")
     }
@@ -85,7 +85,7 @@ impl TreeBuilder {
         }
     }
 
-    pub(super) fn in_foreign_content(&mut self, tok: Token) {
+    pub(super) fn in_foreign_content(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 if data.chars().any(|c| c != '\0' && !is_ws_char(c)) {
@@ -114,8 +114,8 @@ impl TreeBuilder {
                         name,
                         attrs,
                         self_closing,
-                    });
-                    return;
+                    })?;
+                    return Ok(());
                 }
                 // Also the adjusted current node's own namespace (not just
                 // `current()`'s): a foreign fragment context with nothing
@@ -126,7 +126,7 @@ impl TreeBuilder {
                     .adjusted_current()
                     .map(|(ns, _)| ns)
                     .unwrap_or(Namespace::Html);
-                let node = self.insert_foreign_element(&name, attrs, namespace);
+                let node = self.insert_foreign_element(&name, attrs, namespace)?;
                 if self_closing {
                     // HTML-32: a self-closing SVG `<script/>` (necessarily
                     // `src`-only -- self-closing leaves no room for inline
@@ -165,8 +165,8 @@ impl TreeBuilder {
                         if matches!(name.as_str(), "p" | "br") {
                             self.open.truncate(position + 1);
                         }
-                        self.process_token_in_html(Token::EndTag { name });
-                        return;
+                        self.process_token_in_html(Token::EndTag { name })?;
+                        return Ok(());
                     }
                     if self
                         .dom
@@ -198,12 +198,13 @@ impl TreeBuilder {
                             }
                         }
                         self.open.truncate(position);
-                        return;
+                        return Ok(());
                     }
                 }
             },
-            Token::Eof => self.process_token_in_html(Token::Eof),
+            Token::Eof => self.process_token_in_html(Token::Eof)?,
             Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
-        }
+        };
+        Ok(())
     }
 }

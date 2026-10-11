@@ -41,11 +41,15 @@ pub enum ParseSignal {
     /// The document is fully parsed. `take_deferred_or_async` returns every
     /// non-blocking script discovered along the way, in document order.
     Eof,
+    /// The embedding retired/replaced this exact active parser.
+    Aborted,
 }
 
 /// A script-interleaved HTML parser: see the module docs.
 pub struct ResumableParser {
-    builder: TreeBuilder,
+    builder: Option<TreeBuilder<'static>>,
+    creation_failure: Option<amazing_dom::DomError>,
+    aborted: bool,
     tokenizer: Tokenizer,
     deferred_or_async: Vec<(NodeIdx, ScriptMode)>,
     write_inputs: Vec<(Vec<char>, bool)>,
@@ -59,7 +63,9 @@ impl ResumableParser {
     /// have to graft in afterward.
     pub fn new(dom: Dom) -> Self {
         Self {
-            builder: TreeBuilder::from_dom(dom),
+            builder: Some(TreeBuilder::from_dom(dom)),
+            creation_failure: None,
+            aborted: false,
             tokenizer: Tokenizer::new(Vec::new()),
             deferred_or_async: Vec::new(),
             write_inputs: Vec::new(),
@@ -67,23 +73,40 @@ impl ResumableParser {
         }
     }
 
+    /// The embedding publishes a detached genuine tree frame while its
+    /// insertion callbacks execute. A second publisher is rejected.
+    pub fn publish_execution_frame(&mut self, frame: TreeBuilder<'static>) -> Result<(), amazing_dom::DomError> {
+        if self.builder.is_some() { return Err(amazing_dom::DomError::InvalidStateError); }
+        self.builder = Some(frame);
+        Ok(())
+    }
+    pub fn reclaim_execution_frame(&mut self) -> Result<TreeBuilder<'static>, amazing_dom::DomError> {
+        self.builder.take().ok_or(amazing_dom::DomError::InvalidStateError)
+    }
+
+    /// True only while the genuine tree frame is available for another entry.
+    pub fn execution_frame_available(&self) -> bool { self.builder.is_some() }
+    /// Called only when the embedding retires this actual active-parser entry.
+    pub fn abort(&mut self) { self.aborted = true; }
+    pub fn is_aborted(&self) -> bool { self.aborted }
+
     /// Configure a srcdoc navigation before feeding its source. Its document
     /// stays in no-quirks mode, including when the doctype is missing.
     pub fn set_srcdoc(&mut self) {
-        self.builder.set_srcdoc();
+        self.builder.as_mut().expect("tree execution frame is borrowed").set_srcdoc();
     }
 
     /// Sets scripting before feeding source. Disabled mode never pauses for
     /// scripts or queues deferred/async script execution events.
     pub fn set_scripting_mode(&mut self, mode: crate::ScriptingMode) {
-        self.builder.set_scripting_mode(mode);
+        self.builder.as_mut().expect("tree execution frame is borrowed").set_scripting_mode(mode);
     }
 
     /// Sets declarative shadow parsing before feeding input. An embedding
     /// reopening a Document passes that actual Document's preserved policy;
     /// scripting permission is independent. The normal parser default stays on.
     pub fn set_allow_declarative_shadow_roots(&mut self, allowed: bool) {
-        self.builder.set_allow_declarative_shadow_roots(allowed);
+        self.builder.as_mut().expect("tree execution frame is borrowed").set_allow_declarative_shadow_roots(allowed);
     }
 
     /// Feeds the whole, already-decoded document source (newline-normalized
@@ -104,11 +127,13 @@ impl ResumableParser {
     /// crossed along the way (which never pauses) is queued; drain it with
     /// `take_deferred_or_async`.
     pub fn run(&mut self) -> ParseSignal {
+        self.write_insertion_point = None;
         loop {
+            if self.aborted { return ParseSignal::Aborted; }
             let tok = self.tokenizer.next_token();
-            let eof = tree::feed_with_tokenizer_feedback(&mut self.builder, &mut self.tokenizer, tok);
-            self.deferred_or_async.extend(self.builder.take_script_events());
-            if let Some(node) = self.builder.take_pending_script() {
+            let eof = tree::feed_with_tokenizer_feedback(self.builder.as_mut().expect("tree execution frame is borrowed"), &mut self.tokenizer, tok).expect("unhosted parser construction");
+            self.deferred_or_async.extend(self.builder.as_mut().expect("tree execution frame is borrowed").take_script_events());
+            if let Some(node) = self.builder.as_mut().expect("tree execution frame is borrowed").take_pending_script() {
                 self.write_insertion_point = Some(self.tokenizer.cursor());
                 return ParseSignal::Script(node);
             }
@@ -116,6 +141,40 @@ impl ResumableParser {
                 return ParseSignal::Eof;
             }
         }
+    }
+
+    /// Execute an actual tree frame outside the shared parser borrow. Authored
+    /// constructors can reach the tokenizer's real insertion point, while the
+    /// driver enforces its genuine dynamic-markup insertion counter.
+    pub fn run_with_creation_host(parser: &std::rc::Rc<std::cell::RefCell<Self>>,
+        host: &mut dyn crate::ParserElementCreationHost) -> Result<ParseSignal, amazing_dom::DomError> {
+        if let Some(error) = parser.borrow().creation_failure { return Err(error); }
+        if parser.borrow().aborted { return Ok(ParseSignal::Aborted); }
+        parser.borrow_mut().write_insertion_point = None;
+        let tree = parser.borrow_mut().builder.take().expect("parser tree frame already executing");
+        let mut tree = tree.borrow_creation_host(host);
+        let signal = loop {
+            if parser.borrow().aborted { break Ok(ParseSignal::Aborted); }
+            let token = parser.borrow_mut().tokenizer.next_token();
+            let eof = token == crate::tokenizer::Token::Eof;
+            let start_name = match &token { crate::tokenizer::Token::StartTag { name, .. } => Some(name.clone()), _ => None };
+            if let Err(error) = tree.feed(token) { break Err(error); }
+            if parser.borrow().aborted { break Ok(ParseSignal::Aborted); }
+            {
+                let mut shared = parser.borrow_mut();
+                tree::finish_tokenizer_feedback(&tree, &mut shared.tokenizer, start_name);
+                shared.deferred_or_async.extend(tree.take_script_events());
+                if let Some(node) = tree.take_pending_script() {
+                    shared.write_insertion_point = Some(shared.tokenizer.cursor());
+                    break Ok(ParseSignal::Script(node));
+                }
+            }
+            if eof { break Ok(ParseSignal::Eof); }
+        };
+        let mut shared = parser.borrow_mut();
+        shared.builder = Some(tree.release_creation_host());
+        if let Err(error) = signal { shared.creation_failure = Some(error); }
+        signal
     }
 
     /// `document.write`/`writeln` while paused at a blocking script: per
@@ -139,7 +198,13 @@ impl ResumableParser {
     /// or the original source; exhausting this input does not signal EOF.
     pub fn begin_write(&mut self, text: &str) {
         let text = text.replace("\r\n", "\n").replace('\r', "\n");
-        let point = self.write_insertion_point.unwrap_or_else(|| self.tokenizer.cursor());
+        // A stored point belongs to the script that paused the parser. Once the
+        // tokenizer has moved past it (a reaction or callback writing while the
+        // parser runs), the point is the tokenizer's current position.
+        let cursor = self.tokenizer.cursor();
+        let point = self.write_insertion_point
+            .filter(|point| *point >= cursor && *point <= self.tokenizer.buffered_input_scalars())
+            .unwrap_or(cursor);
         self.write_inputs.push(self.tokenizer.begin_write_input(point, &text));
     }
 
@@ -149,15 +214,44 @@ impl ResumableParser {
     pub fn run_write(&mut self) -> Option<NodeIdx> {
         assert!(!self.write_inputs.is_empty(), "no active document.write input");
         while let Some(token) = self.tokenizer.next_available() {
-            tree::feed_with_tokenizer_feedback(&mut self.builder, &mut self.tokenizer, token);
-            self.deferred_or_async.extend(self.builder.take_script_events());
-            if let Some(node) = self.builder.take_pending_script() {
+            tree::feed_with_tokenizer_feedback(self.builder.as_mut().expect("tree execution frame is borrowed"), &mut self.tokenizer, token).expect("unhosted written parser construction");
+            self.deferred_or_async.extend(self.builder.as_mut().expect("tree execution frame is borrowed").take_script_events());
+            if let Some(node) = self.builder.as_mut().expect("tree execution frame is borrowed").take_pending_script() {
                 self.write_insertion_point = Some(self.tokenizer.cursor());
                 return Some(node);
             }
         }
         self.end_write();
         None
+    }
+
+    /// The document.write counterpart of the scoped construction frame.
+    /// A constructor cannot write into this Document while its real HTML
+    /// dynamic-markup counter is positive, but other Documents remain usable.
+    pub fn run_write_with_creation_host(parser: &std::rc::Rc<std::cell::RefCell<Self>>,
+        host: &mut dyn crate::ParserElementCreationHost) -> Result<Option<NodeIdx>, amazing_dom::DomError> {
+        if let Some(error) = parser.borrow().creation_failure { return Err(error); }
+        let tree = parser.borrow_mut().builder.take().expect("parser tree frame already executing");
+        let mut tree = tree.borrow_creation_host(host);
+        let result = loop {
+            if parser.borrow().aborted { break Ok(None); }
+            let Some(token) = parser.borrow_mut().tokenizer.next_available() else { break Ok(None); };
+            let start_name = match &token { crate::tokenizer::Token::StartTag { name, .. } => Some(name.clone()), _ => None };
+            if let Err(error) = tree.feed(token) { break Err(error); }
+            if parser.borrow().aborted { break Ok(None); }
+            let mut shared = parser.borrow_mut();
+            tree::finish_tokenizer_feedback(&tree, &mut shared.tokenizer, start_name);
+            shared.deferred_or_async.extend(tree.take_script_events());
+            if let Some(node) = tree.take_pending_script() {
+                shared.write_insertion_point = Some(shared.tokenizer.cursor());
+                break Ok(Some(node));
+            }
+        };
+        let mut shared = parser.borrow_mut();
+        shared.builder = Some(tree.release_creation_host());
+        if let Err(error) = result { shared.creation_failure = Some(error); }
+        if !matches!(result, Ok(Some(_))) { shared.end_write(); }
+        result
     }
 
     /// Restores suspended input if the embedding abandons a written script.
@@ -173,12 +267,12 @@ impl ResumableParser {
     /// swap, not a copy -- node indices from either side stay valid the
     /// whole time, since it is the same arena moving, never a second one.
     pub fn swap_dom(&mut self, other: &mut Dom) {
-        std::mem::swap(self.builder.dom_mut(), other);
+        std::mem::swap(self.builder.as_mut().expect("tree execution frame is borrowed").dom_mut(), other);
     }
 
     /// The DOM under construction, immutably.
     pub fn dom(&self) -> &Dom {
-        self.builder.dom()
+        self.builder.as_ref().expect("tree execution frame is borrowed").dom()
     }
 
     /// The DOM under construction, mutably. A driver that keeps this arena
@@ -190,7 +284,7 @@ impl ResumableParser {
     /// arena before resuming: `IncrementalDocumentImport::reverse_sync`
     /// writes through exactly this accessor.
     pub fn dom_mut(&mut self) -> &mut Dom {
-        self.builder.dom_mut()
+        self.builder.as_mut().expect("tree execution frame is borrowed").dom_mut()
     }
 
     /// Drains every `defer`/`async`/module script discovered since the last
@@ -207,8 +301,8 @@ impl ResumableParser {
     /// whatever has been built so far (a caller that wants to abandon a
     /// parse mid-document can still use it, matching `document.close()`
     /// abandoning the rest of a real parse).
-    pub fn into_dom(self) -> Dom {
-        self.builder.into_dom()
+    pub fn into_dom(mut self) -> Dom {
+        self.builder.take().expect("tree execution frame is borrowed").into_dom()
     }
 }
 

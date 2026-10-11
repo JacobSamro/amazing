@@ -127,7 +127,8 @@ impl Dom {
         let Some(attributes) = self.attributes_expanded(node) else { return SelectorTokens::default() };
         let mut tokens = SelectorTokens::default();
         for attribute in attributes {
-            let value: Vec<u16> = attribute.value.encode_utf16().collect();
+            let value = self.attribute_ns_utf16(node, attribute.namespace_uri, attribute.local_name)
+                .unwrap_or_else(|| attribute.value.encode_utf16().collect());
             if attribute.namespace_uri.is_none() && attribute.local_name == "id" {
                 tokens.id = Some(value.clone());
             }

@@ -157,7 +157,8 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
     if let O::Cssom(operation) = operation { return host.invoke_cssom(operation, receiver, args); }
-    host.with_dom(|dom| { dom.custom_element_push_reaction_frame(); Ok(()) })?;
+    let reaction_capture = host.capture_dom_for_reactions()?;
+    host.with_captured_dom(&reaction_capture, |dom| { dom.custom_element_push_reaction_frame(); Ok(()) })?;
     let result = invoke_inner(host, operation, receiver, args);
     let created = if matches!(operation, O::CreateElement | O::CreateElementNS) {
         result.as_ref().ok().and_then(|value| host.node_brand(value))
@@ -165,8 +166,8 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     if let Some(node) = created {
         host.with_dom(|dom| { dom.queue_custom_element_upgrade(node); Ok(()) })?;
     }
-    host.with_dom(|dom| { dom.custom_element_pop_reaction_frame(); Ok(()) })?;
-    let delivered = crate::custom_element_bindings::deliver_custom_element_reactions_for_created(host, created);
+    let frame = host.with_captured_dom(&reaction_capture, |dom| dom.custom_element_pop_isolated_reaction_frame())?;
+    let delivered = crate::custom_element_bindings::deliver_custom_element_reaction_frame(host, &reaction_capture, frame);
     match result { Err(error) => Err(error), Ok(value) => { delivered?; Ok(value) } }
 }
 
@@ -289,6 +290,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     }
     if crate::clipboard_bindings::handles(operation) {
         return crate::clipboard_bindings::invoke(host, operation, receiver, args);
+    }
+    if matches!(operation, O::HTMLConstructor(_)) {
+        return Err(host.type_error("HTML constructor requires a registered newTarget"));
     }
     let constructor = matches!(
         operation,

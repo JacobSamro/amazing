@@ -160,9 +160,12 @@ pub(crate) fn run_interleaved_parse(
     scheduler.register_active_parser(0, parser.clone());
     let mut deferred_events = Vec::new();
     let outcome: Result<(), String> = loop {
-        let signal = parser.borrow_mut().run();
+        let signal = match scheduler.run_parser_creation_frame(&parser) {
+            Ok(signal) => signal, Err(error) => break Err(format!("Parser element creation: {error:?}")),
+        };
         deferred_events.extend(parser.borrow_mut().take_deferred_or_async());
         match signal {
+            amazing_html::ParseSignal::Aborted => break Ok(()),
             amazing_html::ParseSignal::Eof => break Ok(()),
             amazing_html::ParseSignal::Script(node) => {
                 parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
@@ -170,7 +173,8 @@ pub(crate) fn run_interleaved_parse(
                 let result = scheduler.refresh_parser_browsing_contexts()
                     .map_err(|error| error.describe()).and_then(|_| match script {
                     _ if !scheduler.parser_session_current(session) => Ok(()),
-                    Some(script) => run_script(scheduler, &script),
+                    Some(script) => scheduler.with_parser_blocking_script(session, |scheduler| run_script(scheduler, &script))
+                        .map_err(|error| error.describe()).and_then(|result| result),
                     // Slipped past `tree.rs`'s own classic/module MIME check
                     // some other way (defensive; not expected in practice).
                     None => Ok(()),

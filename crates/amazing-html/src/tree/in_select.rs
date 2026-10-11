@@ -3,7 +3,7 @@
 
 use super::*;
 
-impl TreeBuilder {
+impl TreeBuilder<'_> {
     /// The `<selectedcontent>` element mirrors its `<select>`'s selected
     /// `<option>` (a newer HTML feature -- "customizable select";
     /// html5lib/WPT webkit02.dat cases 45-48). Its spec form is a live

@@ -11,6 +11,42 @@ use receiving_context::{ReceivingWindowEnvironment,ReceivingNativeAdmission};
 #[path = "runtime_host_html_sandbox.rs"]
 mod sandbox;
 use sandbox::{SandboxFlags, parse_sandbox};
+#[path = "runtime_host_html/parser_checkpoint.rs"]
+mod parser_checkpoint;
+use amazing_dom::event_loop::{EventLoop, CallbackId as DriverCallbackId, TimerId, AnimationFrameId};
+use amazing_js::interp::{SchedulingRequest, SchedulingToken, NativeMicrotaskKind, NativeTaskToken};
+#[derive(Clone)]
+pub(crate) enum DriverPayload {
+    ParserLifecycle(crate::runtime_binding_host::html::HtmlParserTask),
+    ParserScript(crate::runtime_binding_host::html::HtmlReadyParserScript),
+    Job(SchedulingToken),
+    Callback(SchedulingToken),
+    Mutation,
+    AbortTimeout(AbortSignalId, u64),
+    FormSelection(u32),
+    NativeSelection(NativeTaskToken),
+}
+pub(crate) struct DriverTimerRegistration {
+    pub(crate) core: TimerId,
+    pub(crate) callback: DriverCallbackId,
+    pub(crate) repeat: bool,
+}
+
+/// The actual installed scheduler FIFO and callback registry, shared only so
+/// a parser checkpoint can lend it without borrowing the scheduler/Document.
+pub(crate) struct DriverFifo {
+    pub(crate) loop_: EventLoop,
+    pub(crate) pending: VecDeque<SchedulingRequest>,
+    pub(crate) payloads: BTreeMap<u64, DriverPayload>,
+    pub(crate) timers: BTreeMap<u32, DriverTimerRegistration>,
+    pub(crate) frames: BTreeMap<u32, (AnimationFrameId, DriverCallbackId)>,
+    pub(crate) next_callback: u64,
+    pub(crate) trace: Vec<String>,
+    pub(crate) trace_entry_depth: usize,
+}
+#[path = "runtime_host_html_constructor.rs"]
+pub(crate) mod html_constructor;
+pub(crate) use html_constructor::HtmlConstructorRuntime;
 #[path = "runtime_host_html_fragment_scripts.rs"]
 mod fragment_scripts;
 #[path = "runtime_host_html/document_write.rs"]
@@ -105,6 +141,7 @@ struct HtmlNavigation {
 
 #[derive(Default)]
 pub(super) struct FrameRuntime {
+    parser_checkpoint_fifo: Option<std::rc::Weak<RefCell<DriverFifo>>>,
     parser_lifecycle: parser_lifecycle::ParserLifecycle,
     documents: HashMap<NodeIdx, FrameDocument>,
     pub(crate) contexts: HashMap<RealmHandle, WindowContext>,
@@ -387,7 +424,10 @@ fn register_active_parser_state(
 ) {
     let mut state_ref = state.borrow_mut();
     state_ref.write_insertion_points.entry(document).or_insert((document, None));
-    state_ref.active_parsers.insert(document, parser);
+    if let Some(previous) = state_ref.active_parsers.insert(document, parser.clone())
+        && !Rc::ptr_eq(&previous, &parser) {
+        previous.borrow_mut().abort();
+    }
 }
 
 /// Ends `document`'s interleaved-parser window, removing both maps
@@ -398,7 +438,7 @@ fn register_active_parser_state(
 /// own `write()` call is a full-document replace, not an append.
 fn unregister_active_parser_state(state: &Rc<RefCell<BindingState>>, document: NodeIdx) {
     let mut state_ref = state.borrow_mut();
-    state_ref.active_parsers.remove(&document);
+    if let Some(parser) = state_ref.active_parsers.remove(&document) { parser.borrow_mut().abort(); }
     state_ref.write_insertion_points.remove(&document);
 }
 
@@ -1347,7 +1387,12 @@ impl RuntimeBindings {
                 if mode == amazing_html::ScriptMode::Async {
                     self.queue_ready_parser_script(crate::cmd::js::HtmlParserScript {
                         script: script.clone(), mode, session: lifecycle }, source, url)
-                } else { js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, source, url)) }
+                } else {
+                    let _scope = if mode == amazing_html::ScriptMode::Blocking {
+                        Some(self.enter_parser_blocking_script(lifecycle)?)
+                    } else { None };
+                    js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, source, url))
+                }
             };
             match &script.src {
                 None => execute(js, &script.body, &script_url),
@@ -1370,7 +1415,13 @@ impl RuntimeBindings {
         state.borrow_mut().frames.parser_imports.insert(document, import.clone());
         let outcome: Result<(), Throw> = loop {
             if !self.parser_session_current(lifecycle) { return Ok(()); }
-            let signal = parser.borrow_mut().run();
+            let signal = {
+                let mut creation = html_constructor::HtmlParserCreationHost { js, bindings: self.clone(), realm, import: Some(import.clone()), parser: parser.clone() };
+                amazing_html::ResumableParser::run_with_creation_host(&parser, &mut creation)
+            };
+            let signal = match signal { Ok(signal) => signal,
+                Err(error) => break Err(Throw::type_error(format!("Child parser creation: {error:?}"))) };
+            if signal == amazing_html::ParseSignal::Aborted { return Ok(()); }
             deferred_events.extend(parser.borrow_mut().take_deferred_or_async());
             let graft = (|| {
                 let mut host_ref = host.borrow_mut();
@@ -1391,6 +1442,7 @@ impl RuntimeBindings {
             // Navigation only queues loads; their dispatch remains deferred.
             self.navigate_iframes(js);
             match signal {
+                amazing_html::ParseSignal::Aborted => return Ok(()),
                 amazing_html::ParseSignal::Eof => break Ok(()),
                 amazing_html::ParseSignal::Script(source_node) => {
                     if !can_run_scripts { continue; }

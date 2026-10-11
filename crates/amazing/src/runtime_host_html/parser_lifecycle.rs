@@ -33,7 +33,22 @@ struct ParserCompletion {
     load_queued: bool,
     loaded: bool,
     asynchronous: usize,
+    script_nesting: usize,
     embedding: Option<PendingFrameLoad>,
+}
+/// An executing parser-blocking script owns this exact session epoch. A
+/// replacement parser cannot inherit or be decremented by its old script.
+pub(crate) struct ParserScriptScope {
+    state: Rc<RefCell<BindingState>>,
+    session: HtmlParserSession,
+}
+impl Drop for ParserScriptScope {
+    fn drop(&mut self) {
+        if let Some(entry) = self.state.borrow_mut().frames.parser_lifecycle.sessions.get_mut(&self.session.document)
+            && entry.session == self.session {
+            entry.script_nesting -= 1;
+        }
+    }
 }
 impl FrameRuntime {
     fn parser_session_current(&self, dom: &Dom, session: HtmlParserSession) -> bool {
@@ -89,8 +104,20 @@ impl RuntimeBindings {
         let embedding = lifecycle.sessions.get(&document).filter(|entry| entry.session.generation == generation)
             .and_then(|entry| entry.embedding.clone());
         lifecycle.sessions.insert(document, ParserCompletion { session, parsed: false, eof: false,
-            dcl: false, load_queued: false, loaded: false, asynchronous: 0, embedding });
+            dcl: false, load_queued: false, loaded: false, asynchronous: 0, script_nesting: 0, embedding });
         Ok(session)
+    }
+    pub(crate) fn enter_parser_blocking_script(&self, session: HtmlParserSession) -> Result<ParserScriptScope, Throw> {
+        if !self.parser_session_current(session) { return Err(Throw::type_error("Stale parser script session")); }
+        let mut state = self.state.borrow_mut();
+        let entry = state.frames.parser_lifecycle.sessions.get_mut(&session.document).unwrap();
+        entry.script_nesting = entry.script_nesting.checked_add(1)
+            .ok_or_else(|| Throw::range_error("Parser script nesting exhausted"))?;
+        Ok(ParserScriptScope { state: self.state.clone(), session })
+    }
+    pub(super) fn parser_script_nesting(&self, document: NodeIdx) -> usize {
+        self.state.borrow().frames.parser_lifecycle.sessions.get(&document)
+            .map_or(0, |entry| entry.script_nesting)
     }
     pub(crate) fn parser_session(&self, document: NodeIdx) -> Option<HtmlParserSession> {
         self.state.borrow().frames.parser_lifecycle.sessions.get(&document).map(|entry| entry.session)

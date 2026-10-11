@@ -11,15 +11,35 @@ use std::rc::Rc;
 struct Calls(Vec<(String, usize, bool, NodeIdx)>);
 struct Host(Rc<RefCell<Calls>>);
 impl ParserCustomElementHost for Host {
-    fn construct(&mut self, dom: &mut Dom, request: ParserConstruction) -> bool {
-        let attributes = dom.attrs_of(request.element).map_or(0, |a| a.len());
-        let detached = dom.get(request.element).parent.is_none();
-        let owner = dom.owner_document(request.element).unwrap();
-        self.0.borrow_mut().0.push((request.local_name.clone(), attributes, detached, owner));
-        if request.local_name == "x-bad" { return false; }
-        dom.custom_element_super(request.definition) == Ok(request.element)
-    }
+    fn create(&mut self, dom: &mut Dom, request: ParserConstruction)
+        -> Result<amazing_dom::render_mutation::NodeGeneration, amazing_dom::DomError> {
+        use amazing_dom::custom_elements::{ElementCreationPlan as Plan, CustomElementCreationCompletion as Completion};
+        let plan = dom.prepare_custom_element_creation(request.document, Some("http://www.w3.org/1999/xhtml"), None,
+            &request.local_name, request.is_value.as_deref(), true)?;
+        let selected = match plan {
+            Plan::Element(owner) => Ok(owner),
+            Plan::Upgrade { element, definition, .. } => {
+                dom.begin_custom_element_upgrade(element.node, definition)?;
+                self.0.borrow_mut().0.push((request.local_name, 0, true, dom.owner_document(element.node).unwrap()));
+                let constructed = dom.custom_element_super(definition) == Ok(element.node);
+                let _ = dom.finish_custom_element_upgrade(element.node, definition, constructed);
+                Ok(element)
+            }
+            Plan::Autonomous(context) => {
+                let cap = dom.prepare_html_constructor_in_document(context.document(), context.document(), context.definition(), context.constructor())?;
+                let owner = cap.element(); dom.consume_html_constructor(cap)?;
+                self.0.borrow_mut().0.push((request.local_name.clone(), 0, true, dom.owner_document(owner.node).unwrap()));
+                let returned = (request.local_name != "x-bad").then_some(owner);
+                match dom.complete_custom_element_creation(context, returned)? {
+                    Completion::Created(owner) => Ok(owner),
+                    Completion::Failed(failure) => dom.finish_custom_element_creation_failure(failure),
+                }
+            }
+        }?;
+        for (name, value) in request.attributes { dom.set_attribute(selected.node, &name, &value)?; }
+        Ok(selected)    }
 }
+
 fn define(dom: &mut Dom, name: &str, callback: u64) {
     let mut definition = CustomElementDefinition::new(NodeIdx(0), name.into(), name.into(), CallbackId(callback));
     definition.observed_attributes.push("data-k".into());
@@ -28,7 +48,7 @@ fn define(dom: &mut Dom, name: &str, callback: u64) {
     dom.define_custom_element(definition).unwrap();
 }
 fn find(dom: &Dom, name: &str) -> Vec<NodeIdx> {
-    (0..dom.node_count()).map(|n| NodeIdx(n as u32)).filter(|&n| dom.name(n) == Some(name)).collect()
+    (0..dom.node_count()).map(|n| NodeIdx(n as u32)).filter(|&n| dom.name(n) == Some(name) && dom.get(n).parent.is_some()).collect()
 }
 fn id(dom: &Dom, value: &str) -> NodeIdx {
     (0..dom.node_count()).map(|n| NodeIdx(n as u32))

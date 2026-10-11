@@ -25,6 +25,33 @@ fn attribute_name(name: &[u16], setter: bool) -> Result<String, DomError> {
     String::from_utf16(&units).map_err(|_| DomError::InvalidCharacterError)
 }
 impl Dom {
+    fn validate_dataset_generation(&self, element: NodeIdx, generation: u64) -> Result<(), DomError> {
+        self.check_node(element)?;
+        if self.node_generation(element) != Some(generation) { return Err(DomError::InvalidStateError); }
+        if !matches!(self.get(element).kind, crate::NodeKind::Element { .. }) { return Err(DomError::TypeError); }
+        Ok(())
+    }
+    /// Embeddings capture generation before author-defined string conversion.
+    pub fn dataset_pairs_for_generation(&mut self, element: NodeIdx, generation: u64)
+        -> Result<Vec<(Vec<u16>, Vec<u16>)>, DomError> {
+        self.validate_dataset_generation(element, generation)?;
+        self.dataset_pairs(element)
+    }
+    pub fn dataset_value_for_generation(&mut self, element: NodeIdx, generation: u64, name: &[u16])
+        -> Result<Option<Vec<u16>>, DomError> {
+        self.validate_dataset_generation(element, generation)?;
+        self.dataset_value(element, name)
+    }
+    pub fn set_dataset_value_for_generation(&mut self, element: NodeIdx, generation: u64,
+        name: &[u16], value: Vec<u16>) -> Result<(), DomError> {
+        self.validate_dataset_generation(element, generation)?;
+        self.set_dataset_value(element, name, value)
+    }
+    pub fn delete_dataset_value_for_generation(&mut self, element: NodeIdx, generation: u64,
+        name: &[u16]) -> Result<(), DomError> {
+        self.validate_dataset_generation(element, generation)?;
+        self.delete_dataset_value(element, name)
+    }
     /// Attribute order is preserved. Only ASCII capitals are excluded; other
     /// Unicode characters and unusual valid names remain observable.
     pub fn dataset_pairs(&mut self, element: NodeIdx) -> Result<Vec<(Vec<u16>, Vec<u16>)>, DomError> {
@@ -45,9 +72,7 @@ impl Dom {
     pub fn set_dataset_value(&mut self, element: NodeIdx, name: &[u16], value: Vec<u16>) -> Result<(), DomError> {
         let name = attribute_name(name, true)?;
         if !valid_attribute_name(&name) { return Err(DomError::InvalidCharacterError); }
-        self.set_attribute(element, &name, &String::from_utf16_lossy(&value))?;
-        let attribute = self.get_attribute_node(element, None, &name).ok_or(DomError::InvalidStateError)?;
-        self.store_attr_value_units(attribute, value)
+        self.set_attribute_ns_units(element, None, &name, value)
     }
     pub fn delete_dataset_value(&mut self, element: NodeIdx, name: &[u16]) -> Result<(), DomError> {
         let name = attribute_name(name, false)?;
@@ -92,3 +117,7 @@ mod tests {
         dom.delete_dataset_value(element, &units("absent")).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "dataset_exact_tests.rs"]
+mod exact_tests;

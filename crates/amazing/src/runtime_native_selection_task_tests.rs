@@ -30,7 +30,7 @@ fn native_selection_preserves_both_author_orders_and_microtask_checkpoint() {
             _ => None,
         }).collect();
         assert_eq!(order, if mutation_first { vec!["selection", "timer"] } else { vec!["timer", "selection"] });
-        d.pending.extend(requests);
+        d.fifo.borrow_mut().pending.extend(requests);
         d.drain_outbox().unwrap();
         pump(&mut d);
         // Cross-source choice belongs to EventLoop's documented policy. The
@@ -77,20 +77,20 @@ fn native_selection_full_js_quota_and_partial_abrupt_dom_mutation() {
 #[test]
 fn native_selection_failed_admission_keeps_front_and_payload_then_releases() {
     let mut d = driver(64);
-    d.next_callback = u64::MAX;
+    d.fifo.borrow_mut().next_callback = u64::MAX;
     assert!(d.run_script("getSelection().setPosition(text,1);setTimeout(()=>log.push('timer'),0)").is_err());
-    assert!(matches!(d.pending.front(), Some(SchedulingRequest::NativeTask { .. })));
-    let token = match d.pending.front().copied().unwrap() { SchedulingRequest::NativeTask { token } => token, _ => unreachable!() };
+    assert!(matches!(d.fifo.borrow().pending.front(), Some(SchedulingRequest::NativeTask { .. })));
+    let token = match d.fifo.borrow().pending.front().copied().unwrap() { SchedulingRequest::NativeTask { token } => token, _ => unreachable!() };
     assert!(d.bindings.native_selection_task(token).unwrap().is_some());
-    assert!(d.payloads.is_empty());
+    assert!(d.fifo.borrow().payloads.is_empty());
     // Recover the injected downstream callback-ID exhaustion; no request was lost.
-    d.next_callback = 1;
+    d.fifo.borrow_mut().next_callback = 1;
     pump(&mut d);
     check(&mut d, "log.length===2&&log.includes('selection')&&log.includes('timer')");
     assert!(d.bindings.native_selection_task(token).is_err());
     d.run_script("getSelection().setPosition(text,2)").unwrap();
     // The next allocation never reuses the released opaque slot.
-    let newer = d.payloads.values().find_map(|p| match p { Payload::NativeSelection(t) => Some(*t), _ => None }).unwrap();
+    let newer = d.fifo.borrow().payloads.values().find_map(|p| match p { Payload::NativeSelection(t) => Some(*t), _ => None }).unwrap();
     assert!(newer.slot() > token.slot());
     assert!(d.admit(SchedulingRequest::NativeTask { token: NativeTaskToken::new(newer.owner()+1,newer.slot()) }).is_err());
     assert!(d.admit(SchedulingRequest::NativeTask { token: newer }).is_err());
@@ -110,7 +110,7 @@ fn native_selection_stale_generation_and_removed_child_drop_without_cross_docume
         SchedulingRequest::NativeTask { token } => Some(*token), _ => None,
     }).unwrap();
     let original = bindings.test_stale_native_generation(token);
-    d.pending.extend(requests);
+    d.fifo.borrow_mut().pending.extend(requests);
     d.drain_outbox().unwrap();
     assert!(bindings.test_native_tasks_empty());
     // Discarding a mismatched snapshot must not clear a genuine current flag.

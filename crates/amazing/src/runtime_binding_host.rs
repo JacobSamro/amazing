@@ -119,7 +119,12 @@ enum WebObject {
 #[path = "runtime_host_native_tasks.rs"]
 mod native_tasks;
 
+#[path = "runtime_host_tokenlist.rs"]
+mod tokenlist;
+
 struct BindingState {
+    html_constructor: html::HtmlConstructorRuntime,
+    tokenlist: tokenlist::TokenListRuntime,
     event_creation_realms: HashMap<usize, RealmHandle>,
     native_tasks: native_tasks::NativeTaskRuntime,
     image_states: HashMap<NodeIdx, (ImageLoaderState, u64, u64, crate::runtime_host_replaced_content::ImageDecodeDecision)>,
@@ -632,7 +637,9 @@ impl RuntimeBindingHost<'_> {
                 NodeKind::DocumentType { .. } => Interface::DocumentType,
                 NodeKind::Element { .. } => {
                     if host.dom.namespace(node) == Some(Namespace::Html) {
-                        html_element_interface(host.dom.name(node).unwrap_or(""))
+                        // A failed autonomous creation yields the HTMLUnknownElement fallback.
+                        if host.dom.is_failed_custom_element_creation(node) { Interface::HTMLUnknownElement }
+                        else { html_element_interface(host.dom.name(node).unwrap_or("")) }
                     } else if host.dom.namespace(node) == Some(Namespace::Svg) {
                         Interface::SVGElement
                     } else if host.dom.namespace(node) == Some(Namespace::MathMl) {
@@ -765,6 +772,8 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
                 }
                 Ok(value)
             }
+            NativeEntry::Operation(Operation::HTMLConstructor(interface)) =>
+                amazing_bindings::html_constructor::invoke_html_constructor(&mut adapter, interface, new_target),
             NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
             NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
@@ -814,6 +823,7 @@ pub(crate) fn install(
         slot
     };
     let state = Rc::new(RefCell::new(BindingState {
+        tokenlist: tokenlist::TokenListRuntime::default(),
                 event_creation_realms: HashMap::new(),
         native_tasks: native_tasks::NativeTaskRuntime::default(),
         image_states: HashMap::new(),
@@ -851,6 +861,7 @@ pub(crate) fn install(
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
         frames: html::FrameRuntime::default(),
+        html_constructor: html::HtmlConstructorRuntime::default(),
         pending_form_selection_events: Vec::new(),
         messaging: None,
         encoding: None,
@@ -945,6 +956,16 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl BindingHost for RuntimeBindingHost<'_> {
+    type DomCapture = tokenlist::RuntimeDomCapture;
+    type ConstructorExceptionContext = html::html_constructor::HtmlConstructorExceptionContext;
+    fn capture_dom_for_reactions(&mut self) -> Result<Self::DomCapture, Throw> {
+        let arena = self.state.borrow().arena;
+        self.tokenlist_capture_dom(arena)
+    }
+    fn dom_capture_arena(&self, capture: &Self::DomCapture) -> u64 { capture.arena() }
+    fn capture_dom(&mut self, arena: u64) -> Result<Self::DomCapture, Throw> { self.tokenlist_capture_dom(arena) }
+    fn with_captured_dom<R>(&mut self, capture: &Self::DomCapture, callback: impl FnOnce(&mut Dom) -> Result<R, DomError>) -> Result<R, Throw> { self.tokenlist_with_captured_dom(capture, callback) }
+    fn token_list_supported_tokens(&mut self, capture: &Self::DomCapture, list: &amazing_dom::token_list::TokenListCapture) -> Result<Option<Vec<Vec<u16>>>, Throw> { self.tokenlist_supported_tokens(capture, list) }
     fn invoke_cssom(&mut self, operation: amazing_bindings::cssom::CssomOp, receiver: JsValue, arguments: &[JsValue]) -> Result<JsValue, Throw> {
         amazing_bindings::cssom::invoke(self, operation, receiver, arguments)
     }
@@ -1054,13 +1075,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     _ => Err(DomError::InvalidStateError),
                 },
                 Operation::TokenListSupportedIndexCount => {
-                    if let Some((node, attribute)) = dom.token_list_info(handle.slot as usize) {
-                        let value = dom.attrs_of(node).and_then(|attrs| attrs.iter()
-                            .find(|(name, _)| name == attribute).map(|(_, value)| value.as_str())).unwrap_or("");
-                        let mut seen = std::collections::HashSet::new();
-                        Ok(value.split(|ch| matches!(ch, '\t' | '\n' | '\u{000C}' | '\r' | ' '))
-                            .filter(|token| !token.is_empty() && seen.insert(*token)).count())
-                    } else { Err(DomError::InvalidStateError) }
+                    dom.token_list_capture(handle.slot as usize)
+                        .and_then(|capture| dom.token_list_length(&capture))
                 },
                 Operation::NamedNodeMapSupportedIndexCount => {
                     dom.attribute_nodes(NodeIdx(handle.slot as u32)).map(|attrs| attrs.len())
@@ -1157,7 +1173,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         key: PlatformKey,
         brand: InterfaceBrand,
     ) -> Result<JsValue, Throw> {
-        if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION) {
+        if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION | InterfaceBrand::CUSTOM_ELEMENT_REGISTRY) {
             let node = self.node_from_object_key(key)
                 .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
             self.dom_initialize_template_document_origin(node)?;
@@ -1218,6 +1234,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     RuntimeBindingHost { js, state }.wrap_platform_object(key, brand));
             }
         }
+        if brand == InterfaceBrand::DOM_TOKEN_LIST {
+            if let Some(value) = self.tokenlist_wrap_in_owner_realm(key)? { return Ok(value); }
+        }
         let interface = self.interface_for(key, brand)?;
         let prototype = self
             .prototype(interface)
@@ -1231,6 +1250,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
             },
             &prototype,
         )?;
+        if brand == InterfaceBrand::DOM_TOKEN_LIST {
+            self.tokenlist_associate_element(&value, key)?;
+        }
         if brand == InterfaceBrand::LOCATION {
             self.materialize_location_unforgeables(&value)?;
         } else if interface == Interface::MessageEvent {
@@ -1259,7 +1281,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
             slot: handle.slot,
             generation: handle.generation,
         };
-        if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION) {
+        if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION | InterfaceBrand::CUSTOM_ELEMENT_REGISTRY) {
             self.node_from_object_key(key).map(|_| key)
         } else if brand == InterfaceBrand::SELECTION {
             self.dom_selection_from_key(key).ok().map(|_| key)
@@ -1336,6 +1358,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn abort_signal_created(&mut self, signal: AbortSignalId) -> Result<(), Throw> {
         self.dom_register_abort(signal)
+    }
+    fn wrap_node_in_captured_dom(&mut self, capture: &Self::DomCapture, key: PlatformKey) -> Result<JsValue, Throw> {
+        self.tokenlist_wrap_captured_key(capture, key)
     }
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey {
         PlatformKey {
@@ -1437,7 +1462,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     definition.name,
                     length,
                     NativeEntry::Operation(operation),
-                    if operation == Operation::XMLSerializerConstructor {
+                    if matches!(operation, Operation::XMLSerializerConstructor | Operation::HTMLConstructor(_)) {
                         HostCallPolicy::ConstructOnlyAllocates
                     } else {
                         HostCallPolicy::ConstructOnly
@@ -1564,7 +1589,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
         Ok(OptionalHookInstall::Installed)
     }
     fn install_custom_elements_global(&mut self) -> Result<OptionalHookInstall, Throw> {
-        let registry = registry_for_document(self, NodeIdx(0))?;
+        // Each Window owns its own Document's registry, never the top one.
+        let document = self.dom_current_document_for_nodes().unwrap_or(NodeIdx(0));
+        let registry = registry_for_document(self, document)?;
         let global = self.js.binding_global_object();
         self.define_data_property(&global, "customElements", registry, true, false, true)?;
         Ok(OptionalHookInstall::Installed)
@@ -1613,11 +1640,17 @@ impl BindingHost for RuntimeBindingHost<'_> {
     fn sequence_shadow_roots(&mut self, value: &JsValue) -> Result<Vec<NodeIdx>, Throw> {
         self.dom_sequence_shadow_roots(value)
     }
+    fn construct_custom_element_autonomous(&mut self, constructor: &JsValue,
+        context: &amazing_dom::custom_elements::AutonomousCreationContext, capture: &Self::DomCapture) -> Result<JsValue, Throw> {
+        self.html_construct_autonomous(constructor, context, capture)
+    }
+    fn capture_custom_element_constructor_exception_context(&mut self, constructor: &JsValue)
+        -> Result<Self::ConstructorExceptionContext, Throw> { self.html_capture_constructor_exception(constructor) }
+    fn report_custom_element_constructor_exception(&mut self, context: Self::ConstructorExceptionContext,
+        error: Throw) -> Result<(), Throw> { self.html_report_constructor_exception(context, error) }
     fn construct_custom_element(&mut self, constructor: &JsValue,
-        _definition: usize, _element: NodeIdx) -> Result<JsValue, Throw> {
-        // JSRT-7 must make derived `super()` return this element's canonical
-        // wrapper. Until then the native finish check rejects ordinary objects.
-        self.js.binding_construct(constructor, Vec::new())
+        definition: usize, element: NodeIdx) -> Result<JsValue, Throw> {
+        self.html_construct_custom_element(constructor, definition, element)
     }
     fn new_promise(&mut self) -> Result<JsValue, Throw> {
         let global = self.js.binding_global_object();
@@ -2054,41 +2087,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
             state.constructed_documents.insert((copy, copy_generation));
         }
     }
-    fn with_dom<R>(
-        &mut self,
-        callback: impl FnOnce(&mut Dom) -> Result<R, DomError>,
-    ) -> Result<R, Throw> {
-        let host = self.state.borrow().host.clone();
-        let result = callback(&mut host.borrow_mut().dom);
-        // Preserve the order in which script queues JS jobs and native DOM
-        // mutations. Collecting only at the end of the script would move the
-        // mutation checkpoint behind jobs queued after this operation.
-        // A committed Selection mutation enters the shared FIFO before any
-        // later author registration, even when this operation returns an error.
-        let emitted = RuntimeBindings { state: self.state.clone() }.emit_native_selection_tasks(self.js);
-        let microtasks = (|| {
-            let pending = host.borrow().pending_native_microtasks();
-            for request in pending {
-                self.js.enqueue_native_microtask(request.global, request.kind)?;
-                host.borrow_mut().acknowledge_native_microtask(request);
-            }
-            Ok::<(), Throw>(())
-        })();
-        if result.is_ok() { emitted?; microtasks?; }
-        // Failed emissions remain pending for checkpoint retry. An earlier DOM
-        // error takes precedence over a later scheduling error.
-        // HTML-35: named access on window (SS7.2.2.3). Every DOM-mutating
-        // binding call passes through this one function, so this is the
-        // single choke point that can keep window's named properties live
-        // without a hook into amazing-js's property lookup itself. The flag
-        // check is one bool per call in the overwhelming common case
-        // (nothing id/name/tree-membership-relevant changed); the O(document
-        // size) rescan behind it only runs when `Dom::mark_named_objects_dirty`
-        // actually fired.
-        if result.is_ok() && host.borrow_mut().dom.take_named_objects_dirty() {
-            self.dom_refresh_window_named_properties()?;
-        }
-        result.map_err(|error| throw_dom_error(self, error))
+    fn with_dom<R>(&mut self, callback: impl FnOnce(&mut Dom) -> Result<R, DomError>) -> Result<R, Throw> {
+        self.tokenlist_with_current_dom(callback)
     }
     fn is_html_document(&self, document: NodeIdx) -> bool {
         if document != NodeIdx(0) {

@@ -26,20 +26,6 @@ pub struct LiveCollection {
 }
 
 impl Dom {
-    /// Canonical live token-list identity for one element and content attribute.
-    pub fn token_list(&mut self, node: NodeIdx, attribute: &str) -> Result<usize, DomError> {
-        self.check_node(node)?;
-        if !matches!(self.get(node).kind, NodeKind::Element { .. }) { return Err(DomError::TypeError); }
-        if let Some(slot) = self.token_lists.iter().position(|entry| entry.0 == node && entry.1 == attribute) {
-            return Ok(slot);
-        }
-        let slot = self.token_lists.len();
-        self.token_lists.push((node, attribute.to_owned()));
-        Ok(slot)
-    }
-    pub fn token_list_info(&self, slot: usize) -> Option<(NodeIdx, &str)> {
-        self.token_lists.get(slot).map(|entry| (entry.0, entry.1.as_str()))
-    }
     /// Reuses the collection attached to an owner and filter. In particular,
     /// repeated `children` access returns the same native identity.
     pub fn collection(&mut self, root: NodeIdx, filter: CollectionFilter) -> Result<usize, DomError> {

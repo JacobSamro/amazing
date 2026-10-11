@@ -116,6 +116,15 @@ impl Dom {
         Ok(node)
     }
 
+    pub fn validate_element_creation_name(namespace_uri: Option<&str>, name: &str, qualified: bool)
+        -> Result<(Option<String>, String), DomError> {
+        if qualified {
+            let (prefix, local) = validate_and_extract(namespace_uri.filter(|uri| !uri.is_empty()), name, false)?;
+            Ok((prefix.map(str::to_owned), local.to_owned()))
+        } else if valid_element_local_name(name) { Ok((None, name.to_owned())) }
+        else { Err(DomError::InvalidCharacterError) }
+    }
+
     /// `Document.createElement` takes a local name, not a qualified name.
     /// Colons are literal characters here; only `createElementNS` extracts a prefix.
     pub fn create_element_local_in(
@@ -139,7 +148,7 @@ impl Dom {
     /// keeps the type's default `false` -- exactly the spec's "set to false
     /// by the HTML parser and the XML parser on script elements they insert",
     /// with no change needed in the html lane's tree builder.
-    fn init_force_async(&mut self, node: NodeIdx) {
+    pub(crate) fn init_force_async(&mut self, node: NodeIdx) {
         if self.local_name(node) == Some("script") && matches!(self.get(node).kind,
             NodeKind::Element { namespace: Namespace::Html, .. }) {
             self.set_force_async(node, true);
@@ -230,9 +239,14 @@ impl Dom {
         qualified_name: &str,
         value: &str,
     ) -> Result<(), DomError> {
+        self.set_attribute_qualified_ns_units(node, namespace_uri, qualified_name, value.encode_utf16().collect())
+    }
+    /// Qualified-name validation is identical; values reach admission as exact units.
+    pub fn set_attribute_qualified_ns_units(&mut self, node: NodeIdx, namespace_uri: Option<&str>,
+        qualified_name: &str, value: Vec<u16>) -> Result<(), DomError> {
         let uri = namespace_uri.filter(|uri| !uri.is_empty());
         let (prefix, local_name) = validate_and_extract(uri, qualified_name, true)?;
-        self.set_attribute_expanded(node, uri, prefix, local_name, value)
+        self.set_attribute_expanded_units(node, uri, prefix, local_name, value)
     }
 
     /// Parser/value-setting primitive for already-validated expanded attributes.
@@ -246,6 +260,11 @@ impl Dom {
         local_name: &str,
         value: &str,
     ) -> Result<(), DomError> {
+        self.set_attribute_expanded_units(node, namespace_uri, prefix, local_name, value.encode_utf16().collect())
+    }
+    /// Expanded identity with exact DOMString value; preserves an existing prefix.
+    pub fn set_attribute_expanded_units(&mut self, node: NodeIdx, namespace_uri: Option<&str>,
+        prefix: Option<&str>, local_name: &str, value: Vec<u16>) -> Result<(), DomError> {
         self.check_node(node)?;
         if !matches!(self.get(node).kind, NodeKind::Element { .. }) {
             return Err(DomError::NotSupportedError);
@@ -256,7 +275,7 @@ impl Dom {
             return Err(DomError::NamespaceError);
         }
         let exists = self.get_attribute_ns(node, uri, local_name).is_some();
-        self.set_attribute_ns(node, uri, local_name, value)?;
+        self.set_attribute_ns_units(node, uri, local_name, value)?;
         if !exists {
             if let Some(uri) = uri {
                 let attr = self.nodes[node.0 as usize]

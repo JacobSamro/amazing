@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 pub mod host;
+pub mod html_constructor;
 pub mod cssom;
 pub mod storage_interfaces;
 pub mod dom_exception;
@@ -76,7 +77,7 @@ pub use amazing_dom::{Dom, DomError, NodeIdx};
 pub use amazing_fetch::api::{Blob, BlobPart, File, FormData};
 pub use interfaces::{html_element_interface, install, unscopable_members, InstallReport, OptionalCapability, INTERFACES};
 pub use invoke::{invoke, supported_index_count, supported_names};
-pub use custom_element_bindings::{deliver_custom_element_reactions, registry_for_document};
+pub use custom_element_bindings::{deliver_custom_element_reactions, deliver_custom_element_reaction_frame, registry_for_document, create_element_from_plan};
 
 #[cfg(test)]
 mod tests;

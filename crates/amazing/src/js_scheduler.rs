@@ -11,33 +11,13 @@ use crate::dom_host::BrowserDomHost;
 pub(crate) const GLOBAL: GlobalId = GlobalId(1);
 pub(crate) const JS_CAPACITY: usize = 4096;
 
-#[derive(Clone)]
-enum Payload {
-    ParserLifecycle(crate::runtime_binding_host::html::HtmlParserTask),
-    ParserScript(crate::runtime_binding_host::html::HtmlReadyParserScript),
-    Job(SchedulingToken),
-    Callback(SchedulingToken),
-    Mutation,
-    AbortTimeout(AbortSignalId, u64),
-    FormSelection(u32),
-    NativeSelection(NativeTaskToken),
-}
-struct TimerRegistration {
-    core: TimerId,
-    callback: CallbackId,
-    repeat: bool,
-}
+use crate::runtime_binding_host::html::{DriverFifo, DriverPayload as Payload, DriverTimerRegistration as TimerRegistration};
 
 pub(crate) struct DriverScheduler {
     pub(crate) js: Interpreter,
     host: Rc<RefCell<BrowserDomHost>>,
     bindings: crate::runtime_binding_host::RuntimeBindings,
-    loop_: EventLoop,
-    pending: VecDeque<SchedulingRequest>,
-    payloads: BTreeMap<u64, Payload>,
-    timers: BTreeMap<u32, TimerRegistration>,
-    frames: BTreeMap<u32, (AnimationFrameId, CallbackId)>,
-    next_callback: u64,
+    fifo: Rc<RefCell<DriverFifo>>,
     parser_globals: std::collections::HashMap<amazing_js::interp::RealmHandle, (GlobalId, amazing_dom::NodeIdx, u64)>,
     next_parser_global: u64,
     root_realm: amazing_js::interp::RealmHandle,
@@ -45,7 +25,6 @@ pub(crate) struct DriverScheduler {
     parser_script_pending: VecDeque<crate::runtime_binding_host::html::HtmlReadyParserScript>,
     started: Instant,
     now: Duration,
-    trace: Vec<String>,
     pending_resize: bool,
     pending_scroll: Vec<u32>,
     render_hook: Option<Rc<dyn Fn()>>,
@@ -59,18 +38,31 @@ impl DriverScheduler {
         let root_realm = js.binding_current_realm();
         let mut loop_ = EventLoop::new();
         loop_.register_global(GLOBAL).map_err(loop_error)?;
+        let fifo = Rc::new(RefCell::new(DriverFifo::new(loop_)));
+        bindings.attach_parser_checkpoint_fifo(&fifo)?;
         Ok(Self {
-            js, host, bindings, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
-            timers: BTreeMap::new(), frames: BTreeMap::new(), next_callback: 1, parser_globals: std::collections::HashMap::new(), next_parser_global: 2, root_realm, parser_task_pending: VecDeque::new(), parser_script_pending: VecDeque::new(),
-            started: Instant::now(), now: Duration::ZERO, trace: Vec::new(),
+            js, host, bindings, fifo, parser_globals: std::collections::HashMap::new(), next_parser_global: 2, root_realm, parser_task_pending: VecDeque::new(), parser_script_pending: VecDeque::new(),
+            started: Instant::now(), now: Duration::ZERO,
             pending_resize: false, pending_scroll: Vec::new(), render_hook: None,
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn bindings_for_parser_checkpoint(&self) -> crate::runtime_binding_host::RuntimeBindings { self.bindings.clone() }
     pub(crate) fn run_script(&mut self, source: impl Into<amazing_js::value::JsString>) -> Result<JsValue, Throw> {
         let source = source.into();
         self.enter(|js| js.run_script_utf16(source.units()))
     }
+    /// Execute the actual root parser tree outside its RefCell borrow. The
+    /// constructor bridge swaps the same native arena only during author JS.
+    pub(crate) fn run_parser_creation_frame(&mut self,
+        parser: &Rc<RefCell<amazing_html::ResumableParser>>) -> Result<amazing_html::ParseSignal, amazing_dom::DomError> {
+        let mut creation = crate::runtime_binding_host::html::html_constructor::HtmlParserCreationHost {
+            js: &mut self.js, bindings: self.bindings.clone(), realm: self.root_realm, import: None, parser: parser.clone(),
+        };
+        amazing_html::ResumableParser::run_with_creation_host(parser, &mut creation)
+    }
+
     pub(crate) fn run_page_script(&mut self, script: &crate::cmd::js::PageScript,
         source: impl Into<amazing_js::value::JsString>, url: &str) -> Result<JsValue, Throw> {
         let bindings = self.bindings.clone();
@@ -269,10 +261,12 @@ impl DriverScheduler {
         // Retry them before allowing another JS entry; never silently discard one.
         self.drain_outbox()?;
         let before = self.js.output.borrow().len();
+        self.fifo.borrow_mut().trace_entry_depth += 1;
         let result = f(&mut self.js);
+        self.fifo.borrow_mut().trace_entry_depth -= 1;
         let bindings = self.bindings.clone();
         let reactions = bindings.deliver_reactions(&mut self.js);
-        self.trace.extend(self.js.output.borrow()[before..].iter().cloned());
+        self.fifo.borrow_mut().trace.extend(self.js.output.borrow()[before..].iter().cloned());
         let collected = self.collect_native_mutations();
         let drained = self.drain_outbox();
         reactions?;
@@ -290,20 +284,16 @@ impl DriverScheduler {
         Ok(())
     }
 
-    fn own(&mut self, payload: Payload) -> Result<CallbackId, Throw> {
-        let id = self.next_callback;
-        self.next_callback = id.checked_add(1)
-            .ok_or_else(|| Throw::range_error("driver callback IDs exhausted"))?;
-        self.payloads.insert(id, payload);
-        Ok(CallbackId(id))
-    }
+    fn own(&mut self, payload: Payload) -> Result<CallbackId, Throw> { self.fifo.borrow_mut().own(payload) }
 
     fn drain_outbox(&mut self) -> Result<(), Throw> {
         self.bindings.emit_native_selection_tasks(&mut self.js)?;
-        self.pending.extend(self.js.take_scheduling_requests());
-        while let Some(request) = self.pending.front().copied() {
+        self.fifo.borrow_mut().pending.extend(self.js.take_scheduling_requests());
+        loop {
+            let request = { self.fifo.borrow().pending.front().copied() };
+            let Some(request) = request else { break; };
             self.admit(request)?;
-            self.pending.pop_front();
+            self.fifo.borrow_mut().pending.pop_front();
         }
         // Cross-document storage notifications enter this document as tasks,
         // after requests already emitted by its own script execution.
@@ -311,10 +301,12 @@ impl DriverScheduler {
         // Cross-document messages (postMessage/MessageChannel/BroadcastChannel)
         // enter this document as tasks at the same checkpoint.
         self.bindings.schedule_messages(&mut self.js)?;
-        self.pending.extend(self.js.take_scheduling_requests());
-        while let Some(request) = self.pending.front().copied() {
+        self.fifo.borrow_mut().pending.extend(self.js.take_scheduling_requests());
+        loop {
+            let request = { self.fifo.borrow().pending.front().copied() };
+            let Some(request) = request else { break; };
             self.admit(request)?;
-            self.pending.pop_front();
+            self.fifo.borrow_mut().pending.pop_front();
         }
         for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
             self.register_abort_timeout(signal, delay_ms)?;
@@ -324,8 +316,9 @@ impl DriverScheduler {
         while let Some(script) = self.parser_script_pending.front().cloned() {
             let global = self.parser_task_global(script.record.session)?;
             let callback = self.own(Payload::ParserScript(script))?;
-            if let Err(error) = self.loop_.queue_task(TaskSource::Networking, Some(global), callback) {
-                self.payloads.remove(&callback.0);
+            let queued = { self.fifo.borrow_mut().loop_.queue_task(TaskSource::Networking, Some(global), callback) };
+            if let Err(error) = queued {
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 return Err(loop_error(error));
             }
             self.parser_script_pending.pop_front();
@@ -334,15 +327,16 @@ impl DriverScheduler {
         while let Some(task) = self.parser_task_pending.front().copied() {
             let global = self.parser_task_global(task.session)?;
             let callback = self.own(Payload::ParserLifecycle(task))?;
-            if let Err(error) = self.loop_.queue_task(TaskSource::DomManipulation, Some(global), callback) {
-                self.payloads.remove(&callback.0);
+            let queued = { self.fifo.borrow_mut().loop_.queue_task(TaskSource::DomManipulation, Some(global), callback) };
+            if let Err(error) = queued {
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 return Err(loop_error(error));
             }
             self.parser_task_pending.pop_front();
         }
         for node in self.bindings.take_form_selection_events() {
             let callback = self.own(Payload::FormSelection(node.0))?;
-            self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
+            self.fifo.borrow_mut().loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
                 .map_err(loop_error)?;
         }
         Ok(())
@@ -351,131 +345,70 @@ impl DriverScheduler {
     fn register_abort_timeout(&mut self, signal: AbortSignalId, delay_ms: u64) -> Result<(), Throw> {
         let chunk = delay_ms.min(i32::MAX as u64);
         let callback = self.own(Payload::AbortTimeout(signal, delay_ms - chunk))?;
-        if let Err(error) = self.loop_.set_timer(GLOBAL, callback, chunk as i32, false) {
-            self.payloads.remove(&callback.0);
+        let queued = { self.fifo.borrow_mut().loop_.set_timer(GLOBAL, callback, chunk as i32, false) };
+        if let Err(error) = queued {
+            self.fifo.borrow_mut().payloads.remove(&callback.0);
             return Err(loop_error(error));
         }
         Ok(())
     }
 
     fn admit(&mut self, request: SchedulingRequest) -> Result<(), Throw> {
-        match request {
-            SchedulingRequest::Timer { registration, callback_token, delay_ms, repeat } => {
-                let callback = self.own(Payload::Callback(callback_token))?;
-                let core = match self.loop_.set_timer(GLOBAL, callback, delay_ms, repeat) {
-                    Ok(id) => id,
-                    Err(error) => { self.payloads.remove(&callback.0); return Err(loop_error(error)); }
-                };
-                self.timers.insert(registration, TimerRegistration { core, callback, repeat });
-            }
-            SchedulingRequest::CancelTimer { registration } => {
-                if let Some(entry) = self.timers.remove(&registration) {
-                    self.loop_.clear_timer(entry.core);
-                    self.payloads.remove(&entry.callback.0);
-                }
-            }
-            SchedulingRequest::AnimationFrame { registration, callback_token } => {
-                let callback = self.own(Payload::Callback(callback_token))?;
-                let core = match self.loop_.request_animation_frame(GLOBAL, callback) {
-                    Ok(id) => id,
-                    Err(error) => { self.payloads.remove(&callback.0); return Err(loop_error(error)); }
-                };
-                self.frames.insert(registration, (core, callback));
-            }
-            SchedulingRequest::CancelAnimationFrame { registration } => {
-                if let Some((core, callback)) = self.frames.get(&registration).copied() {
-                    self.loop_.cancel_animation_frame(GLOBAL, core).map_err(loop_error)?;
-                    self.frames.remove(&registration);
-                    self.payloads.remove(&callback.0);
-                }
-            }
-            SchedulingRequest::Microtask { job_token } => {
-                let callback = self.own(Payload::Job(job_token))?;
-                if let Err(error) = self.loop_.queue_microtask(GLOBAL, callback) {
-                    self.payloads.remove(&callback.0);
-                    return Err(loop_error(error));
-                }
-            }
-            SchedulingRequest::NativeTask { token } => {
-                if self.bindings.native_selection_task(token)?.is_none() {
-                    self.bindings.discard_native_selection_task(token)?;
-                } else {
-                    let callback = self.own(Payload::NativeSelection(token))?;
-                    if let Err(error) = self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback) {
-                        self.payloads.remove(&callback.0);
-                        return Err(loop_error(error));
-                    }
-                    // Existing root scheduling-global policy remains explicit;
-                    // target Document generation and creation realm are independent.
-                    self.bindings.native_selection_admitted(token);
-                }
-            }
-            SchedulingRequest::NativeMicrotask { global, kind } => {
-                if global != GLOBAL.0 || kind != NativeMicrotaskKind::MutationObserver {
-                    return Err(Throw::type_error("unknown native microtask request"));
-                }
-                let callback = self.own(Payload::Mutation)?;
-                if let Err(error) = self.loop_.queue_microtask(GLOBAL, callback) {
-                    self.payloads.remove(&callback.0);
-                    return Err(loop_error(error));
-                }
-            }
-        }
-        Ok(())
+        self.fifo.borrow_mut().admit(request, &self.bindings)
     }
 
     fn invoke(&mut self, callback: CallbackId, timestamp: Option<Duration>) -> Result<(), Throw> {
-        let payload = self.payloads.get(&callback.0).cloned()
+        let payload = self.fifo.borrow_mut().payloads.get(&callback.0).cloned()
             .ok_or_else(|| Throw::type_error("unknown driver callback"))?;
         match payload {
             Payload::ParserLifecycle(task) => {
-                self.payloads.remove(&callback.0);
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.run_parser_task(js, task))
             }
             Payload::ParserScript(task) => {
-                self.payloads.remove(&callback.0);
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.run_ready_parser_script(js, task))
             }
             Payload::Job(token) => {
-                self.payloads.remove(&callback.0);
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 self.enter(|js| js.invoke_one_job(token))
             }
             Payload::Callback(token) => {
                 // A repeating timer retains its token and payload. A one-shot
                 // timer or frame is removed after invocation, including throws.
-                let repeating = self.timers.values().any(|timer| timer.callback == callback && timer.repeat);
+                let repeating = self.fifo.borrow_mut().timers.values().any(|timer| timer.callback == callback && timer.repeat);
                 if !repeating {
-                    self.payloads.remove(&callback.0);
-                    self.timers.retain(|_, timer| timer.callback != callback);
-                    self.frames.retain(|_, (_, id)| *id != callback);
+                    self.fifo.borrow_mut().payloads.remove(&callback.0);
+                    self.fifo.borrow_mut().timers.retain(|_, timer| timer.callback != callback);
+                    self.fifo.borrow_mut().frames.retain(|_, (_, id)| *id != callback);
                 }
                 let receiver = JsValue::Object(self.js.global_obj.clone());
                 self.enter(|js| js.invoke_one_callback(token, receiver, timestamp))
             }
             Payload::Mutation => {
-                self.payloads.remove(&callback.0);
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 let bindings = self.bindings.clone();
                 let result = self.enter(|js| bindings.deliver_mutations(js));
                 self.host.borrow_mut().native_forwarded = false;
-                self.trace.push("M".into());
+                self.fifo.borrow_mut().trace.push("M".into());
                 result
             }
             Payload::AbortTimeout(signal, remaining) => {
-                self.payloads.remove(&callback.0);
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 if remaining > 0 { return self.register_abort_timeout(signal, remaining); }
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.fire_abort_timeout(js, signal))
             }
             Payload::NativeSelection(token) => {
-                self.payloads.remove(&callback.0);
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 let bindings = self.bindings.clone();
                 let task = bindings.release_native_selection_task(token)?;
                 self.enter(|js| bindings.fire_selection_change(js, task))
             }
             Payload::FormSelection(node) => {
-                self.payloads.remove(&callback.0);
+                self.fifo.borrow_mut().payloads.remove(&callback.0);
                 self.dispatch_dom_event(node, "select")
             }
         }
@@ -533,7 +466,7 @@ impl DriverScheduler {
         mut on_render: impl FnMut(RenderPhase, Duration),
     ) -> Result<bool, Throw> {
         self.now = self.now.max(now);
-        self.loop_.advance_to(self.now).map_err(loop_error)?;
+        self.fifo.borrow_mut().loop_.advance_to(self.now).map_err(loop_error)?;
         // Update rendering follows the task and microtask checkpoint for this
         // turn. In particular, a timer may register a frame callback before
         // this opportunity begins.
@@ -542,11 +475,12 @@ impl DriverScheduler {
         let mut rendering_queued = !render;
         for _ in 0..10_000 {
             self.sync_parser_globals()?;
-            let step = match self.loop_.step().map_err(loop_error)? {
+            let next = { self.fifo.borrow_mut().loop_.step().map_err(loop_error)? };
+            let step = match next {
                 Some(step) => step,
                 None if !rendering_queued => {
                     rendering_queued = true;
-                    self.loop_.rendering_opportunity(GLOBAL, self.now).map_err(loop_error)?;
+                    self.fifo.borrow_mut().loop_.rendering_opportunity(GLOBAL, self.now).map_err(loop_error)?;
                     continue;
                 }
                 None => return first_error.map_or(Ok(did_work), Err),
@@ -570,7 +504,7 @@ impl DriverScheduler {
             if let Err(error) = result { first_error.get_or_insert(error); }
             // Even a throw or admission failure must release the in-flight step.
             let drained = self.drain_outbox();
-            self.loop_.complete(step.id).map_err(loop_error)?;
+            self.fifo.borrow_mut().loop_.complete(step.id).map_err(loop_error)?;
             if let Err(error) = drained { return Err(error); }
         }
         Err(Throw::range_error("driver event loop step limit reached"))
@@ -613,7 +547,7 @@ impl Drop for DriverScheduler {
     }
 }
 
-fn loop_error(error: amazing_dom::event_loop::LoopError) -> Throw {
+pub(crate) fn loop_error(error: amazing_dom::event_loop::LoopError) -> Throw {
     Throw::type_error(format!("EventLoop: {error:?}"))
 }
 
@@ -745,14 +679,14 @@ mod tests {
         let (mut driver, _) = adapter(16, false);
         driver.run_script("setTimeout(()=>{console.log('A'); Promise.resolve().then(()=>{console.log('P'); queueMicrotask(()=>console.log('R'))}); queueMicrotask(()=>console.log('Q'))},0); setTimeout(()=>console.log('B'),0)").unwrap();
         driver.pump_at(Duration::ZERO, false).unwrap();
-        assert_eq!(driver.trace, ["A", "P", "Q", "R", "B"]);
-        println!("TRACE timer-promise-microtask: {}", driver.trace.join(","));
+        assert_eq!(driver.fifo.borrow().trace, ["A", "P", "Q", "R", "B"]);
+        println!("TRACE timer-promise-microtask: {}", driver.fifo.borrow().trace.join(","));
 
         let (mut frame, _) = adapter(16, false);
         frame.run_script("let second; requestAnimationFrame(()=>{console.log('F1'); Promise.resolve().then(()=>cancelAnimationFrame(second))}); second=requestAnimationFrame(()=>console.log('F2'))").unwrap();
         frame.pump_at(Duration::from_millis(16), true).unwrap();
-        assert_eq!(frame.trace, ["F1"]);
-        println!("TRACE frame-cancel: {}", frame.trace.join(","));
+        assert_eq!(frame.fifo.borrow().trace, ["F1"]);
+        println!("TRACE frame-cancel: {}", frame.fifo.borrow().trace.join(","));
     }
 
     #[test]
@@ -772,7 +706,7 @@ mod tests {
         // The loop yields the pre-rAF render step, then the rAF callback, then the
         // post-rAF render step, so a compositor ticks once per frame in order.
         assert_eq!(&*phases.borrow(), &["before", "after"]);
-        assert_eq!(driver.trace, ["F"]);
+        assert_eq!(driver.fifo.borrow().trace, ["F"]);
         println!("TRACE render-hook-phases: before,F,after");
     }
 
@@ -784,20 +718,20 @@ mod tests {
         assert!(host_one.borrow().dom.mutation_microtask_pending());
         assert!(host_one.borrow().native_forwarded);
         one.pump_at(Duration::ZERO, false).unwrap();
-        assert_eq!(one.trace, ["TypeError", "P", "M"]);
+        assert_eq!(one.fifo.borrow().trace, ["TypeError", "P", "M"]);
         assert!(!host_one.borrow().dom.mutation_microtask_pending());
-        println!("TRACE native-capacity-one: {}", one.trace.join(","));
+        println!("TRACE native-capacity-one: {}", one.fifo.borrow().trace.join(","));
 
         let (mut two, host_two) = adapter(2, true);
         two.run_script(script).unwrap();
         two.pump_at(Duration::ZERO, false).unwrap();
-        assert_eq!(two.trace, ["P", "M", "Q"]);
+        assert_eq!(two.fifo.borrow().trace, ["P", "M", "Q"]);
         assert!(!host_two.borrow().native_forwarded);
         two.run_script("document.querySelector('x').setAttribute('watched','2')").unwrap();
         assert!(host_two.borrow().native_forwarded);
         two.pump_at(Duration::ZERO, false).unwrap();
-        assert_eq!(two.trace, ["P", "M", "Q", "M"]);
-        println!("TRACE native-rearm: {}", two.trace.join(","));
+        assert_eq!(two.fifo.borrow().trace, ["P", "M", "Q", "M"]);
+        println!("TRACE native-rearm: {}", two.fifo.borrow().trace.join(","));
     }
 
     #[test]
@@ -806,15 +740,15 @@ mod tests {
         let error = script.run_script("Promise.resolve().then(()=>console.log('P')); throw new Error('script sentinel')").unwrap_err();
         assert!(error.describe().contains("script sentinel"));
         script.pump_at(Duration::ZERO, false).unwrap();
-        assert_eq!(script.trace, ["P"]);
-        println!("TRACE thrown-script: {}", script.trace.join(","));
+        assert_eq!(script.fifo.borrow().trace, ["P"]);
+        println!("TRACE thrown-script: {}", script.fifo.borrow().trace.join(","));
 
         let (mut callback, _) = adapter(8, false);
         callback.run_script("setTimeout(()=>{console.log('A'); Promise.resolve().then(()=>console.log('P')); throw new Error('callback sentinel')},0); setTimeout(()=>console.log('B'),0)").unwrap();
         let error = callback.pump_at(Duration::ZERO, false).unwrap_err();
         assert!(error.describe().contains("callback sentinel"));
-        assert_eq!(callback.trace, ["A", "P", "B"]);
-        println!("TRACE thrown-callback: {}", callback.trace.join(","));
+        assert_eq!(callback.fifo.borrow().trace, ["A", "P", "B"]);
+        println!("TRACE thrown-callback: {}", callback.fifo.borrow().trace.join(","));
     }
 
     #[test]
@@ -824,9 +758,9 @@ mod tests {
         // has left the interpreter, so the driver must retain it and fail closed.
         driver.js.enqueue_native_microtask(999, NativeMicrotaskKind::MutationObserver).unwrap();
         assert!(driver.run_script("console.log('must not run')").is_err());
-        assert_eq!(driver.pending.len(), 1);
+        assert_eq!(driver.fifo.borrow().pending.len(), 1);
         assert!(driver.run_script("console.log('still blocked')").is_err());
-        assert_eq!(driver.pending.len(), 1);
+        assert_eq!(driver.fifo.borrow().pending.len(), 1);
         assert!(driver.js.output.borrow().is_empty());
         assert!(!host.borrow().native_forwarded);
         println!("TRACE downstream-fail-closed: retained=1 executed=0");
@@ -838,11 +772,11 @@ mod tests {
         assert_eq!(host.borrow_mut().query_selector("x"), Some(1));
         driver.run_script("let x=document.querySelector('x'); x.setAttribute('watched','1'); x.setAttribute('watched','2')").unwrap();
         assert!(host.borrow().native_forwarded);
-        assert_eq!(driver.payloads.values().filter(|p| matches!(p, Payload::Mutation)).count(), 1);
+        assert_eq!(driver.fifo.borrow().payloads.values().filter(|p| matches!(p, Payload::Mutation)).count(), 1);
         driver.pump_at(Duration::ZERO, false).unwrap();
-        assert_eq!(driver.trace, ["M"]);
+        assert_eq!(driver.fifo.borrow().trace, ["M"]);
         assert!(!host.borrow().native_forwarded);
-        println!("TRACE mutation-batch: {}", driver.trace.join(","));
+        println!("TRACE mutation-batch: {}", driver.fifo.borrow().trace.join(","));
     }
 }
 
@@ -850,7 +784,7 @@ impl DriverScheduler {
     fn sync_parser_globals(&mut self) -> Result<(), Throw> {
         let root = self.root_realm;
         for (id, _, _) in self.parser_globals.values() {
-            self.loop_.set_active(*id, false).map_err(loop_error)?;
+            self.fifo.borrow_mut().loop_.set_active(*id, false).map_err(loop_error)?;
         }
         for (realm, document, generation, active) in self.bindings.parser_global_associations() {
             let id = if let Some((id, saved, saved_generation)) = self.parser_globals.get(&realm) {
@@ -863,14 +797,14 @@ impl DriverScheduler {
                     let id = GlobalId(self.next_parser_global);
                     self.next_parser_global = self.next_parser_global.checked_add(1)
                         .ok_or_else(|| Throw::range_error("WindowGlobal task IDs exhausted"))?;
-                    self.loop_.register_global(id).map_err(loop_error)?;
-                    self.loop_.set_renderable(id, false).map_err(loop_error)?;
+                    self.fifo.borrow_mut().loop_.register_global(id).map_err(loop_error)?;
+                    self.fifo.borrow_mut().loop_.set_renderable(id, false).map_err(loop_error)?;
                     id
                 };
                 self.parser_globals.insert(realm, (id, document, generation));
                 id
             };
-            self.loop_.set_active(id, active).map_err(loop_error)?;
+            self.fifo.borrow_mut().loop_.set_active(id, active).map_err(loop_error)?;
         }
         Ok(())
     }
@@ -883,6 +817,12 @@ impl DriverScheduler {
     pub(crate) fn begin_parser_session(&mut self, document: amazing_dom::NodeIdx)
         -> Result<crate::runtime_binding_host::html::HtmlParserSession, Throw> {
         self.bindings.begin_parser_session(&mut self.js, document)
+    }
+    pub(crate) fn with_parser_blocking_script<T>(&mut self,
+        session: crate::runtime_binding_host::html::HtmlParserSession,
+        operation: impl FnOnce(&mut Self) -> T) -> Result<T, Throw> {
+        let _scope = self.bindings.enter_parser_blocking_script(session)?;
+        Ok(operation(self))
     }
     pub(crate) fn parser_session_current(&self, session: crate::runtime_binding_host::html::HtmlParserSession) -> bool {
         self.bindings.parser_session_current(session)

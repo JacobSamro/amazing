@@ -269,6 +269,7 @@ pub enum LegacyReflectionKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    HTMLConstructor(Interface),
     Cssom(crate::cssom::CssomOp),
     /// `true` when the click is driver-initiated (e.g. testdriver's
     /// synthetic `mousedown`/`mouseup`/click sequence, simulating real user
@@ -1094,6 +1095,32 @@ pub enum RangeCreationContext {
 pub trait BindingHost: Sized {
     type Value: Clone;
     type Error;
+    /// Actual owning DOM custody captured before author conversion.
+    type DomCapture: Clone;
+    type ConstructorExceptionContext;
+    /// None means this actual associated attribute has no defined token policy.
+    fn token_list_supported_tokens(&mut self, capture: &Self::DomCapture,
+        list: &amazing_dom::token_list::TokenListCapture)
+        -> Result<Option<Vec<Vec<u16>>>, Self::Error>;
+    fn capture_dom(&mut self, arena: u64) -> Result<Self::DomCapture, Self::Error>;
+    /// Actual native dispatch arena, captured before any author conversion.
+    /// This supplies no Document/Window/source-policy authority.
+    fn capture_dom_for_reactions(&mut self) -> Result<Self::DomCapture, Self::Error>;
+    fn dom_capture_arena(&self, capture: &Self::DomCapture) -> u64;
+    fn with_captured_dom<R>(&mut self, capture: &Self::DomCapture,
+        callback: impl FnOnce(&mut Dom) -> Result<R, DomError>) -> Result<R, Self::Error>;
+
+    /// Canonical wrapping with explicit original arena/generation, never a bare
+    /// node interpreted against a replacement current document.
+    fn wrap_node_in_captured_dom(&mut self, capture: &Self::DomCapture, key: PlatformKey)
+        -> Result<Self::Value, Self::Error> {
+        self.with_captured_dom(capture, |dom| {
+            let node = NodeIdx(u32::try_from(key.slot).map_err(|_| DomError::InvalidNode)?);
+            if dom.node_generation(node) != Some(key.generation) { return Err(DomError::InvalidStateError); }
+            Ok(())
+        })?;
+        self.wrap_platform_object(key, InterfaceBrand::NODE)
+    }
 
     /// Optional CSSOM dispatch seam; a host installs its real style callback.
     fn invoke_cssom(&mut self, _operation: crate::cssom::CssomOp, _receiver: Self::Value,
@@ -1302,6 +1329,17 @@ pub trait BindingHost: Sized {
     fn sequence_shadow_roots(&mut self, _value: &Self::Value) -> Result<Vec<NodeIdx>, Self::Error> {
         self.with_dom::<Vec<NodeIdx>>(|_| Err(DomError::NotSupportedError))
     }
+    fn construct_custom_element_autonomous(&mut self, _constructor: &Self::Value,
+        _context: &amazing_dom::custom_elements::AutonomousCreationContext, _capture: &Self::DomCapture)
+        -> Result<Self::Value, Self::Error> {
+        Err(self.type_error("Autonomous custom construction host is not installed"))
+    }
+    /// Move-only actual constructor-associated realm/global custody, captured
+    /// before Construct without invoking author code or following a Proxy target.
+    fn capture_custom_element_constructor_exception_context(&mut self, constructor: &Self::Value)
+        -> Result<Self::ConstructorExceptionContext, Self::Error>;
+    fn report_custom_element_constructor_exception(&mut self, context: Self::ConstructorExceptionContext,
+        error: Self::Error) -> Result<(), Self::Error>;
     fn construct_custom_element(&mut self, _constructor: &Self::Value,
         _definition: usize, _element: NodeIdx) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))

@@ -1,5 +1,5 @@
 use crate::host::{BindingHost, InterfaceBrand, Operation as O};
-use amazing_dom::{DomError, NodeIdx, NodeKind};
+use amazing_dom::{Dom, DomError, NodeIdx, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::DocumentImplementation | O::ImplementationCreateDocumentType
@@ -54,6 +54,8 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     if matches!(op, O::CreateElement | O::CreateElementNS) {
         let doc = document(host, &receiver)?;
+        let document_key = host.node_object_key(doc);
+        let capture = host.capture_dom(document_key.arena)?;
         let html_document = host.is_html_document(doc);
         let xhtml_document = host.with_dom(|dom| Ok(dom.document_metadata(doc)?
             .is_some_and(|metadata| metadata.content_type == "application/xhtml+xml")))?;
@@ -72,20 +74,16 @@ pub(crate) fn invoke<H: BindingHost>(
                 if host.is_nullish(options) { None } else {
                     let value = host.get_property(options, "is")?;
                     if host.is_undefined(&value) { None }
-                    else { Some(String::from_utf16_lossy(&host.to_dom_string(&value)?)) }
+                    else { Some(host.to_dom_string(&value)?) }
                 }
             } else { None }
         };
-        let node = host.with_dom(|dom| {
-            let node = if op == O::CreateElement {
-                dom.create_element_local_in(doc, uri.as_deref(), &name)?
-            } else {
-                dom.create_element_ns_in(doc, uri.as_deref(), &name)?
-            };
-            if let Some(is_name) = &is_name { dom.set_attribute(node, "is", is_name)?; }
-            Ok(node)
-        })?;
-        return host.wrap_node(node);
+        let (prefix, local_name) = host.with_captured_dom(&capture, |_| Dom::validate_element_creation_name(
+            uri.as_deref(), &name, op == O::CreateElementNS))?;
+        let plan = host.with_captured_dom(&capture, |dom| dom.prepare_dom_custom_element_creation(
+            amazing_dom::render_mutation::NodeGeneration { node: doc, generation: document_key.generation },
+            uri.as_deref(), prefix.as_deref(), &local_name, is_name.as_deref()))?;
+        return crate::custom_element_bindings::create_element_from_plan(host, &capture, document_key.arena, plan);
     }
     if op == O::CreateProcessingInstruction {
         let doc = document(host, &receiver)?;

@@ -67,12 +67,35 @@ impl Dom {
         self.nodes[copy.0 as usize].namespaced_attributes =
             self.get(node).namespaced_attributes.clone();
         self.nodes[copy.0 as usize].attribute_order = self.get(node).attribute_order.clone();
+        // Element storage has a scalar projection; attached Attr owns exact units.
+        // One scan collects only the source's attached Attr nodes (usually none).
+        if matches!(self.get(node).kind, NodeKind::Element { .. })
+            && !self.get(node).attribute_order.is_empty() {
+            let attached: Vec<(Option<String>, String, Vec<u16>)> = self.nodes.iter().filter_map(|n| match &n.kind {
+                NodeKind::Attr { local_name, namespace_uri, value, owner_element: Some(owner), .. }
+                    if *owner == node => Some((namespace_uri.clone(), local_name.clone(), value.clone())),
+                _ => None,
+            }).collect();
+            for (namespace, name, units) in attached {
+                let same = self.get_attribute_ns(node, namespace.as_deref(), &name)
+                    .is_some_and(|display| units.iter().copied().eq(display.encode_utf16()));
+                if same { continue; }
+                let attr = self.get_attribute_node(copy, namespace.as_deref(), &name)
+                    .ok_or(DomError::InvalidStateError)?;
+                self.store_attr_value_units(attr, units)?;
+            }
+        }
         self.nodes[copy.0 as usize].character_data_units =
             self.get(node).character_data_units.clone();
         self.nodes[copy.0 as usize].processing_instruction_attributes =
             self.get(node).processing_instruction_attributes.clone();
         self.nodes[copy.0 as usize].prefix = self.get(node).prefix.clone();
         self.clone_form_state(node, copy);
+        if matches!(self.get(copy).kind, NodeKind::Element { .. }) {
+            let value = self.custom_element_is_value(node)?.map(<[u16]>::to_vec);
+            self.initialize_custom_element_is_value(copy, self.node_generation(copy).unwrap(), value.as_deref())?;
+            self.queue_custom_element_upgrade(copy);
+        }
         if self.is_html_template(node) {
             let copy_contents = self.ensure_template_contents(copy)?;
             if deep {

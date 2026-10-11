@@ -3,7 +3,7 @@
 //! the parser deliberately does not maintain a second association table.
 use super::{NodeIdx, TreeBuilder};
 
-impl TreeBuilder {
+impl TreeBuilder<'_> {
     // HTML's thorough variant is specific to template closure; other stack
     // checkpoints keep their existing ordinary implied-end-tag algorithm.
     pub(super) fn generate_template_implied_end_tags(&mut self) {
@@ -23,6 +23,18 @@ impl TreeBuilder {
         let parent = self.shadow_templates.iter().find(|(template, _)| *template == target)
             .map(|(_, root)| *root).or_else(|| self.dom.template_contents(target)).unwrap_or(target);
         (parent, None)
+    }
+
+    /// A `<template for>` carrying `sanitize` (anything but "unsafe") applies
+    /// the default safe sanitizer to the nodes it patches in. That sanitizer
+    /// drops custom elements and customized built-ins, so none is created,
+    /// upgraded or constructed. Any enclosing safe patch template applies.
+    pub(super) fn inside_safe_patch_template(&self) -> bool {
+        self.open.iter().any(|&node| {
+            self.dom.is_html_template(node) && self.dom.template_insertion(node).is_some()
+                && self.dom.get_attribute_ns(node, None, "sanitize")
+                    .is_some_and(|value| !value.eq_ignore_ascii_case("unsafe"))
+        })
     }
 
     pub(super) fn prepare_content_patching(&mut self, scope: NodeIdx, template: NodeIdx) -> bool {
@@ -48,14 +60,14 @@ mod tests {
     use super::*;
     use super::super::{Token, Tokenizer, feed_with_tokenizer_feedback};
 
-    fn prepared() -> TreeBuilder {
+    fn prepared() -> TreeBuilder<'static> {
         let mut builder = TreeBuilder::new();
         let mut tokenizer = Tokenizer::new("<body><div><?start name='x'>old<?end>tail</div><section></section><template for=x>".chars().collect());
         loop {
             let token = tokenizer.next_token();
             assert_ne!(token, Token::Eof);
             let stop = matches!(&token, Token::StartTag { name, .. } if name == "template");
-            feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, token);
+            feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, token).unwrap();
             if stop { break; }
         }
         builder

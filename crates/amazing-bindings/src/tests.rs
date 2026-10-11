@@ -46,6 +46,9 @@ struct Host {
     promises: Vec<(u64, Option<V>, Option<V>)>,
     custom_element_errors: Vec<String>,
     fail_custom_element_constructor: bool,
+    fail_custom_element_after_super: bool,
+    held_custom_element_constructor_node: Option<NodeIdx>,
+    constructor_error_reports: Vec<(V, String, usize)>,
     skip_optional_hooks: bool,
     fail_class_string: Option<Interface>,
     constants: Vec<(&'static str, u16)>,
@@ -99,6 +102,33 @@ impl Host {
 impl BindingHost for Host {
     type Value = V;
     type Error = String;
+    type DomCapture = u64;
+    type ConstructorExceptionContext = (V, amazing_dom::render_mutation::NodeGeneration);
+    fn capture_dom_for_reactions(&mut self) -> Result<u64, String> { self.capture_dom(1) }
+    fn dom_capture_arena(&self, capture: &u64) -> u64 { *capture }
+    fn capture_dom(&mut self, arena: u64) -> Result<u64, String> {
+        if arena != 1 { return Err("Invalid original DOM arena".into()); }
+        Ok(arena)
+    }
+    fn with_captured_dom<R>(&mut self, capture: &u64,
+        callback: impl FnOnce(&mut Dom) -> Result<R, DomError>) -> Result<R, String> {
+        if *capture != 1 { return Err("Invalid original DOM arena".into()); }
+        self.with_dom(callback)
+    }
+    fn token_list_supported_tokens(&mut self, capture: &u64,
+        list: &amazing_dom::token_list::TokenListCapture) -> Result<Option<Vec<Vec<u16>>>, String> {
+        self.with_captured_dom(capture, |dom| {
+            let owner = dom.token_list_owner(list)?.node;
+            if dom.namespace_uri(owner) != Some("http://www.w3.org/1999/xhtml") { return Ok(None); }
+            let words: Option<&[&str]> = match (dom.token_list_attribute(list)?, dom.local_name(owner)) {
+                ("rel", Some("a" | "area")) => Some(&["noreferrer", "noopener", "opener"]),
+                ("rel", Some("link")) => Some(&["alternate", "dns-prefetch", "icon", "manifest", "modulepreload", "preconnect", "prefetch", "preload", "stylesheet"]),
+                ("rel", _) => Some(&[]),
+                _ => None,
+            };
+            Ok(words.map(|words| words.iter().map(|word| word.encode_utf16().collect()).collect()))
+        })
+    }
     fn dom_parser_new(&mut self) -> Result<V, String> {
         Ok(self.web_push(WebMock::DomParser, InterfaceBrand::DOM_PARSER))
     }
@@ -313,6 +343,31 @@ impl BindingHost for Host {
             V::Node(node) if self.dom.is_shadow_root(*node) => Ok(*node),
             _ => Err("TypeError: Expected a ShadowRoot".into()),
         }).collect()
+    }
+    fn construct_custom_element_autonomous(&mut self, _constructor: &V,
+        context: &amazing_dom::custom_elements::AutonomousCreationContext, capture: &u64) -> Result<V, String> {
+        if self.fail_custom_element_constructor { return Err("constructor failed".into()); }
+        let element = self.with_captured_dom(capture, |dom| {
+            let capability = dom.prepare_html_constructor_in_document(context.document(),
+                amazing_dom::render_mutation::NodeGeneration { node: NodeIdx(0), generation: dom.node_generation(NodeIdx(0)).unwrap() },
+                context.definition(), context.constructor())?;
+            dom.consume_html_constructor(capability)
+        })?;
+        self.held_custom_element_constructor_node = Some(element.node);
+        if self.fail_custom_element_after_super { return Err("constructor failed".into()); }
+        self.wrap_node_in_captured_dom(capture, PlatformKey { arena: 1, slot: u64::from(element.node.0), generation: element.generation })
+    }
+    fn capture_custom_element_constructor_exception_context(&mut self, constructor: &V)
+        -> Result<Self::ConstructorExceptionContext, String> {
+        // This native invocation fixture has one explicitly associated global
+        // Document. Installed real realms are covered by the driver controls.
+        Ok((constructor.clone(), amazing_dom::render_mutation::NodeGeneration {
+            node: NodeIdx(0), generation: self.dom.node_generation(NodeIdx(0)).unwrap() }))
+    }
+    fn report_custom_element_constructor_exception(&mut self, context: Self::ConstructorExceptionContext, error: String) -> Result<(), String> {
+        assert_eq!(self.dom.node_generation(context.1.node), Some(context.1.generation));
+        self.constructor_error_reports.push((context.0, error.clone(), self.dom.node_count()));
+        self.report_custom_element_exception(error)
     }
     fn construct_custom_element(&mut self, _constructor: &V, definition: usize, element: NodeIdx)
         -> Result<V, String> {
@@ -2371,9 +2426,26 @@ fn synchronous_custom_element_creation_propagates_constructor_failure() {
         ("prototype", V::Dictionary(vec![]))]);
     call(&mut h, O::CustomElementRegistryDefine, registry,
         &[str_value("x-fail"), constructor]);
-    h.fail_custom_element_constructor = true;
-    assert_eq!(invoke(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("x-fail")]),
-        Err("constructor failed".into()));
+    // Corrected stale native oracle, same identity. DOM create-element catches
+    // autonomous synchronous exceptions, reports, and returns fresh Failed/Unknown.
+    // https://dom.spec.whatwg.org/#concept-create-element (dom.bs6400–6407).
+    let registered = h.dom.custom_element_definition_by_name(NodeIdx(0), "x-fail").unwrap().1.constructor;
+    let constructor = h.root_value(registered).unwrap();
+    h.fail_custom_element_after_super = true;
+    let result = invoke(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("x-fail")]).unwrap();
+    let fallback = h.node_brand(&result).unwrap();
+    let held = h.held_custom_element_constructor_node.unwrap();
+    assert_ne!(fallback, held);
+    assert_eq!(h.dom.local_name(fallback), Some("x-fail"));
+    assert_eq!(h.dom.owner_document(fallback), Some(NodeIdx(0)));
+    assert_eq!(h.dom.custom_element_state(fallback), amazing_dom::custom_elements::CustomElementState::Failed);
+    assert!(h.dom.is_failed_custom_element_creation(fallback));
+    assert_eq!(h.dom.custom_element_definition_of(fallback), None);
+    assert_eq!(h.dom.custom_element_state(held), amazing_dom::custom_elements::CustomElementState::Custom);
+    assert_eq!(h.constructor_error_reports.len(), 1);
+    assert_eq!(h.constructor_error_reports[0].0, constructor);
+    assert_eq!(h.constructor_error_reports[0].1, "constructor failed");
+    assert_eq!(h.constructor_error_reports[0].2 + 1, h.dom.node_count());
 }
 
 // Pinned WPT custom-elements/CustomElementRegistry.html validation order and
@@ -2799,3 +2871,125 @@ fn selection_programmatic_aliases_directions_and_index_uint32() {
 
 #[path = "tests_ua_event_object.rs"]
 mod tests_ua_event_object;
+
+#[path = "tests_tokenlist_native.rs"]
+mod tests_tokenlist_native;
+
+impl crate::html_constructor::HtmlConstructorHost for Host {
+    type HtmlConstructorCapture = crate::html_constructor::HtmlConstructorIdentity;
+    fn capture_html_constructor(&mut self, _interface: Interface, new_target: &V)
+        -> Result<Self::HtmlConstructorCapture, String> {
+        let matched = self.dom.custom_element_definitions(NodeIdx(0)).into_iter()
+            .find(|(_, definition)| self.root_value(definition.constructor).as_ref() == Some(new_target))
+            .map(|(id, definition)| (id, definition.constructor));
+        let (definition, constructor) = matched.ok_or_else(|| "Illegal constructor".to_owned())?;
+        Ok(crate::html_constructor::HtmlConstructorIdentity {
+            document: amazing_dom::render_mutation::NodeGeneration { node: NodeIdx(0),
+                generation: self.dom.node_generation(NodeIdx(0)).unwrap() },
+            creation_document: amazing_dom::render_mutation::NodeGeneration { node: NodeIdx(0),
+                generation: self.dom.node_generation(NodeIdx(0)).unwrap() }, definition, constructor,
+        })
+    }
+    fn html_constructor_identity(&self, capture: &Self::HtmlConstructorCapture) -> Self::HtmlConstructorCapture { *capture }
+    fn html_constructor_dom_capture(&self, _capture: &Self::HtmlConstructorCapture) -> u64 { 1 }
+    fn html_constructor_intrinsic_prototype(&mut self, _capture: &Self::HtmlConstructorCapture) -> Result<V, String> {
+        Ok(V::Dictionary(vec![]))
+    }
+    fn html_constructor_wrap(&mut self, _capture: &Self::HtmlConstructorCapture,
+        element: amazing_dom::render_mutation::NodeGeneration, prototype: &V) -> Result<V, String> {
+        assert!(self.is_object_value(prototype)?);
+        assert_eq!(self.dom.node_generation(element.node), Some(element.generation));
+        self.wrap_node(element.node)
+    }
+}
+fn html_constructor_registry(h: &mut Host, local: &str, prototype: V) -> (usize, V) {
+    let constructor = V::Dictionary(vec![("prototype", prototype)]);
+    let root = h.retain_value(constructor.clone());
+    let definition = h.dom.define_custom_element(amazing_dom::custom_elements::CustomElementDefinition::new(
+        NodeIdx(0), "x-binding-constructor".into(), local.into(), root)).unwrap();
+    (definition, constructor)
+}
+#[test]
+fn html_constructor_native_entry_allocates_and_uses_intrinsic_fallback() {
+    for prototype in [V::Dictionary(vec![]), V::Number(3.)] {
+        let mut h = Host::default();
+        let (id, constructor) = html_constructor_registry(&mut h, "x-binding-constructor", prototype);
+        let value = crate::html_constructor::invoke_html_constructor(&mut h, Interface::HTMLElement, Some(constructor)).unwrap();
+        let node = h.node_brand(&value).unwrap();
+        assert_eq!(h.dom.custom_element_definition_of(node), Some(id));
+        assert_eq!(h.dom.custom_element_state(node), amazing_dom::custom_elements::CustomElementState::Custom);
+        assert_eq!(h.property_reads, ["prototype"]);
+    }
+}
+#[test]
+fn html_constructor_interface_validation_precedes_author_prototype_getter() {
+    let mut h = Host::default();
+    let (_, constructor) = html_constructor_registry(&mut h, "button", V::Dictionary(vec![]));
+    for interface in [Interface::Node, Interface::Element, Interface::HTMLUnknownElement,
+        Interface::HTMLMediaElement, Interface::HTMLElement, Interface::HTMLDivElement] {
+        assert!(crate::html_constructor::invoke_html_constructor(&mut h, interface, Some(constructor.clone())).is_err());
+    }
+    assert!(h.property_reads.is_empty());
+    assert!(crate::html_constructor::invoke_html_constructor(&mut h, Interface::HTMLButtonElement, Some(constructor)).is_ok());
+}
+#[test]
+fn html_constructor_call_and_unregistered_target_stay_illegal() {
+    let mut h = Host::default();
+    assert!(crate::html_constructor::invoke_html_constructor(&mut h, Interface::HTMLElement, None).is_err());
+    assert!(crate::html_constructor::invoke_html_constructor(&mut h, Interface::HTMLElement,
+        Some(V::Dictionary(vec![("prototype", V::Dictionary(vec![]))]))).is_err());
+    assert!(h.property_reads.is_empty());
+}
+#[test]
+fn html_constructor_upgrade_uses_actual_existing_native_node_once() {
+    let mut h = Host::default();
+    let (id, constructor) = html_constructor_registry(&mut h, "x-binding-constructor", V::Dictionary(vec![]));
+    let node = h.dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "x-binding-constructor").unwrap();
+    h.dom.begin_custom_element_upgrade(node, id).unwrap();
+    assert_eq!(crate::html_constructor::invoke_html_constructor(&mut h, Interface::HTMLElement,
+        Some(constructor.clone())).unwrap(), V::Node(node));
+    assert!(crate::html_constructor::invoke_html_constructor(&mut h, Interface::HTMLElement, Some(constructor)).is_err());
+    h.dom.finish_custom_element_upgrade(node, id, true).unwrap();
+}
+
+#[test]
+fn html_constructor_customized_generic_html_interface_is_valid() {
+    let mut h = Host::default();
+    let (_, constructor) = html_constructor_registry(&mut h, "article", V::Dictionary(vec![]));
+    let value = crate::html_constructor::invoke_html_constructor(&mut h, Interface::HTMLElement, Some(constructor)).unwrap();
+    assert_eq!(h.dom.local_name(h.node_brand(&value).unwrap()), Some("article"));
+}
+
+#[test]
+fn customized_creation_options_keep_private_exact_is_without_content_attribute() {
+    let mut h = Host::default();
+    let units = vec![0xd800, 0xdc00, 0xfffd];
+    let value = call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value("button"), V::Dictionary(vec![("is", V::String(units.clone()))])]);
+    let node = h.node_brand(&value).unwrap();
+    assert_eq!(h.dom.custom_element_is_value(node).unwrap(), Some(units.as_slice()));
+    assert_eq!(h.dom.get_attribute_ns(node, None, "is"), None);
+    h.dom.set_attribute(node, "is", "authored").unwrap();
+    assert_eq!(h.dom.custom_element_is_value(node).unwrap(), Some(units.as_slice()));
+}
+
+#[test]
+fn exact_observed_attribute_name_conversion_preserves_surrogate_distinction() {
+    let mut h = Host::default();
+    let registry = crate::registry_for_document(&mut h, NodeIdx(0)).unwrap();
+    let constructor = V::Dictionary(vec![("__constructor", V::Bool(true)),
+        ("prototype", V::Dictionary(vec![("attributeChangedCallback", V::Callable(912))])),
+        ("observedAttributes", V::Array(vec![V::String(vec![0xd800])]))]);
+    call(&mut h, O::CustomElementRegistryDefine, registry, &[str_value("x-exact-observed"), constructor]);
+    let value = call(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("x-exact-observed")]);
+    call(&mut h, O::ElementSetAttribute, value, &[str_value("\u{fffd}"), str_value("actual")]);
+    assert!(!h.calls.contains(&912));
+}
+#[test]
+fn html_element_interface_rejects_reserved_and_uppercase_custom_names() {
+    for name in ["annotation-xml", "color-profile", "font-face", "font-face-src", "font-face-uri",
+        "font-face-format", "font-face-name", "missing-glyph", "x-UPPER"] {
+        assert_eq!(html_element_interface(name), Interface::HTMLUnknownElement);
+    }
+    assert_eq!(html_element_interface("x-valid"), Interface::HTMLElement);
+}

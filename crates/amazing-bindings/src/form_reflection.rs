@@ -77,17 +77,15 @@ pub(crate) fn invoke<H: BindingHost + UrlReflection>(host: &mut H, op: O,
         _ => unreachable!(),
     };
     let spec = spec(attribute);
-    let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a form element"))?;
-    host.with_dom(|dom| match &dom.get(node).kind {
+    let capture = html_reflection::capture_element(host, &receiver)?;
+    let node = capture.node;
+    html_reflection::with_element(host, &capture, |dom| match &dom.get(node).kind {
         NodeKind::Element { namespace: Namespace::Html, .. }
             if spec.tags.contains(&dom.local_name(node).unwrap()) => Ok(()),
         _ => Err(DomError::TypeError),
     })?;
     if matches!(spec.kind, Kind::TokenList) {
-        let slot = host.with_dom(|dom| dom.token_list(node, spec.name))?;
-        let mut key = host.node_platform_key(node);
-        key.slot = slot as u64;
-        let list = host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST)?;
+        let list = crate::tokenlist::wrap(host, node, spec.name)?;
         return if setter {
             crate::tokenlist::invoke(host, O::TokenListSetValue, list, args)
         } else { Ok(list) };
@@ -96,7 +94,7 @@ pub(crate) fn invoke<H: BindingHost + UrlReflection>(host: &mut H, op: O,
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         if matches!(spec.kind, Kind::Boolean) {
             let enabled = host.to_boolean(value);
-            host.with_dom(|dom| if enabled { html_reflection::set(dom, node, spec.name, Vec::new()) }
+            html_reflection::with_element(host, &capture, |dom| if enabled { html_reflection::set(dom, node, spec.name, Vec::new()) }
                 else { dom.remove_attribute(node, spec.name) })?;
         } else {
             let units = match spec.kind {
@@ -104,7 +102,7 @@ pub(crate) fn invoke<H: BindingHost + UrlReflection>(host: &mut H, op: O,
                     let integer = integer(host.to_number(value)?);
                     if (matches!(spec.kind, Kind::NonNegative) && integer < 0)
                         || (matches!(spec.kind, Kind::Positive(_)) && integer <= 0) {
-                        return host.with_dom(|_| Err(DomError::IndexSizeError));
+                        return html_reflection::with_element(host, &capture, |_| Err(DomError::IndexSizeError));
                     }
                     (integer as u32).to_string().encode_utf16().collect()
                 }
@@ -112,15 +110,15 @@ pub(crate) fn invoke<H: BindingHost + UrlReflection>(host: &mut H, op: O,
                     .encode_utf16().collect(),
                 _ => host.to_dom_string(value)?,
             };
-            host.with_dom(|dom| html_reflection::set(dom, node, spec.name, units))?;
+            html_reflection::with_element(host, &capture, |dom| html_reflection::set(dom, node, spec.name, units))?;
         }
         return Ok(host.undefined());
     }
-    let value = host.with_dom(|dom| Ok(dom.attribute_utf16(node, spec.name)))?;
+    let value = html_reflection::with_element(host, &capture, |dom| Ok(dom.attribute_utf16(node, spec.name)))?;
     match spec.kind {
         Kind::Boolean => Ok(host.boolean(value.is_some())),
         Kind::Unsigned(default) => {
-            let default = if attribute == A::Size && host.with_dom(|dom| Ok(dom.local_name(node) == Some("input")))? { 20 } else { default };
+            let default = if attribute == A::Size && html_reflection::with_element(host, &capture, |dom| Ok(dom.local_name(node) == Some("input")))? { 20 } else { default };
             Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long).unwrap_or(default) as f64))
         }
         Kind::NonNegative => Ok(host.number(value.as_deref().and_then(html_reflection::signed_long)
@@ -136,13 +134,13 @@ pub(crate) fn invoke<H: BindingHost + UrlReflection>(host: &mut H, op: O,
             .unwrap_or_else(|| default.encode_utf16().collect())),
         Kind::Autocomplete => {
             let units = value.as_deref().unwrap_or_default();
-            let form = host.with_dom(|dom| Ok(dom.local_name(node) == Some("form")))?;
+            let form = html_reflection::with_element(host, &capture, |dom| Ok(dom.local_name(node) == Some("form")))?;
             let result = html_reflection::keyword(units, &["on", "off"])
                 .unwrap_or_else(|| if form { "on".encode_utf16().collect() } else { units.to_vec() });
             host.string(&result)
         }
         Kind::String if attribute == A::Label && value.is_none() => {
-            let text = host.with_dom(|dom| if dom.local_name(node) == Some("option") {
+            let text = html_reflection::with_element(host, &capture, |dom| if dom.local_name(node) == Some("option") {
                 dom.option_text(node)
             } else { Ok(Vec::new()) })?;
             host.string(&text)

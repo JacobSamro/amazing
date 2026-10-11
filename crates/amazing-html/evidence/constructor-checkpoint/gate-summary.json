@@ -1,0 +1,49 @@
+{
+ "schema": 2,
+ "ticket": "html-constructor-checkpoint",
+ "base_dev_measured": "8c69cc89120ced6ab09cbc3f3a5fc21f86613c2f",
+ "fix_code_commit_measured": "c0608a5afd72abf1245a6f2b9e28d361e397291e",
+ "previous_candidate_code_commit": "4948de08dc7499a9261fc8282fd7c85da7b33336",
+ "host": "Boat 4 vCPU sandbox bx_qh8gm7ut, lane resume-html3",
+ "perf_fix": "custom-element work is O(1) on the common path: Dom::custom_elements_idle() (no definition and no tracked element) skips the subtree walks in tree insert/remove/move/adopt/attribute-change and queue_custom_element_upgrade; an empty popped reaction frame skips delivery (one captured-DOM round trip per binding invoke)",
+ "workspace": {
+  "nextest": "5677 passed (5 slow), 17 skipped, 0 failed",
+  "doctests": "pass (rc 0)",
+  "test262": "unchanged: fix touches only amazing-dom and amazing-bindings, no amazing-js change since the gated 4948de08d (zero lost there)"
+ },
+ "wpt": {
+  "corpus": "dom/ + html/dom/ + custom-elements/ (1001 files), pinned c2a2fce, native wpt-harness, 4 jobs, 20000 ms, same runner and input hash as the BEFORE baseline",
+  "before_8c69cc891": {"pass_files": 410, "pass_subtests": 101239},
+  "previous_candidate_4948de08d": {"pass_files": 456, "pass_subtests": 101794, "lost_subtests_vs_before": 163},
+  "fix": {"pass_files": 457, "pass_subtests": 102135},
+  "fix_vs_before": {"lost_files": 0, "gained_files": 47, "lost_subtests": 0, "gained_subtests": 896},
+  "fix_vs_previous_candidate": {"lost_subtests": 0, "gained_subtests": 341},
+  "fix_file_status_counts": {"pass": 457, "fail": 361, "timeout": 107, "error": 74, "unsupported": 2},
+  "fix_passset_zlib_sha256": "afb353e525cc7776d01c97e318e7175ea1692e2360b9f661864856487cd63a2a",
+  "fix_binary_sha256": "97fb789cc8e1e83282cb43d4b84e30b71f7b2bcf1120911e7382881191655935",
+  "before_binary_sha256": "bdc27fc7295695e7ba51cffefa189afe29f6c1dbcc41c5eacc3367d0bdfaa3b9",
+  "previous_candidate_binary_sha256": "b5d0a385cbaf41ca05e94460e385b681b7aac38afe6a8469d92feb53fef1e310",
+  "compact_file_note": "wpt-dom-html-dom-custom-elements.compact.json is the previous candidate's (4948de08d) classification; the fix pass-set (499920 bytes zlib) stays on the host",
+  "raw_host_paths": {
+   "before": "/home/user/amazing/out/resume-html3/before/raw",
+   "previous_candidate": "/home/user/amazing/out/resume-html3/after/raw",
+   "fix": "/home/user/amazing/out/resume-html3/fix-gate/raw",
+   "fix_summary": "/home/user/amazing/out/resume-html3/fix-gate/summary.json"
+  }
+ },
+ "range_timing": {
+  "note": "sequential, one file at a time, release amazing wpt-harness 800x600; 120 s deadline completion seconds (one run each) and 5 runs at 20 s (passed subtests, interleaved before/fix). The box is noisy: the 120 s completion of the previous candidate was within noise of BEFORE in this session",
+  "completion_s_at_120s_deadline": {
+   "Range-compareBoundaryPoints": {"before": 20.5, "previous_candidate": 20.9, "fix": 20.7, "earlier_session": {"before": 18.9, "previous_candidate": 20.8}},
+   "Range-set": {"before": 25.2, "previous_candidate": 25.0, "fix": 24.2, "earlier_session": {"before": 24.3, "previous_candidate": 24.9}},
+   "Range-mutations-dataChange": {"before": 41.2, "previous_candidate": 38.1, "fix": 41.3, "earlier_session": {"before": 38.5, "previous_candidate": 40.1}}
+  },
+  "pass_at_120s": {"Range-compareBoundaryPoints": 9313, "Range-set": 10920, "Range-mutations-dataChange": 2808},
+  "passed_subtests_5_runs_at_20s": {
+   "Range-compareBoundaryPoints": {"before": [9313, 9313, 9313, 9313, 9313], "fix": [9313, 9313, 9313, 9313, 9313], "deadline_hits": {"before": "1/5", "fix": "0/5"}},
+   "Range-set": {"before": [9814, 9831, 9773, 9889, 9844], "fix": [9913, 9912, 9900, 9965, 9706]},
+   "Range-mutations-dataChange": {"before": [1511, 1547, 1662, 1617, 1640], "fix": [1590, 1679, 1625, 1671, 1731]},
+   "previous_candidate_earlier_session": {"Range-set": "8471-9791", "Range-mutations-dataChange": "1565-1735"}
+  }
+ }
+}

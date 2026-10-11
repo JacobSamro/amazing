@@ -99,18 +99,16 @@ fn input_type(value: &[u16]) -> Vec<u16> {
 pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
     args: &[H::Value]) -> Result<H::Value, H::Error> {
     let spec = spec(op).expect("routed reflection operation");
-    let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected an Element"))?;
-    host.with_dom(|dom| match &dom.get(node).kind {
+    let capture = html_reflection::capture_element(host, &receiver)?;
+    let node = capture.node;
+    html_reflection::with_element(host, &capture, |dom| match &dom.get(node).kind {
         NodeKind::Element { namespace: Namespace::Html, .. }
             if spec.interface.map_or_else(|| spec.tags.contains(&dom.local_name(node).unwrap()),
                 |interface| crate::html_element_interface(dom.local_name(node).unwrap()) == interface) => Ok(()),
         _ => Err(DomError::TypeError),
     })?;
     if matches!(spec.kind, Kind::TokenList) {
-        let slot = host.with_dom(|dom| dom.token_list(node, spec.attribute))?;
-        let mut key = host.node_platform_key(node);
-        key.slot = slot as u64;
-        let list = host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST)?;
+        let list = crate::tokenlist::wrap(host, node, spec.attribute)?;
         return if spec.setter {
             crate::tokenlist::invoke(host, O::TokenListSetValue, list, args)
         } else { Ok(list) };
@@ -123,9 +121,9 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
             // "force async" flag on every call, per spec, before applying
             // the ordinary boolean-attribute set/remove below.
             if op == O::ScriptSetAsync {
-                host.with_dom(|dom| { dom.set_force_async(node, false); Ok(()) })?;
+                html_reflection::with_element(host, &capture, |dom| { dom.set_force_async(node, false); Ok(()) })?;
             }
-            host.with_dom(|dom| if enabled {
+            html_reflection::with_element(host, &capture, |dom| if enabled {
                 html_reflection::set(dom, node, spec.attribute, Vec::new())
             } else { dom.remove_attribute(node, spec.attribute) })?;
         } else {
@@ -146,18 +144,18 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
                 Kind::UsvUrl => String::from_utf16_lossy(&host.to_dom_string(value)?).encode_utf16().collect(),
                 _ => host.to_dom_string(value)?,
             };
-            host.with_dom(|dom| html_reflection::set(dom, node, spec.attribute, units))?;
+            html_reflection::with_element(host, &capture, |dom| html_reflection::set(dom, node, spec.attribute, units))?;
         }
         return Ok(host.undefined());
     }
-    let value = host.with_dom(|dom| Ok(dom.attribute_utf16(node, spec.attribute)))?;
+    let value = html_reflection::with_element(host, &capture, |dom| Ok(dom.attribute_utf16(node, spec.attribute)))?;
     match spec.kind {
         // HTML-35: HTMLScriptElement.async reflects the "force async" flag,
         // not a plain boolean content attribute -- true if the flag is set
         // OR the async attribute is present (see init_force_async/
         // set_force_async in amazing-dom's namespace.rs).
         Kind::Boolean if op == O::ScriptAsync => {
-            let force_async = host.with_dom(|dom| Ok(dom.force_async(node)))?;
+            let force_async = html_reflection::with_element(host, &capture, |dom| Ok(dom.force_async(node)))?;
             Ok(host.boolean(value.is_some() || force_async))
         }
         Kind::Boolean => Ok(host.boolean(value.is_some())),

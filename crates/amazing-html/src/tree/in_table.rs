@@ -6,8 +6,8 @@
 
 use super::*;
 
-impl TreeBuilder {
-    pub(super) fn in_table(&mut self, tok: Token) {
+impl TreeBuilder<'_> {
+    pub(super) fn in_table(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => {
                 self.table_text_return_mode = self.mode;
@@ -18,18 +18,19 @@ impl TreeBuilder {
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
             Token::StartTag { name, attrs, self_closing: _ } => {
-                self.in_table_start_tag(&name, attrs)
+                self.in_table_start_tag(&name, attrs)?
             },
-            Token::EndTag { name } => self.in_table_end_tag(&name),
+            Token::EndTag { name } => self.in_table_end_tag(&name)?,
             Token::Eof => {},
             Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
-        }
+        };
+        Ok(())
     }
 
     /// Accumulate adjacent character tokens before deciding their insertion
     /// place. A non-whitespace scalar makes the entire run foster-parented;
     /// otherwise it belongs under the current table-family element.
-    pub(super) fn in_table_text(&mut self, tok: Token) {
+    pub(super) fn in_table_text(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::Characters(data) => self.pending_table_text.push_str(&data),
             other => {
@@ -40,49 +41,50 @@ impl TreeBuilder {
                         self.insert_text(&data);
                     } else {
                         self.foster = true;
-                        self.in_body(Token::Characters(data));
+                        self.in_body(Token::Characters(data))?;
                         self.foster = false;
                     }
                 }
-                self.process_token(other);
+                self.process_token(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn in_table_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) {
+    fn in_table_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) -> Result<(), amazing_dom::DomError> {
         match name {
             "caption" => {
                 self.clear_back_to_table();
                 self.fmt.push(FmtEntry::Marker);
-                self.insert_and_push("caption", attrs);
+                self.insert_and_push("caption", attrs)?;
                 self.mode = Mode::InCaption;
             },
             "colgroup" => {
                 self.clear_back_to_table();
-                self.insert_and_push("colgroup", attrs);
+                self.insert_and_push("colgroup", attrs)?;
                 self.mode = Mode::InColumnGroup;
             },
             "col" => {
                 self.clear_back_to_table();
-                self.insert_and_push("colgroup", Vec::new());
+                self.insert_and_push("colgroup", Vec::new())?;
                 self.mode = Mode::InColumnGroup;
                 self.in_column_group(Token::StartTag {
                     name: "col".to_owned(),
                     attrs,
                     self_closing: false,
-                });
+                })?;
             },
             "tbody" | "tfoot" | "thead" => {
                 self.clear_back_to_table();
-                self.insert_and_push(name, attrs);
+                self.insert_and_push(name, attrs)?;
                 self.mode = Mode::InTableBody;
             },
             "td" | "th" | "tr" => {
                 // Implicit tbody (§13.2.6.4.9).
                 self.clear_back_to_table();
-                self.insert_and_push("tbody", Vec::new());
+                self.insert_and_push("tbody", Vec::new())?;
                 self.mode = Mode::InTableBody;
-                self.in_table_body_start_tag(name, attrs);
+                self.in_table_body_start_tag(name, attrs)?;
             },
             "table" => {
                 if self.has_in_table_scope("table") {
@@ -92,34 +94,35 @@ impl TreeBuilder {
                         name: name.to_owned(),
                         attrs,
                         self_closing: false,
-                    });
+                    })?;
                 }
             },
             "style" | "script" => {
-                self.start_generic_text_element(name, attrs);
+                self.start_generic_text_element(name, attrs)?;
             },
             "input" => {
                 let hidden = attrs.iter().any(|(n, v)| {
                     n == "type" && v.eq_ignore_ascii_case("hidden")
                 });
                 if hidden {
-                    self.insert_void("input", attrs);
+                    self.insert_void("input", attrs)?;
                 } else {
                     self.foster = true;
-                    self.in_body_start_tag(name, attrs);
+                    self.in_body_start_tag(name, attrs)?;
                 }
             },
             "form" => {
-                self.insert_table_form(attrs);
+                self.insert_table_form(attrs)?;
             },
             _ => {
                 self.foster = true;
-                self.in_body_start_tag(name, attrs);
+                self.in_body_start_tag(name, attrs)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn in_table_end_tag(&mut self, name: &str) {
+    fn in_table_end_tag(&mut self, name: &str) -> Result<(), amazing_dom::DomError> {
         match name {
             "table" => {
                 if self.has_in_table_scope("table") {
@@ -131,59 +134,62 @@ impl TreeBuilder {
             | "tfoot" | "th" | "thead" | "tr" => {},
             _ => {
                 self.foster = true;
-                self.in_body_end_tag(name);
+                self.in_body_end_tag(name)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    pub(super) fn in_table_body(&mut self, tok: Token) {
+    pub(super) fn in_table_body(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::StartTag { name, attrs, self_closing: _ } => {
-                self.in_table_body_start_tag(&name, attrs)
+                self.in_table_body_start_tag(&name, attrs)?
             },
-            Token::EndTag { name } => self.in_table_body_end_tag(&name),
+            Token::EndTag { name } => self.in_table_body_end_tag(&name)?,
             other => {
-                self.in_table(other);
+                self.in_table(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
     fn in_table_body_start_tag(
         &mut self,
         name: &str,
         attrs: Vec<(String, String)>,
-    ) {
+    ) -> Result<(), amazing_dom::DomError> {
         match name {
             "tr" => {
                 self.clear_back_to_section();
-                self.insert_and_push("tr", attrs);
+                self.insert_and_push("tr", attrs)?;
                 self.mode = Mode::InRow;
             },
             "td" | "th" => {
                 // Parse error: synthesize the missing row, then reprocess
                 // the cell token using the in-row rules.
                 self.clear_back_to_section();
-                self.insert_and_push("tr", Vec::new());
+                self.insert_and_push("tr", Vec::new())?;
                 self.mode = Mode::InRow;
                 self.in_row(Token::StartTag {
                     name: name.to_owned(),
                     attrs,
                     self_closing: false,
-                });
+                })?;
             },
             "caption" | "colgroup" | "col" | "tbody" | "tfoot" | "thead" => {
                 if self.close_section() {
                     self.reset_insertion_mode();
-                    self.in_table_start_tag(name, attrs);
+                    self.in_table_start_tag(name, attrs)?;
                 }
             },
             _ => {
-                self.in_table_start_tag(name, attrs);
+                self.in_table_start_tag(name, attrs)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    fn in_table_body_end_tag(&mut self, name: &str) {
+    fn in_table_body_end_tag(&mut self, name: &str) -> Result<(), amazing_dom::DomError> {
         match name {
             "tbody" | "tfoot" | "thead" => {
                 if self.stack_has(name) {
@@ -196,30 +202,31 @@ impl TreeBuilder {
                 // These end tags are ignored in the table-body mode.
             },
             _ => {
-                self.in_table_end_tag(name);
+                self.in_table_end_tag(name)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    pub(super) fn in_row(&mut self, tok: Token) {
+    pub(super) fn in_row(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::StartTag { name, attrs, self_closing: _ } => {
                 match name.as_str() {
                     "td" | "th" => {
                         self.clear_back_to_row();
                         self.fmt.push(FmtEntry::Marker);
-                        self.insert_and_push(&name, attrs);
+                        self.insert_and_push(&name, attrs)?;
                         self.mode = Mode::InCell;
                     },
                     "caption" | "col" | "colgroup" | "tbody" | "tfoot"
                     | "thead" | "tr" => {
                         if self.close_tr() {
                             self.mode = Mode::InTableBody;
-                            self.in_table_body_start_tag(&name, attrs);
+                            self.in_table_body_start_tag(&name, attrs)?;
                         }
                     },
                     _ => {
-                        self.in_table_start_tag(&name, attrs);
+                        self.in_table_start_tag(&name, attrs)?;
                     },
                 }
             },
@@ -237,20 +244,21 @@ impl TreeBuilder {
                 "tbody" | "tfoot" | "thead" => {
                     if self.close_tr() {
                         self.mode = Mode::InTableBody;
-                        self.in_table_body_end_tag(&name);
+                        self.in_table_body_end_tag(&name)?;
                     }
                 },
                 _ => {
-                    self.in_table_end_tag(&name);
+                    self.in_table_end_tag(&name)?;
                 },
             },
             other => {
-                self.in_table(other);
+                self.in_table(other)?;
             },
-        }
+        };
+        Ok(())
     }
 
-    pub(super) fn in_cell(&mut self, tok: Token) {
+    pub(super) fn in_cell(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::StartTag { name, attrs, self_closing: _ } => {
                 let cell_open = self.stack_has("td") || self.stack_has("th");
@@ -265,9 +273,9 @@ impl TreeBuilder {
                         name,
                         attrs,
                         self_closing: false,
-                    });
+                    })?;
                 } else {
-                    self.in_body_start_tag(&name, attrs);
+                    self.in_body_start_tag(&name, attrs)?;
                 }
             },
             Token::EndTag { name } => match name.as_str() {
@@ -280,16 +288,17 @@ impl TreeBuilder {
                 "table" | "tbody" | "tfoot" | "thead" | "tr" => {
                     if self.has_in_table_scope(&name) {
                         self.close_cell();
-                        self.in_row(Token::EndTag { name });
+                        self.in_row(Token::EndTag { name })?;
                     }
                 },
-                _ => self.in_body_end_tag(&name),
+                _ => self.in_body_end_tag(&name)?,
             },
-            other => self.in_body(other),
-        }
+            other => self.in_body(other)?,
+        };
+        Ok(())
     }
 
-    pub(super) fn in_caption(&mut self, tok: Token) {
+    pub(super) fn in_caption(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         match tok {
             Token::StartTag { ref name, .. }
                 if matches!(name.as_str(), "caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr") =>
@@ -299,7 +308,7 @@ impl TreeBuilder {
                     self.pop_until("caption");
                     self.clear_fmt_to_marker();
                     self.mode = Mode::InTable;
-                    self.in_table(tok);
+                    self.in_table(tok)?;
                 }
             },
             Token::EndTag { ref name } => match name.as_str() {
@@ -317,18 +326,19 @@ impl TreeBuilder {
                         self.pop_until("caption");
                         self.clear_fmt_to_marker();
                         self.mode = Mode::InTable;
-                        self.in_table(Token::EndTag { name: name.clone() });
+                        self.in_table(Token::EndTag { name: name.clone() })?;
                     }
                 },
                 "body" | "col" | "colgroup" | "html" | "tbody" | "td"
                 | "tfoot" | "th" | "thead" | "tr" => {},
-                _ => self.in_body(tok.clone()),
+                _ => self.in_body(tok.clone())?,
             },
-            other => self.in_body(other),
-        }
+            other => self.in_body(other)?,
+        };
+        Ok(())
     }
 
-    pub(super) fn in_column_group(&mut self, tok: Token) {
+    pub(super) fn in_column_group(&mut self, tok: Token) -> Result<(), amazing_dom::DomError> {
         let in_colgroup = self
             .current()
             .map(|c| self.dom.name(c))
@@ -361,22 +371,22 @@ impl TreeBuilder {
                     }
                     self.open.pop();
                     self.mode = Mode::InTable;
-                    self.in_table(Token::Characters(data[split..].to_owned()));
+                    self.in_table(Token::Characters(data[split..].to_owned()))?;
                 }
             },
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
             Token::StartTag { ref name, attrs, self_closing: _ } => {
                 match name.as_str() {
-                    "html" => self.in_body_start_tag("html", attrs),
+                    "html" => self.in_body_start_tag("html", attrs)?,
                     "col" => {
-                        self.insert_void("col", attrs);
+                        self.insert_void("col", attrs)?;
                     },
                     _ => {
                         if in_colgroup {
                             self.open.pop();
                             self.mode = Mode::InTable;
-                            self.in_table_start_tag(name, attrs);
+                            self.in_table_start_tag(name, attrs)?;
                         }
                     },
                 }
@@ -393,11 +403,12 @@ impl TreeBuilder {
                     if in_colgroup {
                         self.open.pop();
                         self.mode = Mode::InTable;
-                        self.in_table_end_tag(name);
+                        self.in_table_end_tag(name)?;
                     }
                 },
             },
             _ => {},
-        }
+        };
+        Ok(())
     }
 }

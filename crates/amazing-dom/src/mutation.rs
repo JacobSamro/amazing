@@ -372,11 +372,28 @@ impl Dom {
         name: &str,
         value: &str,
     ) -> Result<(), DomError> {
+        self.set_attribute_ns_units(node, namespace, name, value.encode_utf16().collect())
+    }
+    /// One attribute change with exact DOMString custody before records are queued.
+    pub fn set_attribute_ns_units(&mut self, node: NodeIdx, namespace: Option<&str>,
+        name: &str, units: Vec<u16>) -> Result<(), DomError> {
         self.check_node(node)?;
         if !matches!(self.get(node).kind, NodeKind::Element { .. }) {
             return Err(DomError::NotSupportedError);
         }
         let namespace = namespace.filter(|s| !s.is_empty());
+        // One attached-Attr lookup (a document scan) serves old units, the
+        // stored value and the record; the new units are exactly `units`.
+        let attached = self.attached_attr_slot(node, namespace, name);
+        let old_units = match attached {
+            Some(slot) => match &self.get(slot).kind {
+                NodeKind::Attr { value, .. } => Some(value.clone()),
+                _ => None,
+            },
+            None => self.get_attribute_ns(node, namespace, name).map(|old| old.encode_utf16().collect()),
+        };
+        let value = String::from_utf16_lossy(&units);
+        let value = value.as_str();
         let old = self
             .get_attribute_ns(node, namespace, name)
             .map(str::to_owned);
@@ -408,9 +425,16 @@ impl Dom {
                 namespace_uri: namespace.map(str::to_owned), local_name: name.into(),
             });
         }
-        self.sync_attached_attr_value(node, namespace, name, value);
-        self.queue_attribute_record(node, namespace, name, old.clone());
-        self.custom_element_attribute_changed(node, namespace, name, old, Some(value.into()));
+        if let Some(slot) = attached {
+            if let NodeKind::Attr { value: stored, .. } = &mut self.nodes[slot.0 as usize].kind {
+                *stored = units.clone();
+            }
+        } else if units.iter().copied().ne(value.encode_utf16()) {
+            let attr = self.get_attribute_node(node, namespace, name).ok_or(DomError::InvalidStateError)?;
+            self.store_attr_value_units(attr, units.clone())?;
+        }
+        self.queue_attribute_record(node, namespace, name, old.clone(), old_units.clone(), Some(units.clone()));
+        self.custom_element_attribute_changed(node, namespace, name, old_units, Some(units));
         if namespace.is_none() { self.form_attribute_changed(node, name); }
         if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
         if namespace.is_none() && matches!(name, "id" | "name") { self.mark_named_objects_dirty(); }
@@ -463,6 +487,7 @@ impl Dom {
         else {
             return Ok(());
         };
+        let old_units = self.attribute_ns_utf16(node, namespace, name);
         if let Some(ns) = namespace {
             self.nodes[node.0 as usize]
                 .namespaced_attributes
@@ -473,8 +498,8 @@ impl Dom {
         self.nodes[node.0 as usize].attribute_order.retain(|key|
             key.namespace_uri.as_deref() != namespace || key.local_name != name);
         self.detach_attached_attr(node, namespace, name);
-        self.queue_attribute_record(node, namespace, name, Some(old.clone()));
-        self.custom_element_attribute_changed(node, namespace, name, Some(old), None);
+        self.queue_attribute_record(node, namespace, name, Some(old), old_units.clone(), None);
+        self.custom_element_attribute_changed(node, namespace, name, old_units, None);
         if namespace.is_none() { self.form_attribute_changed(node, name); }
         if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
         if namespace.is_none() && matches!(name, "id" | "name") { self.mark_named_objects_dirty(); }
@@ -486,6 +511,8 @@ impl Dom {
         namespace: Option<&str>,
         name: &str,
         old: Option<String>,
+        old_value: Option<Vec<u16>>,
+        new_value: Option<Vec<u16>>,
     ) {
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         if namespace.is_none() {
@@ -500,16 +527,13 @@ impl Dom {
                     generation: self.node_generation(target).unwrap_or(0), attribute: name.into() });
             }
         }
-        let new_value = self.get_attribute_ns(target, namespace, name)
-            .map(|value| value.encode_utf16().collect());
         let new_tokens = self.selector_tokens(target);
         let mut old_tokens = new_tokens.clone();
-        let old_value = old.as_ref().map(|value| value.encode_utf16().collect());
         old_tokens.restore_attribute(namespace, name, old_value.clone());
         self.record_render_mutation(target,
             crate::render_mutation::RenderMutationKind::Attribute {
                 namespace_uri: namespace.map(str::to_owned), local_name: name.into(),
-                old_value, new_value, old_tokens, new_tokens,
+                old_value: old_value.clone(), new_value, old_tokens, new_tokens,
             });
         if namespace.is_none() && matches!(name, "checked" | "selected" | "value") {
             self.record_render_full(target, "form attribute state");
@@ -518,6 +542,7 @@ impl Dom {
         record.attribute_name = Some(name.into());
         record.attribute_namespace = namespace.map(str::to_owned);
         record.old_value = old;
+        record.old_value_utf16 = old_value;
         self.mutations
             .queue(&self.inclusive_ancestors(target), record);
     }

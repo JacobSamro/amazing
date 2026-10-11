@@ -19,6 +19,7 @@ pub mod focus;
 pub mod attr;
 pub mod dataset;
 pub mod collection;
+pub mod token_list;
 pub mod abort;
 pub mod animation;
 pub mod observable;
@@ -165,7 +166,8 @@ pub struct Dom {
     document_scripting: Vec<(NodeIdx, u64, bool)>,
     document_declarative_shadow_roots: Vec<(NodeIdx, u64, bool)>,
     document_metadata: Vec<(NodeIdx, document_surface::DocumentMetadata)>,
-    token_lists: Vec<(NodeIdx, String)>,
+    token_lists: Vec<token_list::TokenListRecord>,
+    token_list_arena: std::sync::Arc<()>,
     mutation_generation: u64,
     node_generations: Vec<u64>,
     node_creation_documents: Vec<(NodeIdx, u64)>,
@@ -251,6 +253,7 @@ impl Dom {
             document_declarative_shadow_roots: Vec::new(),
             document_metadata: Vec::new(),
             token_lists: Vec::new(),
+            token_list_arena: std::sync::Arc::new(()),
             mutation_generation: 0,
             node_generations: Vec::new(),
             node_creation_documents: Vec::new(),
