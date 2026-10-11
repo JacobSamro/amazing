@@ -44,6 +44,8 @@ use crate::value::{
 pub mod vm;
 #[path = "vm/eligibility.rs"]
 mod vm_eligibility;
+#[path = "vm/stats.rs"]
+pub(crate) mod vm_stats;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ExecutionBackend {
@@ -1376,6 +1378,7 @@ impl Interpreter {
             self.strict_eval_context = true;
         }
         let result = self.run_program_inner(p).map_err(|th| self.normalize_throw(th));
+        vm_stats::flush_calls();
         self.strict_eval_context = previous_strict;
         self.entry_realm = previous_entry;
         result
@@ -1383,18 +1386,24 @@ impl Interpreter {
 
     fn run_program_inner(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         let direct_eval_env = self.direct_eval_env.take();
-        if direct_eval_env.is_none() && vm_eligibility::eligible(p)
-            && std::env::var_os("AMAZING_JS_VM").is_some() {
+        let vm_programs = std::env::var_os("AMAZING_JS_VM").is_some();
+        if direct_eval_env.is_none() && vm_programs && vm_eligibility::eligible(p) {
             let is_module = !self.in_eval && self.global_env.kind() == EnvKind::Module;
             match vm::compile(p, is_module) {
                 Ok(code) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM compiled"); }
+                    vm_stats::program("vm", "");
                     return code.run_in_current_context(self, vm::DEFAULT_INSTRUCTION_LIMIT);
                 }
-                Err(_) => {
+                Err(error) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM fallback"); }
+                    vm_stats::program("fallback", error.message);
                 }
             }
+        } else if vm_stats::enabled() {
+            if direct_eval_env.is_some() { vm_stats::program("fallback", "direct-eval-context"); }
+            else if !vm_programs { vm_stats::program("tree", "vm-programs-off"); }
+            else { vm_stats::program("fallback", &format!("ineligible:{}", vm_stats::take_reason())); }
         }
         let previous_completion = self.completion.clone();
         self.completion = None;

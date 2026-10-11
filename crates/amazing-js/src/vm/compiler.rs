@@ -60,6 +60,7 @@ const MAX_DEPTH: usize = 64;
 /// Opt-in measurement of actual runtime callable compilation attempts.
 /// Append-only output lets Test262 host subprocesses share a single log.
 fn record_compile_attempt(result: &Result<FunctionCode, CompileError>, params: &[ast::Param], body: &impl std::fmt::Debug) {
+    crate::interp::vm_stats::compile_attempt(result.as_ref().err().map(|error| error.message));
     if let Some(path) = std::env::var_os("AMAZING_JS_VM_COMPILE_LOG") {
         use std::io::Write;
         if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {

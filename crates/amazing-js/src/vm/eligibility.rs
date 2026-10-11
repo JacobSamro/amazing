@@ -1,6 +1,11 @@
 //! Constructs whose tree-walker semantics are not yet represented in bytecode.
 use crate::ast::{self, ArrowBody, Binding, ClassMember, ExprKind, ForInit, ForLeft, MemberProp, ObjElem, PropKey, PropValue, StmtKind};
 
+#[inline]
+fn note(reason: &'static str) {
+    crate::interp::vm_stats::note_reason(reason);
+}
+
 pub(super) fn eligible(program: &ast::Program) -> bool {
     !program.body.iter().any(statement_needs_fallback)
 }
@@ -52,7 +57,8 @@ fn class_needs_fallback(class: &ast::ClassItem) -> bool {
             ClassMember::Method(method) => method_needs_fallback(method),
             // Class fields and static blocks are not represented in bytecode
             // yet: never let compilation silently drop them.
-            ClassMember::StaticBlock(_) | ClassMember::Field(_) => true,
+            ClassMember::StaticBlock(_) => { note("class-static-block"); true }
+            ClassMember::Field(_) => { note("class-field"); true }
         })
 }
 
@@ -92,8 +98,11 @@ fn statement_needs_fallback(statement: &ast::Stmt) -> bool {
         StmtKind::Labeled { body, .. } => statement_needs_fallback(body),
         StmtKind::Try(try_stmt) => block_needs_fallback(&try_stmt.block)
             || try_stmt.catch.as_ref().is_some_and(|catch| {
-                catch.binding.as_ref().is_some_and(|binding| !matches!(binding, Binding::Ident(_)))
-                    || block_needs_fallback(&catch.body)
+                catch.binding.as_ref().is_some_and(|binding| {
+                    let pattern = !matches!(binding, Binding::Ident(_));
+                    if pattern { note("catch-pattern"); }
+                    pattern
+                }) || block_needs_fallback(&catch.body)
             }) || try_stmt.finally.as_ref().is_some_and(block_needs_fallback),
         _ => false,
     }
@@ -109,7 +118,7 @@ fn direct_eval(expr: &ast::Expr) -> bool {
 
 fn expression_needs_fallback(expr: &ast::Expr) -> bool {
     match &expr.kind {
-        ExprKind::Call { callee, args, .. } => direct_eval(callee)
+        ExprKind::Call { callee, args, .. } => (direct_eval(callee) && { note("direct-eval"); true })
             || expression_needs_fallback(callee) || args.iter().any(expression_needs_fallback),
         ExprKind::New { callee, args } => expression_needs_fallback(callee)
             || args.iter().any(expression_needs_fallback),

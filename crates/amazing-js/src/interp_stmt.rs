@@ -2193,6 +2193,7 @@ impl Interpreter {
             .ok_or_else(|| Throw::type_error("value is not callable"))?;
         let strict_function = o.borrow().strict_function;
         let interpreted = matches!(&fun.body, FunctionBody::Block(_) | FunctionBody::Expr(_) | FunctionBody::Bytecode(_));
+        if interpreted { vm_stats::count_call(matches!(&fun.body, FunctionBody::Bytecode(_))); }
         let this = if interpreted && !fun.is_arrow && !strict_function {
             match this {
                 JsValue::Null | JsValue::Undefined => self.global_env.global_scope().resolve_this(),

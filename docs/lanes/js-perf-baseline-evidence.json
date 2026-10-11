@@ -1,0 +1,946 @@
+{
+ "bench": {
+  "binary": "/tmp/amazing-native-target-r2-jsperf-working-tree/release/examples/js_bench_host",
+  "node_version": "v24.18.1",
+  "programs": {
+   "array_loop": {
+    "ast": {
+     "median_ms": 241.11,
+     "median_wall_ms": 246.4,
+     "min_ms": 231.14,
+     "peak_rss_mb": 17.8
+    },
+    "checksum": "array_loop -843449 32524 0 9997",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 8792,
+      "function_compiles": {
+       "ok": 1
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 235.66,
+     "median_wall_ms": 240.0,
+     "min_ms": 233.64,
+     "peak_rss_mb": 17.8
+    },
+    "node": {
+     "median_ms": 3.43,
+     "median_wall_ms": 16.7,
+     "min_ms": 2.71,
+     "peak_rss_mb": 50.7
+    },
+    "node-jitless": {
+     "median_ms": 5.67,
+     "median_wall_ms": 18.6,
+     "min_ms": 5.56,
+     "peak_rss_mb": 42.6
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 8792,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 232.49,
+     "median_wall_ms": 236.6,
+     "min_ms": 227.33,
+     "peak_rss_mb": 17.5
+    },
+    "wrapped": {
+     "median_ms": 111.64,
+     "median_wall_ms": 115.4,
+     "min_ms": 110.22,
+     "peak_rss_mb": 17.3
+    }
+   },
+   "class_inherit": {
+    "ast": {
+     "median_ms": 229.24,
+     "median_wall_ms": 233.3,
+     "min_ms": 228.95,
+     "peak_rss_mb": 15.1
+    },
+    "checksum": "class_inherit 440458",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 56000,
+      "function_compiles": {
+       "ok": 9
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 228.85,
+     "median_wall_ms": 232.5,
+     "min_ms": 227.87,
+     "peak_rss_mb": 15.1
+    },
+    "node": {
+     "median_ms": 3.42,
+     "median_wall_ms": 17.4,
+     "min_ms": 3.3,
+     "peak_rss_mb": 52.3
+    },
+    "node-jitless": {
+     "median_ms": 6.76,
+     "median_wall_ms": 20.2,
+     "min_ms": 6.54,
+     "peak_rss_mb": 43.3
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 56000,
+      "function_compiles": {
+       "ok": 9
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 220.5,
+     "median_wall_ms": 226.0,
+     "min_ms": 219.54,
+     "peak_rss_mb": 15.1
+    },
+    "wrapped": {
+     "median_ms": 167.41,
+     "median_wall_ms": 171.1,
+     "min_ms": 165.89,
+     "peak_rss_mb": 15.1
+    }
+   },
+   "closures": {
+    "ast": {
+     "median_ms": 269.46,
+     "median_wall_ms": 275.0,
+     "min_ms": 268.34,
+     "peak_rss_mb": 113.9
+    },
+    "checksum": "closures 618984 15000",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 63052,
+      "function_compiles": {
+       "ok": 4
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 264.48,
+     "median_wall_ms": 270.8,
+     "min_ms": 262.78,
+     "peak_rss_mb": 102.4
+    },
+    "node": {
+     "median_ms": 3.93,
+     "median_wall_ms": 17.7,
+     "min_ms": 3.57,
+     "peak_rss_mb": 51.8
+    },
+    "node-jitless": {
+     "median_ms": 6.32,
+     "median_wall_ms": 19.7,
+     "min_ms": 6.09,
+     "peak_rss_mb": 43.6
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 63052,
+      "function_compiles": {
+       "ok": 2
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 257.02,
+     "median_wall_ms": 262.8,
+     "min_ms": 255.3,
+     "peak_rss_mb": 102.6
+    },
+    "wrapped": {
+     "median_ms": 165.52,
+     "median_wall_ms": 171.5,
+     "min_ms": 164.37,
+     "peak_rss_mb": 102.4
+    }
+   },
+   "fib": {
+    "ast": {
+     "median_ms": 389.57,
+     "median_wall_ms": 394.1,
+     "min_ms": 385.98,
+     "peak_rss_mb": 16.0
+    },
+    "checksum": "fib 28657 45000",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 138035,
+      "function_compiles": {
+       "ok": 2
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 329.27,
+     "median_wall_ms": 332.8,
+     "min_ms": 326.01,
+     "peak_rss_mb": 15.4
+    },
+    "node": {
+     "median_ms": 3.05,
+     "median_wall_ms": 16.2,
+     "min_ms": 2.95,
+     "peak_rss_mb": 50.1
+    },
+    "node-jitless": {
+     "median_ms": 7.23,
+     "median_wall_ms": 20.3,
+     "min_ms": 7.0,
+     "peak_rss_mb": 42.3
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 138035,
+      "function_compiles": {
+       "ok": 2
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 329.07,
+     "median_wall_ms": 333.0,
+     "min_ms": 327.89,
+     "peak_rss_mb": 15.5
+    },
+    "wrapped": {
+     "median_ms": 267.97,
+     "median_wall_ms": 272.0,
+     "min_ms": 266.74,
+     "peak_rss_mb": 15.2
+    }
+   },
+   "json_roundtrip": {
+    "ast": {
+     "median_ms": 108.91,
+     "median_wall_ms": 112.9,
+     "min_ms": 108.7,
+     "peak_rss_mb": 15.1
+    },
+    "checksum": "json_roundtrip 797114 2156 361",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 110.39,
+     "median_wall_ms": 114.1,
+     "min_ms": 109.36,
+     "peak_rss_mb": 15.1
+    },
+    "node": {
+     "median_ms": 7.32,
+     "median_wall_ms": 20.8,
+     "min_ms": 6.91,
+     "peak_rss_mb": 46.7
+    },
+    "node-jitless": {
+     "median_ms": 9.99,
+     "median_wall_ms": 24.3,
+     "min_ms": 9.67,
+     "peak_rss_mb": 44.3
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 109.86,
+     "median_wall_ms": 113.9,
+     "min_ms": 109.06,
+     "peak_rss_mb": 15.1
+    },
+    "wrapped": {
+     "median_ms": 107.72,
+     "median_wall_ms": 112.0,
+     "min_ms": 106.2,
+     "peak_rss_mb": 15.1
+    }
+   },
+   "map_set": {
+    "ast": {
+     "median_ms": 105.99,
+     "median_wall_ms": 109.8,
+     "min_ms": 105.53,
+     "peak_rss_mb": 15.1
+    },
+    "checksum": "map_set 990922 1500 1000 999976 1000",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 1500,
+      "function_compiles": {
+       "ok": 1
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 105.18,
+     "median_wall_ms": 109.3,
+     "min_ms": 103.89,
+     "peak_rss_mb": 15.1
+    },
+    "node": {
+     "median_ms": 3.06,
+     "median_wall_ms": 15.0,
+     "min_ms": 2.95,
+     "peak_rss_mb": 45.7
+    },
+    "node-jitless": {
+     "median_ms": 5.86,
+     "median_wall_ms": 19.4,
+     "min_ms": 5.75,
+     "peak_rss_mb": 43.2
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 1500,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 103.2,
+     "median_wall_ms": 107.0,
+     "min_ms": 101.34,
+     "peak_rss_mb": 15.1
+    },
+    "wrapped": {
+     "median_ms": 64.67,
+     "median_wall_ms": 68.5,
+     "min_ms": 63.33,
+     "peak_rss_mb": 15.1
+    }
+   },
+   "method_calls": {
+    "ast": {
+     "median_ms": 420.57,
+     "median_wall_ms": 424.5,
+     "min_ms": 416.57,
+     "peak_rss_mb": 15.1
+    },
+    "checksum": "method_calls 24000 24000 1",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 96002,
+      "function_compiles": {
+       "ok": 6
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 413.02,
+     "median_wall_ms": 417.1,
+     "min_ms": 400.2,
+     "peak_rss_mb": 15.1
+    },
+    "node": {
+     "median_ms": 2.79,
+     "median_wall_ms": 15.7,
+     "min_ms": 2.67,
+     "peak_rss_mb": 50.6
+    },
+    "node-jitless": {
+     "median_ms": 6.59,
+     "median_wall_ms": 20.2,
+     "min_ms": 6.14,
+     "peak_rss_mb": 42.3
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 96002,
+      "function_compiles": {
+       "ok": 1
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 396.25,
+     "median_wall_ms": 399.9,
+     "min_ms": 393.07,
+     "peak_rss_mb": 15.1
+    },
+    "wrapped": {
+     "median_ms": 263.64,
+     "median_wall_ms": 267.4,
+     "min_ms": 261.25,
+     "peak_rss_mb": 15.1
+    }
+   },
+   "prop_access": {
+    "ast": {
+     "median_ms": 273.24,
+     "median_wall_ms": 277.2,
+     "min_ms": 270.33,
+     "peak_rss_mb": 15.2
+    },
+    "checksum": "prop_access 240389",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 200,
+      "function_compiles": {
+       "ok": 1
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 272.51,
+     "median_wall_ms": 276.5,
+     "min_ms": 272.37,
+     "peak_rss_mb": 15.1
+    },
+    "node": {
+     "median_ms": 2.79,
+     "median_wall_ms": 15.3,
+     "min_ms": 2.73,
+     "peak_rss_mb": 50.6
+    },
+    "node-jitless": {
+     "median_ms": 5.49,
+     "median_wall_ms": 19.0,
+     "min_ms": 5.4,
+     "peak_rss_mb": 42.3
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 200,
+      "function_compiles": {
+       "ok": 1
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 310.23,
+     "median_wall_ms": 314.3,
+     "min_ms": 306.82,
+     "peak_rss_mb": 15.2
+    },
+    "wrapped": {
+     "median_ms": 181.95,
+     "median_wall_ms": 186.1,
+     "min_ms": 181.35,
+     "peak_rss_mb": 15.1
+    }
+   },
+   "regexp": {
+    "ast": {
+     "median_ms": 213.24,
+     "median_wall_ms": 218.1,
+     "min_ms": 210.78,
+     "peak_rss_mb": 15.4
+    },
+    "checksum": "regexp 4800 125880 17199 true",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 209.24,
+     "median_wall_ms": 213.3,
+     "min_ms": 207.72,
+     "peak_rss_mb": 15.4
+    },
+    "node": {
+     "median_ms": 4.5,
+     "median_wall_ms": 18.3,
+     "min_ms": 4.1,
+     "peak_rss_mb": 52.8
+    },
+    "node-jitless": {
+     "median_ms": 9.6,
+     "median_wall_ms": 23.4,
+     "min_ms": 9.36,
+     "peak_rss_mb": 44.4
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 208.53,
+     "median_wall_ms": 212.4,
+     "min_ms": 206.0,
+     "peak_rss_mb": 15.4
+    },
+    "wrapped": {
+     "median_ms": 164.14,
+     "median_wall_ms": 169.3,
+     "min_ms": 161.33,
+     "peak_rss_mb": 15.4
+    }
+   },
+   "scheduler": {
+    "ast": {
+     "median_ms": 319.68,
+     "median_wall_ms": 323.8,
+     "min_ms": 317.45,
+     "peak_rss_mb": 15.4
+    },
+    "checksum": "scheduler 6536 0:1636:538,1:1632:535,2:1636:537,3:1632:553",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 49057,
+      "function_compiles": {
+       "ok": 15
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 281.91,
+     "median_wall_ms": 286.2,
+     "min_ms": 279.91,
+     "peak_rss_mb": 15.4
+    },
+    "node": {
+     "median_ms": 3.35,
+     "median_wall_ms": 17.8,
+     "min_ms": 3.11,
+     "peak_rss_mb": 51.7
+    },
+    "node-jitless": {
+     "median_ms": 7.04,
+     "median_wall_ms": 21.3,
+     "min_ms": 6.77,
+     "peak_rss_mb": 42.5
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 49057,
+      "function_compiles": {
+       "ok": 4
+      },
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 277.87,
+     "median_wall_ms": 282.4,
+     "min_ms": 277.33,
+     "peak_rss_mb": 15.4
+    },
+    "wrapped": {
+     "median_ms": 279.11,
+     "median_wall_ms": 283.6,
+     "min_ms": 277.88,
+     "peak_rss_mb": 15.4
+    }
+   },
+   "string_ops": {
+    "ast": {
+     "median_ms": 220.76,
+     "median_wall_ms": 225.0,
+     "min_ms": 218.62,
+     "peak_rss_mb": 15.4
+    },
+    "checksum": "string_ops 611484 6000 16889 1111 2000",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 220.85,
+     "median_wall_ms": 225.6,
+     "min_ms": 217.79,
+     "peak_rss_mb": 15.4
+    },
+    "node": {
+     "median_ms": 3.83,
+     "median_wall_ms": 17.6,
+     "min_ms": 3.32,
+     "peak_rss_mb": 53.3
+    },
+    "node-jitless": {
+     "median_ms": 6.41,
+     "median_wall_ms": 19.0,
+     "min_ms": 6.09,
+     "peak_rss_mb": 43.7
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 210.37,
+     "median_wall_ms": 214.1,
+     "min_ms": 206.75,
+     "peak_rss_mb": 15.4
+    },
+    "wrapped": {
+     "median_ms": 88.65,
+     "median_wall_ms": 92.4,
+     "min_ms": 88.16,
+     "peak_rss_mb": 15.4
+    }
+   },
+   "typed_array": {
+    "ast": {
+     "median_ms": 454.28,
+     "median_wall_ms": 458.4,
+     "min_ms": 448.74,
+     "peak_rss_mb": 15.4
+    },
+    "checksum": "typed_array 2262 3273496 6335428",
+    "checksum_agrees": true,
+    "default": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "tree:vm-programs-off": 1
+      }
+     },
+     "median_ms": 451.01,
+     "median_wall_ms": 454.9,
+     "min_ms": 448.75,
+     "peak_rss_mb": 15.4
+    },
+    "node": {
+     "median_ms": 3.7,
+     "median_wall_ms": 16.4,
+     "min_ms": 3.63,
+     "peak_rss_mb": 52.6
+    },
+    "node-jitless": {
+     "median_ms": 6.96,
+     "median_wall_ms": 21.0,
+     "min_ms": 6.59,
+     "peak_rss_mb": 44.4
+    },
+    "vm": {
+     "coverage": {
+      "calls_tree": 0,
+      "calls_vm": 0,
+      "function_compiles": {},
+      "function_fail_reasons": {},
+      "programs": {
+       "vm": 1
+      }
+     },
+     "median_ms": 447.35,
+     "median_wall_ms": 451.6,
+     "min_ms": 444.31,
+     "peak_rss_mb": 15.4
+    },
+    "wrapped": {
+     "median_ms": 146.13,
+     "median_wall_ms": 150.0,
+     "min_ms": 145.28,
+     "peak_rss_mb": 15.4
+    }
+   }
+  },
+  "runs": 5
+ },
+ "box": "Boat 4 vCPU, node v24.18.1, release profile (thin LTO)",
+ "profile_default_mode_top15": {
+  "method_calls": [
+   [
+    6.52,
+    "BuildHasher::hash_one<&PropertyKey>"
+   ],
+   [
+    5.72,
+    "SipHasher13::write (std RandomState hashing)"
+   ],
+   [
+    5.35,
+    "Vec<u16>::from_iter(str::encode_utf16) (str to JsString key)"
+   ],
+   [
+    4.63,
+    "malloc"
+   ],
+   [
+    3.35,
+    "Vec<u16>::extend_desugared(encode_utf16)"
+   ],
+   [
+    3.08,
+    "vm::Program::resume_frame_inner closure"
+   ],
+   [
+    3.08,
+    "hashbrown RawTable<(PropertyKey,BindingCell)>::find (scope lookup)"
+   ],
+   [
+    2.61,
+    "free (cfree)"
+   ],
+   [
+    2.14,
+    "unresolved libc address 0x1a1544"
+   ],
+   [
+    2.13,
+    "Interpreter::scoped_reference (identifier resolution)"
+   ],
+   [
+    2.13,
+    "String::from_iter(decode_utf16) (JsString to Rust String)"
+   ],
+   [
+    2.02,
+    "RawVecInner::finish_grow"
+   ],
+   [
+    1.78,
+    "unresolved libc address 0x1a14d3"
+   ],
+   [
+    1.66,
+    "realloc"
+   ],
+   [
+    1.66,
+    "Interpreter::bind_params"
+   ]
+  ],
+  "typed_array": [
+   [
+    7.37,
+    "SipHasher13::write (std RandomState hashing)"
+   ],
+   [
+    6.38,
+    "Vec<u16>::from_iter(str::encode_utf16) (str to JsString key)"
+   ],
+   [
+    5.31,
+    "Vec<u16>::extend_desugared(encode_utf16)"
+   ],
+   [
+    4.55,
+    "Interpreter::scoped_reference (identifier resolution)"
+   ],
+   [
+    4.33,
+    "malloc"
+   ],
+   [
+    4.24,
+    "hashbrown RawTable<(PropertyKey,BindingCell)>::find (scope lookup)"
+   ],
+   [
+    3.81,
+    "BuildHasher::hash_one<&PropertyKey>"
+   ],
+   [
+    3.58,
+    "interp::binary_state"
+   ],
+   [
+    2.92,
+    "BuildHasher::hash_one<u32> (SipHash of integer key)"
+   ],
+   [
+    2.92,
+    "unresolved libc address 0x1a1544"
+   ],
+   [
+    2.61,
+    "Interpreter::eval_expr"
+   ],
+   [
+    2.28,
+    "Interpreter::identifier_value"
+   ],
+   [
+    2.04,
+    "RawVecInner::finish_grow"
+   ],
+   [
+    1.95,
+    "realloc"
+   ],
+   [
+    1.95,
+    "unresolved libc address 0x1a155b"
+   ]
+  ]
+ },
+ "schema": 1,
+ "source_base": "bfb2c57ad",
+ "test262_with_AMAZING_JS_VM_1_and_stats": {
+  "classification_sha256": "51f58d4725e34b9dd78892e184f334b8f6b207423f7bf481ff5553c80e24e056",
+  "files": {
+   "fail": 318,
+   "pass": 53260,
+   "skipped": 294,
+   "timeout": 0,
+   "unsupported": 0
+  },
+  "host_sha256": "8b615ad4ea7af1319caa1852676bca9667e788abee34de0426755df5cdff0efc",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "raw": {
+   "bytes": 71609329,
+   "host_path": "~/amazing/out/r2-jsperf/vmstats.tsv",
+   "sha256": "e1cf9d8130196f11ee70990a09272e81a405a4a1185bc2d9cf5eb7d3cd71b917"
+  },
+  "result_json": {
+   "host_path": "~/amazing/out/r2-jsperf/t262-vmstats.json",
+   "sha256": "d85c948f088681d78e00cbfade4423c6d66ccfe3dea493105656fff9b5633424"
+  },
+  "variants": {
+   "fail": 623,
+   "pass": 102295,
+   "skipped": 0,
+   "timeout": 0,
+   "unsupported": 0
+  }
+ },
+ "vm_coverage": {
+  "calls_executed": {
+   "tree": 0,
+   "vm": 119116299,
+   "vm_percent": 100.0
+  },
+  "function_compile_fail_reasons_top20": {},
+  "function_compile_fail_reasons_total_kinds": 0,
+  "function_compiles": {
+   "ok": {
+    "count": 1117134,
+    "percent": 100.0
+   }
+  },
+  "processes": 94258,
+  "program_fallback_reasons_all": {
+   "fallback:compiler resource limit": 6,
+   "fallback:direct-eval-context": 1081327,
+   "fallback:ineligible:catch-pattern": 197,
+   "fallback:ineligible:class-field": 3467,
+   "fallback:ineligible:class-static-block": 76,
+   "fallback:ineligible:direct-eval": 1855,
+   "fallback:register limit": 2,
+   "fallback:statement kind": 222
+  },
+  "program_fallback_reasons_test_body": {
+   "fallback:compiler resource limit": 6,
+   "fallback:direct-eval-context": 2049,
+   "fallback:ineligible:catch-pattern": 196,
+   "fallback:ineligible:class-field": 3348,
+   "fallback:ineligible:class-static-block": 76,
+   "fallback:ineligible:direct-eval": 256,
+   "fallback:register limit": 2,
+   "fallback:statement kind": 222
+  },
+  "programs_all": {
+   "fallback": {
+    "count": 1087152,
+    "percent": 72.535
+   },
+   "vm": {
+    "count": 411642,
+    "percent": 27.465
+   }
+  },
+  "programs_test_body": {
+   "fallback": {
+    "count": 6155,
+    "percent": 6.53
+   },
+   "vm": {
+    "count": 88103,
+    "percent": 93.47
+   }
+  }
+ }
+}
