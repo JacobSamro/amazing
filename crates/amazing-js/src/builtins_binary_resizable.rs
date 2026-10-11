@@ -28,6 +28,7 @@ fn binary_resize_buffer(
         .try_reserve(additional)
         .map_err(|_| Throw::range_error("buffer allocation failed"))?;
     b.bytes.resize(length, 0);
+    if let Some(block) = &b.block { block.publish_len(length); }
     Ok(JsValue::Undefined)
 }
 
@@ -77,6 +78,7 @@ fn binary_allocate_buffer(
         .try_reserve_exact(length)
         .map_err(|_| Throw::range_error("buffer allocation failed"))?;
     bytes.resize(length, 0);
+    let (bytes, block) = if shared { binary_shared_storage(bytes, max, resizable) } else { (bytes, None) };
     binary_register(
         &object,
         BinaryState::Buffer(Rc::new(RefCell::new(BinaryBuffer {
@@ -86,6 +88,7 @@ fn binary_allocate_buffer(
             shared,
             detached: false,
             immutable: false,
+            block,
         }))),
     );
     Ok(JsValue::Object(object))

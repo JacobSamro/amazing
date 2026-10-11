@@ -690,7 +690,13 @@ impl Interpreter {
 
     fn drain_jobs(&mut self) -> Result<(), Throw> {
         if self.depth != 0 { return Ok(()); }
-        while let Some(job) = self.jobs.pop_front() {
+        loop {
+            // Atomics.waitAsync waiters notified by (or timed out for) this agent
+            // settle between jobs, so a long-running microtask chain still sees them.
+            if ATOMICS_ASYNC_COUNT.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+                binary_settle_async(self);
+            }
+            let Some(job) = self.jobs.pop_front() else { break };
             self.run_job(job)?;
         }
         Ok(())

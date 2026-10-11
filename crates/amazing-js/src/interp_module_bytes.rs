@@ -12,7 +12,7 @@ impl Interpreter {
         buffer.proto = Some(buffer_proto);
         let buffer = Obj(Rc::new(RefCell::new(buffer)));
         binary_register(&buffer, BinaryState::Buffer(Rc::new(RefCell::new(BinaryBuffer {
-            bytes, max: length, resizable: false, shared: false, detached: false, immutable: true,
+            bytes, max: length, resizable: false, shared: false, detached: false, immutable: true, block: None,
         }))));
         let mut view = JsObject::ordinary();
         view.proto = Some(view_proto);

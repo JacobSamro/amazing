@@ -57,6 +57,21 @@ mod tests {
         assert!(!interpreter.loose_eq(&html_dda, &JsValue::Bool(false)).unwrap());
     }
 
+    #[test]
+    fn html_dda_object_is_falsy_and_typeof_undefined() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let mut dda = JsObject::ordinary();
+            dda.proto = Some(i.object_proto.clone());
+            dda.mark_html_dda();
+            i.global_obj.borrow_mut().set_own("dda", JsValue::object(dda));
+            let out = i.run_script_with_backend(
+                "typeof dda === 'undefined' && !dda && !Boolean(dda) && dda == null && dda == undefined && dda !== undefined \
+                 && (dda ? 0 : 1) === 1 && (dda ?? 5) === dda && (dda || 7) === 7 && typeof {} === 'object'", backend).unwrap();
+            assert_eq!(out, JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
     fn external() -> Interpreter {
         Interpreter::new_with_external_scheduler(64).unwrap()
     }

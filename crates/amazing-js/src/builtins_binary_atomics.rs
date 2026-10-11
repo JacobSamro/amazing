@@ -121,6 +121,9 @@ fn binary_atomic_integer(
         .ok_or_else(|| Throw::range_error("atomic offset"))?;
     // Revalidate the actual complete word too: a tracking RAB may shrink to
     // a partial element. Never resurrect bytes outside its current data block.
+    // Shared memory is aliased by other agents: serialize with wait/notify and
+    // every other read-modify-write on the process-wide shared lock.
+    let _shared = view.buffer.borrow().block.is_some().then(crate::shared_memory::lock);
     let mut buffer = view.buffer.borrow_mut();
     if byte_index >= buffer.bytes.len() || end > buffer.bytes.len() {
         return Err(Throw::range_error("atomic index after conversion"));

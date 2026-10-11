@@ -340,7 +340,8 @@ impl JsValue {
             JsValue::BigInt(n) => !n.is_zero(),
             JsValue::Str(s) => !s.is_empty(),
             JsValue::Symbol(_) => true,
-            JsValue::Object(_) => true,
+            // Annex B.3.6.1: an [[IsHTMLDDA]] object is falsy.
+            JsValue::Object(o) => o.0.try_borrow().map(|o| !o.is_html_dda).unwrap_or(true),
         }
     }
 
@@ -1066,6 +1067,11 @@ impl Default for JsObject {
 }
 
 impl JsObject {
+    /// Give this object the Annex B [[IsHTMLDDA]] internal slot (host hook for `$262.IsHTMLDDA`).
+    pub fn mark_html_dda(&mut self) {
+        self.is_html_dda = true;
+    }
+
     pub fn ordinary() -> JsObject {
         JsObject {
             props: Vec::new(),

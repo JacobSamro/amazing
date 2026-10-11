@@ -66,6 +66,7 @@ fn put(obj: &mut JsObject, name: &str, value: JsValue) {
     p.enumerable = false;
     obj.define(name, p).expect("ordinary host property");
 }
+#[allow(dead_code)]
 fn unsupported(name: &str) -> Result<JsValue, Throw> {
     let mut state = UNSUPPORTED.lock().expect("host protocol state");
     if state.is_none() { *state = Some(name.into()); }
@@ -86,11 +87,13 @@ fn detach(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue
     i.binding_detach_array_buffer(args.first().unwrap_or(&JsValue::Undefined))?;
     Ok(JsValue::Undefined)
 }
-fn gc(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    unsupported("host.gc")
+fn gc(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    i.binding_collect_garbage();
+    Ok(JsValue::Undefined)
 }
-fn agent(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    unsupported("host.agent")
+fn html_dda(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    // Called with no argument or "" returns null (Test262 INTERPRETING.md).
+    Ok(JsValue::Null)
 }
 fn coerce(i: &mut Interpreter, v: JsValue) -> Result<String, Throw> {
     let string = i.global_env.resolve(CAPTURED_STRING)
@@ -134,22 +137,24 @@ fn install(i: &mut Interpreter) {
     ] {
         put(&mut host, name, native(i, name, call));
     }
+    let dda = native(i, "IsHTMLDDA", html_dda);
+    if let JsValue::Object(o) = &dda { o.borrow_mut().mark_html_dda(); }
+    put(&mut host, "IsHTMLDDA", dda);
     put(&mut host, "AbstractModuleSource", i.binding_abstract_module_source_constructor());
     let mut agents = JsObject::ordinary();
     agents.proto = Some(i.object_proto.clone());
-    for name in [
-        "start",
-        "broadcast",
-        "getReport",
-        "sleep",
-        "monotonicNow",
-        "receiveBroadcast",
-        "report",
-        "leaving",
+    for (name, call) in [
+        ("start", agent::start as NativeFn),
+        ("broadcast", agent::broadcast),
+        ("getReport", agent::get_report),
+        ("sleep", agent::sleep),
+        ("monotonicNow", agent::monotonic_now),
+        ("receiveBroadcast", agent::receive_broadcast),
+        ("report", agent::report),
+        ("leaving", agent::leaving),
     ] {
-        put(&mut agents, name, native(i, name, agent));
+        put(&mut agents, name, native(i, name, call));
     }
-    put(&mut agents, "canBlock", JsValue::Bool(false));
     put(&mut host, "agent", JsValue::object(agents));
     put(
         &mut i.global_obj.borrow_mut(),
@@ -199,6 +204,8 @@ fn emit_module(phase: &str, kind: &str, detail: &str, unsupported: Option<&str>)
     );
 }
 
+#[path = "test262_host_support/agent.rs"]
+mod agent;
 #[path = "test262_host_support/modules.rs"]
 mod realm_modules;
 use realm_modules::install_test262_module_loader;
@@ -319,6 +326,20 @@ fn run() -> io::Result<()> {
     } else {
         i.run_program(&program)
     };
+    // Event loop: settle timed Atomics.waitAsync promises (waiters without a
+    // timeout never keep the host running).
+    let execution = execution.and_then(|value| {
+        loop {
+            let atomics = i.binding_pump_atomics();
+            // Timers matter to async tests only, and stop mattering once $DONE ran.
+            let finished = ASYNC_DONE.lock().expect("host protocol state").is_some();
+            let timers = async_test && !finished && i.binding_has_pending_timers();
+            if !atomics && !timers { break; }
+            if timers { i.pump_timers()?; }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        Ok(value)
+    });
     match execution {
         Ok(_) => {
             if async_test {
@@ -367,9 +388,9 @@ const CAPABILITIES: Capabilities = Capabilities {
     can_block: true,
     create_realm: true,
     detach_array_buffer: true,
-    gc: false,
-    agent: false,
-    is_html_dda: false,
+    gc: true,
+    agent: true,
+    is_html_dda: true,
     abstract_module_source: true,
     eval_script: true,
     global: true,
@@ -380,7 +401,7 @@ const CAPABILITIES: Capabilities = Capabilities {
 impl Capabilities {
     fn emit(&self, protocol: u8) {
         println!(
-            "{{\"protocol\":{protocol},\"script_source_context\":{context},\"module\":{},\"async\":{},\"can_block\":{},\"createRealm\":{},\"detachArrayBuffer\":{},\"gc\":{},\"agent\":{},\"IsHTMLDDA\":{},\"AbstractModuleSource\":{},\"evalScript\":{},\"global\":{},\"print\":{},\"intl402\":{}}}",
+            "{{\"protocol\":{protocol},\"script_source_context\":{context},\"module\":{},\"async\":{},\"can_block\":{},\"can_block_false_mode\":true,\"createRealm\":{},\"detachArrayBuffer\":{},\"gc\":{},\"agent\":{},\"IsHTMLDDA\":{},\"AbstractModuleSource\":{},\"evalScript\":{},\"global\":{},\"print\":{},\"intl402\":{}}}",
             self.module && protocol >= 2,
             self.asynchronous,
             self.can_block,
@@ -400,6 +421,9 @@ impl Capabilities {
 }
 
 fn main() -> std::process::ExitCode {
+    if std::env::args().any(|arg| arg == "--cannot-block") {
+        amazing_js::shared_memory::set_can_block(false);
+    }
     if std::env::args().any(|arg| arg == "--capabilities-v2") {
         CAPABILITIES.emit(2);
         return std::process::ExitCode::SUCCESS;
@@ -426,6 +450,40 @@ fn main() -> std::process::ExitCode {
 #[cfg(test)]
 mod protocol_tests {
     use super::*;
+
+    #[test]
+    fn agents_share_memory_and_wait_notify_across_threads() {
+        let mut i = Interpreter::new();
+        install(&mut i);
+        let out = i.run_script(r#"
+            $262.agent.start(`$262.agent.receiveBroadcast(function(sab){
+                var a=new Int32Array(sab); Atomics.add(a,1,1);
+                $262.agent.report('wait:'+Atomics.wait(a,0,0)+':'+a[2]); $262.agent.leaving(); });`);
+            var a=new Int32Array(new SharedArrayBuffer(16));
+            $262.agent.broadcast(a.buffer);
+            while(Atomics.load(a,1)===0) $262.agent.sleep(1);
+            a[2]=9;
+            var n; while((n=Atomics.notify(a,0,1))===0) $262.agent.sleep(1);
+            var r; while((r=$262.agent.getReport())===null) $262.agent.sleep(1);
+            n+':'+r"#).unwrap();
+        assert_eq!(out, JsValue::str("1:wait:ok:9"));
+    }
+
+    #[test]
+    fn html_dda_host_object_has_the_annex_b_behaviour() {
+        let mut i = Interpreter::new();
+        install(&mut i);
+        let out = i.run_script("var d=$262.IsHTMLDDA; typeof d==='undefined' && !d && d==null && d()===null && d('')===null").unwrap();
+        assert_eq!(out, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn gc_hook_is_callable_and_returns_undefined() {
+        let mut i = Interpreter::new();
+        install(&mut i);
+        let out = i.run_script("var b=new Uint8Array(4); b=null; $262.gc()").unwrap();
+        assert_eq!(out, JsValue::Undefined);
+    }
 
     #[test]
     fn captured_intrinsics_and_worker_protocol_share_the_test_lifetime() {

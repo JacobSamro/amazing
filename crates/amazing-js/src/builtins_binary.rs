@@ -13,6 +13,23 @@ struct BinaryBuffer {
     shared: bool,
     detached: bool,
     immutable: bool,
+    /// Cross-agent backing store of a SharedArrayBuffer; `bytes` aliases it.
+    block: Option<Arc<crate::shared_memory::SharedBlock>>,
+}
+
+impl Drop for BinaryBuffer {
+    fn drop(&mut self) {
+        // `bytes` aliases memory owned by the shared block; never free it here.
+        if self.block.is_some() { std::mem::forget(std::mem::take(&mut self.bytes)); }
+    }
+}
+
+/// Move a SharedArrayBuffer's initial contents into a cross-agent block.
+fn binary_shared_storage(bytes: Vec<u8>, max: usize, growable: bool) -> (Vec<u8>, Option<Arc<crate::shared_memory::SharedBlock>>) {
+    match crate::shared_memory::SharedBlock::new(&bytes, max, growable) {
+        Some(block) => (block.alias(), Some(block)),
+        None => (bytes, None),
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -330,8 +347,9 @@ impl Interpreter {
             .unwrap_or_else(|| self.object_proto.clone());
         let mut raw = JsObject::ordinary(); raw.proto = Some(prototype);
         let object = Obj(Rc::new(RefCell::new(raw)));
+        let (bytes, block) = if shared { binary_shared_storage(bytes, max, resizable) } else { (bytes, None) };
         binary_register(&object, BinaryState::Buffer(Rc::new(RefCell::new(BinaryBuffer {
-            bytes, max, resizable, shared, detached: false, immutable: false,
+            bytes, max, resizable, shared, detached: false, immutable: false, block,
         }))));
         JsValue::Object(object)
     }
@@ -361,6 +379,29 @@ impl Interpreter {
     }
     pub fn binding_create_array_buffer(&mut self, bytes: Vec<u8>) -> Result<JsValue, Throw> {
         let len = bytes.len(); Ok(self.binary_new_buffer(bytes, len, false, false))
+    }
+    /// Host hook for `$262.agent.broadcast`: the cross-agent backing store of a
+    /// SharedArrayBuffer (or `None` when `value` is not one).
+    pub fn binding_shared_buffer_block(&self, value: &JsValue) -> Option<Arc<crate::shared_memory::SharedBlock>> {
+        let JsValue::Object(object) = value else { return None; };
+        let Some(BinaryState::Buffer(buffer)) = binary_state(object) else { return None; };
+        let buffer = buffer.borrow();
+        if buffer.shared { buffer.block.clone() } else { None }
+    }
+    /// Host hook for an agent receiving a broadcast: a fresh SharedArrayBuffer
+    /// object in this realm over the same memory.
+    pub fn binding_shared_buffer_from_block(&mut self, block: Arc<crate::shared_memory::SharedBlock>) -> JsValue {
+        let prototype = self.intrinsic_constructors.get("SharedArrayBuffer").map(|(_, prototype)| prototype.clone())
+            .unwrap_or_else(|| self.object_proto.clone());
+        let mut raw = JsObject::ordinary(); raw.proto = Some(prototype);
+        let object = Obj(Rc::new(RefCell::new(raw)));
+        let bytes = block.alias();
+        let max = block.max_byte_length();
+        let resizable = block.growable();
+        binary_register(&object, BinaryState::Buffer(Rc::new(RefCell::new(BinaryBuffer {
+            bytes, max, resizable, shared: true, detached: false, immutable: false, block: Some(block),
+        }))));
+        JsValue::Object(object)
     }
     pub fn binding_create_uint8_array(&mut self, bytes: Vec<u8>) -> Result<JsValue, Throw> {
         let length = bytes.len();
@@ -1187,6 +1228,71 @@ struct BinaryWaiter { buffer: Rc<RefCell<BinaryBuffer>>, byte_offset: usize, pro
 thread_local! {
     static ATOMICS_WAITERS: RefCell<Vec<BinaryWaiter>> = RefCell::new(Vec::new());
 }
+// Pending Atomics.waitAsync waiters of this agent on a cross-agent block. The
+// shared waiter list owns notification state; this list owns the promise and
+// the timeout, and is settled by `binary_pump_async` on the owning thread.
+//
+// The list is process-wide, keyed by the owning interpreter's address, because the tree
+// walker runs async bodies on coroutine worker threads that share one interpreter under a
+// strict handoff (so thread-local storage would hide a waiter from its agent's pump).
+struct AsyncWaiter { owner: usize, id: u64, promise: Obj, deadline: Option<Instant> }
+struct AsyncWaiters(Vec<AsyncWaiter>);
+unsafe impl Send for AsyncWaiters {}
+static ATOMICS_ASYNC: std::sync::Mutex<AsyncWaiters> = std::sync::Mutex::new(AsyncWaiters(Vec::new()));
+static ATOMICS_ASYNC_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Settle every notified or expired waitAsync promise of this agent. Returns
+/// whether a waiter with a timeout is still pending (so a host loop should
+/// keep pumping); waiters without a timeout never keep a host alive.
+fn binary_pump_async(i: &mut Interpreter) -> bool {
+    let (settled, timed_pending) = binary_settle_async(i);
+    if settled { let _ = i.drain_microtasks(); }
+    timed_pending
+}
+/// Settle due waiters without draining jobs (the microtask loop calls this between jobs).
+fn binary_settle_async(i: &mut Interpreter) -> (bool, bool) {
+    let now = Instant::now();
+    let me = i as *mut Interpreter as usize;
+    let (ready, timed_pending) = {
+        let mut list = ATOMICS_ASYNC.lock().unwrap_or_else(|p| p.into_inner());
+        let list = &mut list.0;
+        let mut ready = Vec::new();
+        list.retain(|waiter| {
+            if waiter.owner != me { return true; }
+            let expired = waiter.deadline.is_some_and(|deadline| now >= deadline);
+            match crate::shared_memory::resolve_async(waiter.id, expired) {
+                Some(notified) => { ready.push((waiter.promise.clone(), notified)); false }
+                None => true,
+            }
+        });
+        let timed = list.iter().any(|waiter| waiter.owner == me && waiter.deadline.is_some());
+        (ready, timed)
+    };
+    let settled = !ready.is_empty();
+    ATOMICS_ASYNC_COUNT.fetch_sub(ready.len(), std::sync::atomic::Ordering::SeqCst);
+    for (promise, notified) in ready {
+        let _ = settle_promise(&promise, PromiseFate::Fulfilled(JsValue::str(if notified { "ok" } else { "timed-out" })), i);
+    }
+    (settled, timed_pending)
+}
+impl Interpreter {
+    /// Host event-loop hook: settle due `Atomics.waitAsync` promises. True while a timed waiter is pending.
+    pub fn binding_pump_atomics(&mut self) -> bool { binary_pump_async(self) }
+    /// Host event-loop hook: whether `setTimeout`/`setInterval` timers are pending.
+    pub fn binding_has_pending_timers(&self) -> bool { !self.timers.is_empty() }
+    /// Host `$262.gc()`: reclaim engine side tables whose JS owners are gone. Values are
+    /// reference counted, so unreachable acyclic objects are already freed eagerly.
+    pub fn binding_collect_garbage(&mut self) {
+        loop {
+            let dead: Vec<_> = BINARY_OBJECTS.with(|entries| {
+                let mut entries = entries.borrow_mut();
+                let keys: Vec<usize> = entries.iter().filter(|(_, (weak, _))| weak.strong_count() == 0).map(|(key, _)| *key).collect();
+                keys.into_iter().filter_map(|key| entries.remove(&key)).collect()
+            });
+            if dead.is_empty() { break; }
+            drop(dead);
+        }
+    }
+}
 fn binary_atomics_register_waiter(view: &BinaryView, byte_offset: usize, promise: Obj) {
     ATOMICS_WAITERS.with(|w| w.borrow_mut().push(BinaryWaiter { buffer: view.buffer.clone(), byte_offset, promise }));
 }
@@ -1245,10 +1351,30 @@ fn binary_atomics_wait(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind,
 ) -> Result<JsValue, Throw> {
     let v = binary_atomics_value(i, kind, value_arg)?;
     let timeout = binary_atomics_timeout(i, timeout_arg)?;
+    if !crate::shared_memory::can_block() {
+        return Err(Throw::type_error("Atomics.wait cannot suspend this agent"));
+    }
+    let block = view.buffer.borrow().block.as_ref().map(|block| block.id());
+    let Some(block) = block else {
+        let old = binary_read(view, kind, index * kind.size(), true)?;
+        if !binary_atomics_equal(&old, &v) { return Ok(JsValue::str("not-equal")); }
+        binary_atomics_sleep(timeout);
+        return Ok(JsValue::str("timed-out"));
+    };
+    // The comparison and the waiter registration are one step under the shared lock.
+    let guard = crate::shared_memory::lock();
     let old = binary_read(view, kind, index * kind.size(), true)?;
     if !binary_atomics_equal(&old, &v) { return Ok(JsValue::str("not-equal")); }
-    binary_atomics_sleep(timeout);
-    Ok(JsValue::str("timed-out"))
+    let timeout = if crate::shared_memory::other_agents_exist() {
+        (timeout.is_finite()).then(|| Duration::from_secs_f64(timeout.min(3_600_000.0) / 1000.0))
+    } else {
+        Some(Duration::from_secs_f64(timeout.min(50.0) / 1000.0))
+    };
+    let offset = view.offset + index * kind.size();
+    Ok(JsValue::str(match crate::shared_memory::wait_registered(guard, block, offset, timeout) {
+        crate::shared_memory::WaitOutcome::Ok => "ok",
+        crate::shared_memory::WaitOutcome::TimedOut => "timed-out",
+    }))
 }
 
 fn binary_wait_async(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, index: usize,
@@ -1256,12 +1382,25 @@ fn binary_wait_async(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, i
 ) -> Result<JsValue, Throw> {
     let v = binary_atomics_value(i, kind, value_arg)?;
     let timeout = binary_atomics_timeout(i, timeout_arg)?;
+    let block = view.buffer.borrow().block.as_ref().map(|block| block.id());
+    // The comparison and the waiter registration are one step under the shared lock.
+    let guard = block.map(|_| crate::shared_memory::lock());
     let old = binary_read(view, kind, index * kind.size(), true)?;
     if !binary_atomics_equal(&old, &v) { return binary_wait_async_result(i, false, JsValue::str("not-equal")); }
     if timeout <= 0.0 { return binary_wait_async_result(i, false, JsValue::str("timed-out")); }
     let promise_value = new_promise(i, PromiseFate::Pending);
     let promise_obj = promise_object(&promise_value)?;
-    binary_atomics_register_waiter(view, view.offset + index * kind.size(), promise_obj);
+    let offset = view.offset + index * kind.size();
+    match (block, guard) {
+        (Some(block), Some(guard)) => {
+            let id = crate::shared_memory::register_async(guard, block, offset);
+            let deadline = timeout.is_finite().then(|| Instant::now() + Duration::from_secs_f64(timeout.min(3_600_000.0) / 1000.0));
+            let owner = i as *mut Interpreter as usize;
+            ATOMICS_ASYNC_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ATOMICS_ASYNC.lock().unwrap_or_else(|p| p.into_inner()).0.push(AsyncWaiter { owner, id, promise: promise_obj, deadline });
+        }
+        _ => binary_atomics_register_waiter(view, offset, promise_obj),
+    }
     binary_wait_async_result(i, true, promise_value)
 }
 
@@ -1280,7 +1419,14 @@ fn binary_atomics_notify(i: &mut Interpreter, view: &BinaryView, kind: BinaryKin
     };
     if !view.buffer.borrow().shared { return Ok(JsValue::num(0.0)); }
     let byte_offset = view.offset + index * kind.size();
-    Ok(JsValue::num(binary_atomics_wake(i, &view.buffer, byte_offset, count)))
+    let block = view.buffer.borrow().block.as_ref().map(|block| block.id());
+    let remote = match block {
+        Some(block) => crate::shared_memory::notify(&mut crate::shared_memory::lock(), block, byte_offset, count),
+        None => 0,
+    };
+    // Same-agent waitAsync promises settle now, as before; other agents pump their own.
+    if remote > 0 { binary_pump_async(i); }
+    Ok(JsValue::num(remote as f64 + binary_atomics_wake(i, &view.buffer, byte_offset, count - remote as f64)))
 }
 
 include!("builtins_binary_atomics.rs");

@@ -134,7 +134,7 @@ def unavailable(path: str, meta: dict, caps: dict) -> str | None:
         return "host.module-resolution"
     if "CanBlockIsTrue" in flags and caps.get("can_block") is not True:
         return "host.CanBlockIsTrue"
-    if "CanBlockIsFalse" in flags and caps.get("can_block") is not False:
+    if "CanBlockIsFalse" in flags and caps.get("can_block") is not False and not caps.get("can_block_false_mode"):
         return "host.CanBlockIsFalse"
     if "IsHTMLDDA" in meta.get("features", []) and not caps.get("IsHTMLDDA"):
         return "host.IsHTMLDDA"
@@ -202,9 +202,10 @@ def classify(meta: dict, outcome: dict) -> dict:
     return result("fail", f"{phase}:{outcome['error_type']}", observed=outcome)
 
 
-def execute(binary: pathlib.Path, payload: bytes, timeout: float, module: bool = False) -> dict:
+def execute(binary: pathlib.Path, payload: bytes, timeout: float, module: bool = False,
+            extra_args: list[str] | None = None) -> dict:
     try:
-        child = subprocess.run([str(binary)] + (["--module-request"] if module else []),
+        child = subprocess.run([str(binary)] + (["--module-request"] if module else []) + (extra_args or []),
                                input=payload, capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return result("timeout", "execution.deadline")
@@ -281,7 +282,10 @@ def run_file(path: pathlib.Path, root: pathlib.Path, binary: pathlib.Path,
             payload = (module_request(source, name, root, helpers) if variant == "module"
                        else script_request(source, variant, name, root, helpers) if caps.get("script_source_context")
                        else request(source, variant, helpers))
-            response = execute(binary, payload, timeout, variant == "module")
+            # A host that offers a non-blocking mode runs CanBlockIsFalse tests in it.
+            extra = (["--cannot-block"] if "CanBlockIsFalse" in meta.get("flags", [])
+                     and caps.get("can_block") is not False and caps.get("can_block_false_mode") else [])
+            response = execute(binary, payload, timeout, variant == "module", extra)
             verdict = classify(meta, response["outcome"]) if "outcome" in response else response
         record["variants"].append({"variant": variant, **verdict})
     record["status"] = aggregate(record["variants"])

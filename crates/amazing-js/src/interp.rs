@@ -24,6 +24,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
@@ -1681,7 +1682,11 @@ impl Interpreter {
             JsValue::Str(_) => "string",
             JsValue::Symbol(_) => "symbol",
             JsValue::Object(o) => {
-                if o.borrow().func.is_some() {
+                let o = o.borrow();
+                // Annex B.3.6.2: [[IsHTMLDDA]] objects report "undefined".
+                if o.is_html_dda {
+                    "undefined"
+                } else if o.func.is_some() {
                     "function"
                 } else {
                     "object"
