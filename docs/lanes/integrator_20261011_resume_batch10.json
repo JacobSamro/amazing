@@ -1,0 +1,66 @@
+{
+ "schema": 1,
+ "ticket": "resume-batch10",
+ "date": "2026-10-11",
+ "published_base": "bfb2c57aded60fe28855fab9235ce4875825ee99",
+ "gated_source_commit": "ffe88c530151c032221fcc9ea2f2aa57755f7aa3",
+ "tickets": [
+  "ffe88c530 layout: track-sum max-content width for grids and Grid Lanes containers with explicit columns"
+ ],
+ "workspace": {
+  "nextest": {
+   "passed": 5694,
+   "failed": 0,
+   "skipped": 17
+  },
+  "doctests": {
+   "passed": 39,
+   "failed": 0
+  }
+ },
+ "test262": {
+  "shards": 16,
+  "timeout_seconds": 60,
+  "summary": {
+   "files": {
+    "fail": 312,
+    "pass": 53266,
+    "skipped": 294
+   },
+   "variants": {
+    "fail": 611,
+    "pass": 102307
+   }
+  },
+  "lost_files": 0,
+  "lost_variants": 0,
+  "baseline": "t262-d8052fa8-resume-batch9-20261011 (published bfb2c57ad)",
+  "result_sha256": "3baa94fd409d5ddc5d3af738f040bc664413a01f65f522c2f7ed637ffb9347d4"
+ },
+ "render": {
+  "baseline": "bfb2c57ad",
+  "candidate": "ffe88c530",
+  "css-grid": {
+   "before": 435,
+   "after": 461,
+   "total": 945,
+   "gained": 26,
+   "lost": 0
+  },
+  "css-flexbox": {
+   "before": 349,
+   "after": 349,
+   "lost": 0
+  },
+  "css-sizing": {
+   "before": 99,
+   "after": 99,
+   "lost": 0
+  },
+  "css-tables": {
+   "before": 60,
+   "after": 60,
+   "lost": 0
+  }
+ }
+}
