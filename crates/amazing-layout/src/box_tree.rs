@@ -57,6 +57,7 @@ pub(crate) fn build_layout_tree_from_root(
     dom: &Dom, document: NodeIdx, styled: &StyledDom, fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
+    crate::inline_autospace::reset_memo();
     let root_style = ComputedStyle::default();
     let start = dom_html_from_root(dom, document)
         .and_then(|html| find_element(dom, html, "body"))
@@ -235,7 +236,7 @@ fn generated_box(
         match run {
             ContentRun::Text(text) if !text.is_empty() => {
                 let mut item =
-                    inline_text(dom, origin, origin, text.clone(), &style, font_size, display == Display::Inline);
+                    inline_text(dom, styled, origin, origin, text.clone(), &style, font_size, display == Display::Inline, Some(pseudo));
                 if let InlineNode::Text {
                     source_mappings, source_order, ..
                 } = &mut item
@@ -277,6 +278,22 @@ fn generated_box(
     Some(box_)
 }
 
+/// Scope edges surround the actual descendants, including empty and generated
+/// inlines. Margins are outside padding in both source directions; bidi later
+/// selects the physical inline side without changing the percentage basis.
+fn append_scope_edges(inlines: &mut Vec<InlineNode>, node: NodeIdx,
+    style: &ComputedStyle, font_style: &amazing_text::TextStyle, start: bool) {
+    use crate::InlineEdgeKind::{Margin, Padding};
+    for kind in if start { [Margin, Padding] } else { [Padding, Margin] } {
+        let prefix = if kind == Padding { "padding" } else { "margin" };
+        if ["top", "right", "bottom", "left"].into_iter()
+            .any(|side| nonzero_length(style.get(&format!("{prefix}-{side}")))) {
+            inlines.push(InlineNode::PaddingEdge { kind, node,
+                padding_style: Box::new(style.clone()), font_style: Box::new(font_style.clone()), start });
+        }
+    }
+}
+
 fn append_generated(
     dom: &Dom,
     styled: &StyledDom,
@@ -299,19 +316,11 @@ fn append_generated(
             generated.flow=Flow::Inlines(Vec::new());
         }
         if let Flow::Inlines(items) = &mut generated.flow {
-            let padding_scope = ["padding-top", "padding-right", "padding-bottom", "padding-left"]
-                .into_iter().any(|property| nonzero_length(generated.style.get(property)));
             let font_style = generated.font_metric_style.clone()
                 .unwrap_or_else(|| text_style(dom, origin, &generated.style, generated.font_size, false));
-            if padding_scope {
-                inlines.push(InlineNode::PaddingEdge { node:origin,
-                    padding_style:Box::new(generated.style.clone()),font_style:Box::new(font_style.clone()),start:true });
-            }
+            append_scope_edges(inlines, origin, &generated.style, &font_style, true);
             inlines.append(items);
-            if padding_scope {
-                inlines.push(InlineNode::PaddingEdge { node:origin,
-                    padding_style:Box::new(generated.style.clone()),font_style:Box::new(font_style),start:false });
-            }
+            append_scope_edges(inlines, origin, &generated.style, &font_style, false);
         }
     } else {
         flush_anonymous_into(blocks, inlines, positioned, font_size, fonts, &mut Vec::new());
@@ -1136,6 +1145,7 @@ fn text_style(
             writing_mode.uses_vertical_metrics()),
         variations: Vec::new(),
         synthesis: crate::font_policy::synthesis(style),
+        autospace: crate::inline_autospace::policy(style),
     }
 }
 
@@ -1151,12 +1161,14 @@ fn tab_size(style: &ComputedStyle, font_size: f32) -> crate::TabSize {
 
 fn inline_text(
     dom: &Dom,
+    styled: &StyledDom,
     owner: NodeIdx,
     node: NodeIdx,
     source_text: String,
     style: &ComputedStyle,
     font_size: f32,
     inline_box: bool,
+    pseudo: Option<PseudoElement>,
 ) -> InlineNode {
     let (text, source_mappings) = text_for_white_space(&source_text, style, node, usize::MAX);
     InlineNode::Text {
@@ -1167,6 +1179,7 @@ fn inline_text(
         font_size,
         style: Box::new(text_style(dom, owner, style, font_size, inline_box)),
         font_size_adjust: crate::font_policy::size_adjust_request(style),
+        autospace_scopes: crate::inline_autospace::capture(dom, styled, owner, style, pseudo),
         letter_spacing: values::style_length_percentage(style, "letter-spacing", font_size, font_size * 0.6)
             .and_then(|length| length.resolve(None)).unwrap_or(0.0),
         tab_size: tab_size(style, font_size),
@@ -1231,14 +1244,14 @@ fn boundary_between(
 ) -> ShapingBoundary {
     if hard_inline_edge(dom, node, child_style) {
         ShapingBoundary::Hard
-    } else if text_style(dom, node, child_style, child_font_size, true)
-        != text_style(
+    } else if !text_style(dom, node, child_style, child_font_size, true)
+        .shaping_equivalent(&text_style(
             dom,
             dom.get(node).parent.unwrap_or(node),
             parent_style,
             parent_font_size,
             parse_display(parent_style) == Display::Inline,
-        )
+        ))
     {
         ShapingBoundary::StyleChange
     } else {
@@ -1323,21 +1336,21 @@ fn classify_children(
                 NodeKind::Text { data } => {
                     if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                         run.push(inline_text(
-                            dom,
+                            dom, styled,
                             entry.owner,
                             child,
                             data.clone(),
                             &text_parent,
                             entry.parent_font,
-                            false,
+                            false, None,
                         ));
                     }
                 }
                 NodeKind::CDATASection { data } => {
                     if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                         run.push(inline_text(
-                            dom, entry.owner, child, data.clone(), &text_parent,
-                            entry.parent_font, false,
+                            dom, styled, entry.owner, child, data.clone(), &text_parent,
+                            entry.parent_font, false, None,
                         ));
                     }
                 }
@@ -1434,21 +1447,21 @@ fn classify_children(
                 // rendering; keep non-empty collapsed runs as separators.
                 if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
-                        dom,
+                        dom, styled,
                         entry.owner,
                         child,
                         data.clone(),
                         &text_parent,
                         entry.parent_font,
-                        false,
+                        false, None,
                     ));
                 }
             }
             NodeKind::CDATASection { data } => {
                 if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
-                        dom, entry.owner, child, data.clone(), &text_parent,
-                        entry.parent_font, false,
+                        dom, styled, entry.owner, child, data.clone(), &text_parent,
+                        entry.parent_font, false, None,
                     ));
                 }
             }
@@ -1619,7 +1632,7 @@ fn flush_anonymous_into(
     fonts: &FontSource,
     deferred_floats: &mut Vec<LayoutBox>,
 ) {
-    if inlines.is_empty() || !has_inline_box_content(inlines) {
+    if inlines.is_empty() || !has_split_inline_content(inlines) {
         inlines.clear();
     } else {
         let taken = std::mem::take(inlines);
@@ -1680,6 +1693,23 @@ fn has_renderable_inline_content(inlines: &[InlineNode]) -> bool {
     })
 }
 
+/// A block descendant splits an inline into fragments. Cross-axis margins
+/// do not apply to a non-replaced inline and cannot create anonymous lines
+/// before/after that descendant. A standalone empty inline still keeps the
+/// ordinary empty-scope strut path below.
+fn has_split_inline_content(inlines: &[InlineNode]) -> bool {
+    has_renderable_inline_content(inlines) || inlines.iter().any(|item| match item {
+        InlineNode::PaddingEdge { kind: crate::InlineEdgeKind::Padding, .. } => true,
+        InlineNode::PaddingEdge { kind: crate::InlineEdgeKind::Margin, padding_style, font_style, .. } => {
+            let sides = if font_style.writing_mode.is_vertical_flow() {
+                ["margin-top", "margin-bottom"]
+            } else { ["margin-left", "margin-right"] };
+            sides.into_iter().any(|side| nonzero_length(padding_style.get(side)))
+        }
+        _ => false,
+    })
+}
+
 fn has_inline_box_content(inlines: &[InlineNode]) -> bool {
     has_renderable_inline_content(inlines)
         || inlines.iter().any(|item| matches!(item,InlineNode::PaddingEdge { .. }))
@@ -1710,14 +1740,7 @@ fn flatten_inline(
     let bidi_style = text_style(dom, idx, &style, font_size, true);
     let mut inline_start = inlines.len();
     let mut nowrap_prefix = no_wrap_here(&style) && ancestor_nowrap_content;
-    let padding_scope = ["padding-top", "padding-right", "padding-bottom", "padding-left"]
-        .into_iter().any(|property| nonzero_length(style.get(property)));
-    if padding_scope {
-        inlines.push(InlineNode::PaddingEdge {
-            node: idx, padding_style: Box::new(style.clone()),
-            font_style: Box::new(bidi_style.clone()), start: true,
-        });
-    }
+    append_scope_edges(inlines, idx, &style, &bidi_style, true);
 
     for pseudo in [PseudoElement::Marker, PseudoElement::Before] {
         append_generated(
@@ -1764,21 +1787,21 @@ fn flatten_inline(
             NodeKind::Text { data } => {
                 if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
-                        dom,
+                        dom, styled,
                         entry.owner,
                         child,
                         data.clone(),
                         &text_parent,
                         entry.parent_font,
-                        entry.owner == idx,
+                        entry.owner == idx, None,
                     ));
                 }
             }
             NodeKind::CDATASection { data } => {
                 if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
-                        dom, entry.owner, child, data.clone(), &text_parent,
-                        entry.parent_font, entry.owner == idx,
+                        dom, styled, entry.owner, child, data.clone(), &text_parent,
+                        entry.parent_font, entry.owner == idx, None,
                     ));
                 }
             }
@@ -1920,12 +1943,7 @@ fn flatten_inline(
         inlines,
         positioned_out,
     );
-    if padding_scope {
-        inlines.push(InlineNode::PaddingEdge {
-            node: idx, padding_style: Box::new(style.clone()),
-            font_style: Box::new(bidi_style.clone()), start: false,
-        });
-    }
+    append_scope_edges(inlines, idx, &style, &bidi_style, false);
     if inline_start <= inlines.len() {
         mark_inline_edges(&mut inlines[inline_start..], edge_boundary);
         if bidi_style.unicode_bidi != UnicodeBidi::Normal {

@@ -108,7 +108,14 @@ fn ruby_text(
         }
     }
     *mapping_budget = mapping_budget.saturating_sub(source_mappings.len());
+    let autospace_scopes = source_mappings.iter().map(|mapping| {
+        let source_owner = dom.get(mapping.source).parent.unwrap_or(owner);
+        let source_style = styled.get(source_owner).unwrap_or(&style);
+        (mapping.text_range.clone(), crate::inline_autospace::capture(dom, styled,
+            source_owner, source_style, None))
+    }).collect();
     RubyText {
+        autospace_scopes,
         source_orders: Vec::new(),
         node: owner,
         raw_text,
@@ -132,6 +139,7 @@ fn empty_ruby_text(
     let style = styled.get(owner).cloned().unwrap_or_default();
     let font_size = values::resolve_used_font_size(&style, parent_font_size);
     RubyText {
+        autospace_scopes: Vec::new(),
         source_orders: Vec::new(),
         node: owner,
         raw_text: String::new(),
@@ -355,6 +363,8 @@ impl RubyBuilder<'_> {
             self.mapping_budget,
         )
         .0;
+        result.autospace_scopes = vec![(0..result.text.len(), crate::inline_autospace::capture(
+            self.dom, self.styled, entry.owner, &style, Some(pseudo)))];
         result.font_size = size;
         result.style = Box::new(text_style(self.dom, entry.owner, &style, size, true));
         result.font_size_adjust = crate::font_policy::size_adjust_request(&style);
@@ -628,6 +638,10 @@ fn new_column(base: RubyText, whitespace: bool) -> crate::RubyColumn {
 fn append_ruby_text(result: &mut RubyText, mut part: RubyText) {
     let skip = usize::from(result.text.ends_with(' ') && part.text.starts_with(' '));
     let start = result.text.len();
+    for (range, _) in &mut part.autospace_scopes {
+        *range = start + range.start.saturating_sub(skip)..start + range.end.saturating_sub(skip);
+    }
+    result.autospace_scopes.extend(part.autospace_scopes.into_iter().filter(|(range, _)| !range.is_empty()));
     result.raw_text.push_str(&part.raw_text);
     result.text.push_str(&part.text[skip..]);
     result.format.minimum_advance = result
@@ -654,6 +668,11 @@ fn trim_ruby_start(text: &mut RubyText) {
     }
     let count = text.text.len() - text.text.trim_start_matches(' ').len();
     text.text.drain(..count);
+    for (range, _) in &mut text.autospace_scopes {
+        range.start = range.start.saturating_sub(count);
+        range.end = range.end.saturating_sub(count);
+    }
+    text.autospace_scopes.retain(|(range, _)| !range.is_empty());
     for mapping in &mut text.source_mappings {
         mapping.text_range.start = mapping.text_range.start.saturating_sub(count);
         mapping.text_range.end = mapping.text_range.end.saturating_sub(count);

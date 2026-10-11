@@ -16,6 +16,13 @@ pub(crate) fn resolve(
     font_style: &TextStyle,
     text: &dyn TextSystem,
     context: &Context<'_>,
+ ) -> Sides {
+    resolve_kind(style, font_style, text, context, crate::InlineEdgeKind::Padding)
+}
+
+pub(crate) fn resolve_kind(
+    style: &ComputedStyle, font_style: &TextStyle, text: &dyn TextSystem,
+    context: &Context<'_>, kind: crate::InlineEdgeKind,
 ) -> Sides {
     let normal = text
         .metrics(font_style)
@@ -38,21 +45,22 @@ pub(crate) fn resolve(
         // Piecewise math must choose its branch with the actual basis. The
         // lower CSS evaluator handles computed px/percentage expressions.
         let zoom = style.effective_zoom();
-        amazing_css::used_position_axis(source, basis as f64 / zoom)
+        let value = amazing_css::used_position_axis(source, basis as f64 / zoom)
             .map(|value| (value * zoom) as f32)
             .or_else(|| {
                 values::used_length_percentage_with_units(style, source, units)
                     .and_then(|length| length.resolve(Some(basis)))
             })
             .filter(|value| value.is_finite())
-            .unwrap_or(0.0)
-            .max(0.0)
+            .unwrap_or(0.0);
+        if kind == crate::InlineEdgeKind::Padding { value.max(0.0) } else { value }
     };
+    let prefix = if kind == crate::InlineEdgeKind::Padding { "padding" } else { "margin" };
     Sides {
-        top: side("padding-top"),
-        right: side("padding-right"),
-        bottom: side("padding-bottom"),
-        left: side("padding-left"),
+        top: side(&format!("{prefix}-top")),
+        right: side(&format!("{prefix}-right")),
+        bottom: side(&format!("{prefix}-bottom")),
+        left: side(&format!("{prefix}-left")),
     }
 }
 

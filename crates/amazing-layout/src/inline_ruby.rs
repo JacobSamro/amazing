@@ -19,19 +19,27 @@ fn shape_ruby_leaf(
     text: &crate::RubyText,
     block_offset: f32,
     text_system: &dyn TextSystem,
-) -> Option<(Vec<GlyphFrag>, f32, amazing_text::FontMetrics)> {
+) -> Option<(Vec<GlyphFrag>, Vec<RubyGap>, f32, amazing_text::FontMetrics)> {
     let adjusted = crate::font_policy::adjusted_style(&text.style, text.font_size_adjust, text_system);
     let style = adjusted.as_ref().unwrap_or(text.style.as_ref());
     let metrics = text_system.metrics(style).ok()?;
     if text.text.is_empty() {
-        return Some((Vec::new(), 0.0, metrics));
+        return Some((Vec::new(), Vec::new(), 0.0, metrics));
     }
-    let spans = [TextSpan {
+    let mut spans = vec![TextSpan {
         range: 0..text.text.len(),
         source: text.node.0,
         style: style.clone(),
         boundary_before: ShapingBoundary::Hard,
     }];
+    let bindings = text.autospace_scopes.iter().map(|(range, scopes)|
+        crate::inline_autospace::Binding { range: range.clone(), scopes: std::sync::Arc::clone(scopes) })
+        .collect::<Vec<_>>();
+    let adjoining = |left: &Range<usize>, right: &Range<usize>| {
+        let (start, end) = if left.start < right.start { (left.end, right.start) } else { (right.end, left.start) };
+        !text.nested.iter().any(|nested| nested.range.start < end && start < nested.range.end)
+    };
+    crate::inline_autospace::protect_ligatures(&text.text, &mut spans, &bindings, text_system, adjoining, false).ok()?;
     let sources = text
         .source_mappings
         .iter()
@@ -41,7 +49,7 @@ fn shape_ruby_leaf(
             source_range: mapping.source_range.clone(),
         })
         .collect::<Vec<_>>();
-    let line = text_system
+    let mut line = text_system
         .shape_line(LineRequest {
             paragraph: Paragraph {
                 text: &text.text,
@@ -53,10 +61,14 @@ fn shape_ruby_leaf(
             range: 0..text.text.len(),
         })
         .ok()?;
+    let spacing = crate::inline_autospace::apply(&mut line, &text.text, &bindings, text_system,
+        adjoining, |_| false, false).ok()?;
     let mut fragments = Vec::new();
+    let mut gaps = Vec::new();
     let mut pen = 0.0;
     for run in line.runs {
         for glyph in run.glyphs {
+            if replaced_autospace(&spacing, &glyph.cluster) { continue; }
             let character = text.text[glyph.cluster.clone()].chars().next();
             if character == Some('\t') {
                 pen += text.format.tab_size.advance(
@@ -100,13 +112,30 @@ fn shape_ruby_leaf(
                 synthesis: run.synthesis,
                 color: text.color.clone(),
             });
+            for receipt in spacing.iter().filter(|receipt| receipt.after_cluster == glyph.cluster) {
+                let Some(scope) = crate::inline_autospace::paint_scope(&bindings, receipt) else { continue; };
+                let color = scope.style.get("background-color").unwrap_or("transparent");
+                if color == "transparent" || !matches!(scope.style.get("display"), Some("inline" | "inline flow" | "ruby" | "inline ruby" | "ruby-base" | "ruby-text")) { continue; }
+                let adjusted = crate::font_policy::adjusted_style(&scope.font,
+                    crate::font_policy::size_adjust_request(&scope.style), text_system);
+                let owner_metrics = text_system.metrics(adjusted.as_ref().unwrap_or(&scope.font)).ok()?;
+                let height = crate::values::resolve_used_line_height(&scope.style, scope.font.size,
+                    if run.writing_mode.is_vertical_flow() { owner_metrics.vertical_line_width() } else { owner_metrics.line_height() });
+                gaps.push(RubyGap { cluster: glyph.cluster.clone(), fragment: crate::InlineDecorationFrag {
+                    node: scope.node, x: pen + inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y) - receipt.advance,
+                    y: block_offset - if run.writing_mode.is_vertical_flow() { owner_metrics.vertical_ascent } else { owner_metrics.ascent }, width: receipt.advance, height, color: color.to_owned(),
+                }});
+            }
             pen += inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
         }
     }
-    Some((fragments, pen, metrics))
+    Some((fragments, gaps, pen, metrics))
 }
 
+struct RubyGap { cluster: Range<usize>, fragment: crate::InlineDecorationFrag }
+
 struct RubyRun {
+    gaps: Vec<RubyGap>,
     glyphs: Vec<GlyphFrag>,
     width: f32,
     metrics: amazing_text::FontMetrics,
@@ -146,7 +175,7 @@ fn shape_text(
     if depth >= 64 {
         return None;
     }
-    let (mut glyphs, mut width, metrics) = shape_ruby_leaf(text, 0.0, system)?;
+    let (mut glyphs, mut gaps, mut width, metrics) = shape_ruby_leaf(text, 0.0, system)?;
     let vertical = text.style.writing_mode.is_vertical_flow();
     let mut over = 0.0f32;
     let mut under = 0.0f32;
@@ -183,6 +212,13 @@ fn shape_text(
                 shift(std::slice::from_mut(glyph), vertical, difference, 0.0);
             }
         }
+        for gap in &mut gaps {
+            if gap.cluster.start >= nested.range.end { gap.fragment.x += difference; }
+        }
+        gaps.extend(shaped.decorations.into_iter().map(|mut fragment| {
+            fragment.x += origin;
+            RubyGap { cluster: nested.range.clone(), fragment }
+        }));
         let mut nested_glyphs = shaped.glyphs;
         shift(&mut nested_glyphs, vertical, origin, 0.0);
         // The outer paragraph treats a nested ruby as one indivisible cluster.
@@ -197,9 +233,10 @@ fn shape_text(
         under = under.max(shaped.line_under);
     }
     if text.format.visibility != "visible" {
-        glyphs.clear();
+        glyphs.clear(); gaps.clear();
     }
     Some(RubyRun {
+        gaps,
         glyphs,
         width: width.max(text.format.minimum_advance),
         metrics,
@@ -331,6 +368,8 @@ fn align(
             budget,
         ) {
             run.glyphs = shaped.glyphs;
+            run.gaps = shaped.decorations.into_iter().map(|fragment|
+                RubyGap { cluster: nested.range.clone(), fragment }).collect();
             run.width = shaped.width;
         }
     }
@@ -365,6 +404,10 @@ fn align(
     } else {
         extra * 0.5
     };
+    for gap in &mut run.gaps {
+        let count = opportunities.partition_point(|&offset| offset <= gap.cluster.start);
+        gap.fragment.x += origin + edge + step * count as f32;
+    }
     for glyph in &mut run.glyphs {
         let count = opportunities.partition_point(|&offset| offset <= glyph.cluster.start);
         let advance = origin + edge + step * count as f32;
@@ -509,6 +552,7 @@ fn shape_ruby(
                 budget,
             );
             shift(&mut note.run.glyphs, vertical, 0.0, block);
+            for gap in &mut note.run.gaps { gap.fragment.y += block; }
             if below {
                 level_under = level_under.max(under + height);
             } else {
@@ -520,6 +564,7 @@ fn shape_ruby(
         first = end;
     }
     let mut glyphs = Vec::new();
+    let mut decorations = Vec::new();
     let mut text = String::new();
     for (index, (column, base)) in columns.iter().zip(&mut bases).enumerate() {
         align(
@@ -532,10 +577,12 @@ fn shape_ruby(
             budget,
         );
         glyphs.append(&mut base.glyphs);
+        decorations.extend(base.gaps.drain(..).map(|gap| gap.fragment));
         text.push_str(&column.base.raw_text);
     }
     for note in notes {
         glyphs.extend(note.run.glyphs);
+        decorations.extend(note.run.gaps.into_iter().map(|gap| gap.fragment));
     }
     Some(ShapedRuby {
         source_order: columns.iter().flat_map(|column|&column.base.source_orders).map(|(_,rank)|*rank).min(),
@@ -547,6 +594,7 @@ fn shape_ruby(
         overhang_spaces: spaces,
         font_size,
         glyphs,
+        decorations,
         line_over: over,
         line_under: under,
         break_after: true,

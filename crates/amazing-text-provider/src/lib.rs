@@ -871,7 +871,7 @@ impl TextProvider {
                 && selected[end] == Some(font_index)
                 && visibility[end]==visibility[index]
                 && itemized[end].boundary_before == ShapingBoundary::Continue
-                && itemized[end].style == itemized[index].style
+                && itemized[end].style.shaping_equivalent(&itemized[index].style)
                 && directions[end] == directions[index]
                 && cluster_orientation(&itemized[end].style, text, itemized[end].range.clone())
                     == orientation

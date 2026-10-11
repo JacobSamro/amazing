@@ -88,3 +88,14 @@ fn pinned_flex_gap_logical_sizing_reaches_physical_layout_inputs() {
         assert_eq!(s.get("height"), Some(height), "{axes}");
     }
 }
+
+#[test]
+fn box_shorthands_keep_spaced_math_functions_whole() {
+    let s = style("div{margin:calc(1em / 8) 3px;padding:calc(2px + 1px) min(1px, 2px) 4px}");
+    assert_eq!(s.get("margin-top"), Some("calc(1em / 8)"));
+    assert_eq!(s.get("margin-left"), Some("3px"));
+    assert_eq!(s.get("margin-bottom"), Some("calc(1em / 8)"));
+    assert_eq!(s.get("padding-top").map(|v| v.contains("calc") || v == "3px"), Some(true));
+    assert_eq!(s.get("padding-right").map(|v| v.starts_with("min(") || v == "1px"), Some(true));
+    assert_eq!(s.get("padding-bottom"), Some("4px"));
+}

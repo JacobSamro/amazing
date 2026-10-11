@@ -7,6 +7,9 @@
 
 #![forbid(unsafe_code)]
 
+mod autospace;
+pub use autospace::{AutospaceMode, TextAutospace, AutospaceContext, AutospaceClass, AutospaceAdjustment, AutospacePlan, AutospaceError, autospace_class, autospace_possible, plan_autospace, apply_autospace_plan, autospace_shaping_boundaries};
+
 use std::collections::BTreeMap;
 use std::ops::Range;
 
@@ -332,6 +335,7 @@ pub struct TextStyle {
     pub text_orientation: TextOrientation,
     pub text_combine: TextCombine,
     pub white_space: WhiteSpace,
+    pub autospace: TextAutospace,
     pub word_break: WordBreak,
     pub unicode_bidi: UnicodeBidi,
     pub hyphens: Hyphens,
@@ -341,6 +345,36 @@ pub struct TextStyle {
     pub features: Vec<FeatureSetting>,
     pub variations: Vec<VariationSetting>,
     pub synthesis: FontSynthesis,
+}
+
+impl TextStyle {
+    /// Autospace is applied between visual units after shaping. A policy-only
+    /// difference must not split otherwise identical font shaping runs; actual
+    /// eligible spacing locations are supplied as explicit shaping boundaries.
+    /// Full PartialEq still includes autospace for paragraph/layout cache identity.
+    pub fn shaping_equivalent(&self, other: &Self) -> bool {
+        self.families == other.families
+            && self.size == other.size
+            && self.weight == other.weight
+            && self.stretch == other.stretch
+            && self.stretch_percent == other.stretch_percent
+            && self.slant == other.slant
+            && self.oblique_angle_degrees == other.oblique_angle_degrees
+            && self.direction == other.direction
+            && self.writing_mode == other.writing_mode
+            && self.text_orientation == other.text_orientation
+            && self.text_combine == other.text_combine
+            && self.white_space == other.white_space
+            && self.word_break == other.word_break
+            && self.unicode_bidi == other.unicode_bidi
+            && self.hyphens == other.hyphens
+            && self.line_break == other.line_break
+            && self.overflow_wrap == other.overflow_wrap
+            && self.language == other.language
+            && self.features == other.features
+            && self.variations == other.variations
+            && self.synthesis == other.synthesis
+    }
 }
 
 impl Default for TextStyle {
@@ -358,6 +392,7 @@ impl Default for TextStyle {
             text_orientation: TextOrientation::Mixed,
             text_combine: TextCombine::None,
             white_space: WhiteSpace::Normal,
+            autospace: TextAutospace::NORMAL,
             word_break: WordBreak::Normal,
             unicode_bidi: UnicodeBidi::Normal,
             hyphens: Hyphens::Manual,

@@ -1436,7 +1436,15 @@ fn intrinsic_width_constraints(b: &LayoutBox, inner: f32, fonts: &FontSource) ->
 pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     if let Some(width) = crate::containment::intrinsic_width(b) { return width; }
     match &b.flow {
-        Flow::Inlines(items) => inline_run_width(&contained_atomic_items(b, items, fonts, false), fonts),
+        Flow::Inlines(items) => {
+            let measured = contained_atomic_items(b, items, fonts, false);
+            let units = values::FontRelativeUnits::legacy(b.font_size, fonts.measure("0", b.font_size))
+                .with_line_heights(b.line_height, b.root_line_height);
+            let indentation = inline::Indentation::from_style_with_units(&b.style, 0.0, b.first_formatted_line_eligible, true, Some(units));
+            if indentation.is_zero() { inline_run_width(&measured, fonts) }
+            else { inline::intrinsic_padding_widths_legacy_with_indentation(&measured, fonts, indentation)
+                .map(|pair| pair.1).unwrap_or_else(|| inline_run_width(&measured, fonts)) }
+        },
         Flow::Flex(children) if matches!(
             ContainerSpec::of(&b.style, b.font_size, 0.0, None).direction,
             Direction::Row | Direction::RowReverse
@@ -1500,6 +1508,16 @@ pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 
 pub(crate) fn min_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     if let Some(width) = crate::containment::intrinsic_width(b) { return width; }
     match &b.flow {
+        Flow::Inlines(items) if !inline::Indentation::from_style_with_units(&b.style, 0.0, b.first_formatted_line_eligible, true,
+            Some(values::FontRelativeUnits::legacy(b.font_size, fonts.measure("0", b.font_size))
+                .with_line_heights(b.line_height, b.root_line_height))).is_zero() => {
+            let measured = contained_atomic_items(b, items, fonts, true);
+            let units = values::FontRelativeUnits::legacy(b.font_size, fonts.measure("0", b.font_size))
+                .with_line_heights(b.line_height, b.root_line_height);
+            let indentation = inline::Indentation::from_style_with_units(&b.style, 0.0, b.first_formatted_line_eligible, true, Some(units));
+            inline::intrinsic_padding_widths_legacy_with_indentation(&measured, fonts, indentation)
+                .map(|pair| pair.0).unwrap_or_else(|| inline_min_content_width(&measured, fonts))
+        },
         Flow::Inlines(items) if items.iter().any(|item| matches!(item, crate::InlineNode::PaddingEdge { .. })) => {
             let measured=contained_atomic_items(b,items,fonts,true);
             inline::intrinsic_padding_widths_legacy(&measured,fonts)

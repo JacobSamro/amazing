@@ -96,6 +96,8 @@ mod floats;
 pub mod font;
 mod font_features;
 mod font_policy;
+mod inline_autospace;
+pub use inline_autospace::AutospaceScope;
 pub mod grid;
 mod grid_algorithm;
 pub mod inline;
@@ -182,6 +184,8 @@ pub struct LayoutBox {
     pub(crate) generated_pseudo: Option<amazing_css::selectors::PseudoElement>,
     /// Computed ::first-line style; applied to the first formatted line.
     pub first_line_style: Option<ComputedStyle>,
+    /// Anonymous continuations do not restart their parent's first formatted line.
+    pub(crate) first_formatted_line_eligible: bool,
     /// A list marker outside the principal list-item box.
     pub(crate) outside_marker: bool,
     pub display: Display,
@@ -268,6 +272,7 @@ impl LayoutBox {
             resolved_position: None,
             generated_pseudo: None,
             first_line_style: None,
+            first_formatted_line_eligible: true,
             outside_marker: false,
             display,
             style,
@@ -382,6 +387,8 @@ pub struct RubyAnnotation {
 #[derive(Debug, Clone)]
 pub struct RubyText {
     pub node: NodeIdx,
+    /// Actual normalized source ranges and DOM/pseudo ancestors for spacing.
+    pub autospace_scopes: Vec<(Range<usize>, std::sync::Arc<[std::sync::Arc<AutospaceScope>]>)>,
     pub source_orders: Vec<(Range<usize>, u64)>,
     /// Raw content is retained for auto-hiding before whitespace processing.
     pub raw_text: String,
@@ -407,6 +414,14 @@ pub struct RubyColumn {
     pub intra_level_whitespace: bool,
 }
 
+/// Physical inline scope edges retain their box-model role through shaping.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InlineEdgeKind {
+    #[default]
+    Padding,
+    Margin,
+}
+
 #[derive(Debug, Clone)]
 pub enum InlineNode {
     /// A whitespace-collapsed text run from one DOM text node, rendered at
@@ -421,6 +436,8 @@ pub enum InlineNode {
         /// Explicit computed metric/aspect normalization. Computed CSS size
         /// stays unchanged; the text provider selects the normalized used size.
         font_size_adjust: Option<(amazing_text::FontSizeAdjustMetric, f32)>,
+        /// Actual computed ancestor scopes for post-bidi contextual spacing.
+        autospace_scopes: std::sync::Arc<[std::sync::Arc<AutospaceScope>]>,
         /// Used CSS letter spacing in px; applied between visual character units.
         letter_spacing: f32,
         /// Used CSS word spacing; the percentage is relative to the current font size.
@@ -440,6 +457,7 @@ pub enum InlineNode {
     /// A genuine non-atomic inline scope edge, independent of its descendants.
     /// Retaining computed padding here also represents empty inline scopes.
     PaddingEdge {
+        kind: InlineEdgeKind,
         node: NodeIdx,
         padding_style: Box<ComputedStyle>,
         font_style: Box<amazing_text::TextStyle>,
@@ -703,7 +721,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
             } else {
                 amazing_text::Direction::LeftToRight
             };
-            if let Some(lines) = inline::layout_lines_shaped(
+            if let Some(lines) = inline::layout_lines_shaped_with_indentation(
                 items,
                 inline::InlineContainingBlock {
                     x: layout.content_box.x,
@@ -725,6 +743,12 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 layout.style.get("text-justify").unwrap_or("auto"),
                 layout.style.get("unicode-bidi") == Some("plaintext"),
                 layout.root_font_metric_style.as_ref(), layout.root_line_height,
+                inline::Indentation::from_style_with_units(&layout.style,
+                    if style.writing_mode.is_vertical_flow() { layout.content_box.h } else { layout.content_box.w },
+                    layout.first_formatted_line_eligible, false,
+                    Some(values::FontRelativeUnits::from_text_system(Some(text), Some(style),
+                        layout.root_font_metric_style.as_ref(), style.size)
+                        .with_line_heights(line_height, layout.root_line_height))),
             ) {
                 let old_height = if style.writing_mode.is_vertical_flow() {
                     layout.lines.iter().map(|line| line.height).fold(0.0, f32::max)

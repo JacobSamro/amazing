@@ -255,6 +255,8 @@ pub enum ComputedValue {
     LengthPercentage(LengthPercentage),
     /// Valid CSS math retained until the consumer supplies a percentage basis.
     LengthPercentageExpression(String),
+    /// Signed indentation plus unique hanging/each-line flags.
+    TextIndent(Box<crate::TextIndent>),
     SvgPaint(SvgPaint),
     SvgResource(SvgResource),
     SvgDasharray(Vec<LengthPercentage>),
@@ -281,6 +283,7 @@ pub enum ComputedValue {
     WritingMode(WritingMode),
     Transform(Vec<Transform>),
     FontSizeAdjust(crate::font_size_adjust::FontSizeAdjust),
+    TextAutospace(crate::text_autospace::TextAutospace),
     FilterList(crate::effects::FilterList),
     BlendMode(crate::effects::BlendMode),
     /// `isolation: isolate` is true; `auto` is false.
@@ -538,6 +541,10 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             _=>{},
         }
     }
+    if property == "text-indent" {
+        let indent = crate::TextIndent::parse(css)?;
+        return Some(if indent.hanging || indent.each_line { V::TextIndent(Box::new(indent)) } else { indent.length });
+    }
     let lower = css.trim().to_ascii_lowercase();
     let s = lower.as_str();
     macro_rules! keyword {
@@ -547,6 +554,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     }
     if crate::text_properties::supported(property) {
         let canonical = crate::text_properties::canonical(property, css)?;
+        if property == "text-autospace" {
+            return Some(crate::TextAutospace::parse(&canonical).map(V::TextAutospace).unwrap_or(V::Unparsed));
+        }
         return Some(if property == "white-space" { WhiteSpace::parse(&canonical).map(V::WhiteSpace).unwrap_or(V::Unparsed) } else { V::Unparsed });
     }
     if crate::computed::border_radius::supported(property) {
@@ -1407,6 +1417,7 @@ pub(crate) fn resolve_font_units(
     }
     match value {
         ComputedValue::LengthPercentage(length) => resolve(length, font, root, line_height),
+        ComputedValue::TextIndent(indent) => resolve_font_units(&mut indent.length, font, root, false),
         ComputedValue::Transform(ops) => {
             for op in ops {
                 match op {

@@ -1,0 +1,198 @@
+{
+ "schema": 1,
+ "candidate_code_commit": "323d7f760f865573adf0b800a148f7a5ccda25a7",
+ "gated_dev_base": "8c69cc89120ced6ab09cbc3f3a5fc21f86613c2f",
+ "workspace": {
+  "nextest": "5620 run, 5620 passed, 0 failed, 17 skipped",
+  "doctests": "0 failed (40 passed across crates)"
+ },
+ "single_test_seconds_debug_build": {
+  "text-transform-full-size-kana-007": {
+   "dev": 6.45,
+   "before_fix_candidate": 34.22,
+   "after_fix": 5.36
+  },
+  "ruby-layout-internal-boxes": {
+   "dev": 13.45,
+   "before_fix_candidate": 21.55,
+   "after_fix": 11.79
+  }
+ },
+ "directories": {
+  "css-css-cascade": {
+   "before": {
+    "pass": 17,
+    "mismatch": 4,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "after": {
+    "pass": 17,
+    "mismatch": 4,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "gained": [],
+   "lost": [],
+   "before_sha256": "6849ab669e1d9b7f403873565640e028cefa0bce4faa9efc87240719fa1cd7f7",
+   "after_sha256": "d12fd35a4f2bed5c87ad0cf9032aa45aee35f3cdf6bc3fb46d5c1d3f8806ef03"
+  },
+  "css-css-color": {
+   "before": {
+    "pass": 226,
+    "mismatch": 10,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "after": {
+    "pass": 226,
+    "mismatch": 10,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "gained": [],
+   "lost": [],
+   "before_sha256": "18b8824137485490b2bfb74aebb36625ad30500af6ef6ab8240f7d5ab755a0dd",
+   "after_sha256": "b7146e72f6c7d2bda12f493b421b9e3579f71db75c0f20e1747fa2dba2b39bec"
+  },
+  "css-css-inline": {
+   "before": {
+    "pass": 1,
+    "mismatch": 6,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "after": {
+    "pass": 1,
+    "mismatch": 6,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "gained": [],
+   "lost": [],
+   "before_sha256": "50ae5c7f72184b8dbdafe1857410d7bd1e0d28a9a11c8715078525badc3fcd9a",
+   "after_sha256": "855d5b9fcb231a526a3ca2056331ba4c4470d9c3b46ddb7eef0c1aa84894235a"
+  },
+  "css-css-ruby": {
+   "before": {
+    "pass": 52,
+    "mismatch": 15,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "after": {
+    "pass": 52,
+    "mismatch": 15,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "gained": [],
+   "lost": [],
+   "before_sha256": "20481f76a04b89879a034b709a11483cee2a65f03c22c97551b042ae9d53c255",
+   "after_sha256": "b5462ff6aea9322a27b972922aba0a33451987e80baed0ba8acb07614699c956"
+  },
+  "css-css-text": {
+   "before": {
+    "pass": 238,
+    "mismatch": 208,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "after": {
+    "pass": 240,
+    "mismatch": 206,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "gained": [
+    "css__css-text__text-indent__text-indent-overflow.html",
+    "css__css-text__text-autospace__text-autospace-no-001.html"
+   ],
+   "lost": [],
+   "before_sha256": "422b69378163ee7686d7a6a02526eded531ca656cf1122b5b9bc7e3f70580d8b",
+   "after_sha256": "1d831d0b8fb0ec138dbe5b63d70c9ab227e3cda6b05dd4dd6681dc8de490b71a"
+  },
+  "css-css-values": {
+   "before": {
+    "pass": 65,
+    "mismatch": 47,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "after": {
+    "pass": 67,
+    "mismatch": 45,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "gained": [
+    "css__css-values__calc-padding-block-1.html",
+    "css__css-values__calc-margin-block-1.html"
+   ],
+   "lost": [],
+   "before_sha256": "6db84b5085188e834f4395f1cd0b460b8bd5129a10672e11e74a59ad6a98a708",
+   "after_sha256": "da74a50410520873ea0ece8070deeaeea8335f1b58afa75a8aea60574d7cea19"
+  },
+  "css-selectors": {
+   "before": {
+    "pass": 82,
+    "mismatch": 9,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "after": {
+    "pass": 82,
+    "mismatch": 9,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+   },
+   "gained": [],
+   "lost": [],
+   "before_sha256": "baf4c50b5695ae4de361712cfbead64f2d24c7e22c1968d9b10d81b9a18302d7",
+   "after_sha256": "96aa1f5eaa7c6e71cc82128b1f3afba98a92db61454694def10b76c1c6fc9c88"
+  }
+ },
+ "raw_results": {
+  "autospace7-before": {
+   "box_dir": "/tmp/amazing-render-gate-t_hsklqz",
+   "summary_sha256": "cc878a51bd4468b6a6710e1be790c2655af0a4d911d90516f8f45f95853be1f5"
+  },
+  "autospace9a-after": {
+   "box_dir": "/tmp/amazing-render-gate-1f3_l3ap",
+   "summary_sha256": "e0e5ed127afcae0fdbb0fbb7f4f25fa666253933037f7d028e59fc88f2ce8a21"
+  },
+  "autospace9b-after": {
+   "box_dir": "/tmp/amazing-render-gate-1qd4tp2f",
+   "summary_sha256": "c0130b208835d8327761eec8c792a98dd74bee91cffdc331ab77ec975b86a3ae"
+  }
+ },
+ "wpt": "pinned c2a2fce on Boat bx_wke9prvz; before = origin/dev 8c69cc891 (integrator run autospace7), after = 323d7f760"
+}

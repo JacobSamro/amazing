@@ -21,6 +21,8 @@ mod runtime_host_ipc;
 mod runtime_host_replaced_content;
 #[cfg(test)]
 mod driver_tests;
+#[cfg(test)]
+mod text_indent_native_tests;
 
 // Shared adapters used by the fallback shell and WPT runner.
 use dom_host::BrowserDomHost;
@@ -179,3 +181,6 @@ fn cmd_devtools(args: &[String]) -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod text_autospace_native_tests;

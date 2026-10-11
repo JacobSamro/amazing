@@ -375,6 +375,16 @@ impl ComputedStyle {
         }
     }
 
+    fn resolve_text_indent(&mut self, root: f64) {
+        let font = self.get("font-size").and_then(|s| s.strip_suffix("px")).and_then(|s| s.parse().ok());
+        if let (Some(font), Some(css)) = (font, self.props.get("text-indent").cloned()) {
+            if let Some(value) = crate::TextIndent::computed(&css, font, root) {
+                self.typed.insert("text-indent".into(), values::parse("text-indent", &value).unwrap_or(ComputedValue::Unparsed));
+                self.props.insert("text-indent".into(), value);
+            }
+        }
+    }
+
     fn resolve_typed_units(&mut self) {
         let font = match self.typed.get("font-size") {
             Some(ComputedValue::LengthPercentage(values::LengthPercentage::Px(px))) => *px,
@@ -452,6 +462,7 @@ impl ComputedStyle {
         }
         let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
         self.effective_zoom *= next_zoom / prior_zoom;
+        self.resolve_text_indent(self.root_font_px);
         self.resolve_typed_units();
         self.refresh_flex_values();
     }
@@ -1274,6 +1285,14 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     if crate::text_properties::axes(&property).is_some() {
         return text_policy::expand(&property, value).unwrap_or_default();
     }
+    if property == "text-autospace" {
+        return if needs_deferred_expansion(value) || contains_attr_function(value) {
+            vec![(property, value.to_owned())]
+        } else {
+            crate::text_properties::canonical(&property, value)
+                .map(|value| vec![(property, value)]).unwrap_or_default()
+        };
+    }
     if position_values::supported(&property) {
         return if needs_deferred_expansion(value) { vec![(property, value.into())] } else { position_values::canonical(&property, value).map(|value| vec![(property, value)]).unwrap_or_default() };
     }
@@ -1328,7 +1347,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     {
         return Vec::new();
     }
-    let parts: Vec<&str> = value.split_ascii_whitespace().collect();
+    let parts: Vec<&str> = split_top_level_whitespace(value);
     let logical_parts = if matches!(property.as_str(),
         "margin-inline" | "margin-block" | "padding-inline" | "padding-block"
         | "inset-inline" | "inset-block") {
@@ -2629,6 +2648,7 @@ pub(crate) fn resolve_with_tree_environment(
     let border_image_root = if parent.is_none() { style.props.get("font-size").and_then(|css|css.strip_suffix("px")).and_then(|n|n.parse().ok()).unwrap_or(style.root_font_px) } else { style.root_font_px };
     flow_tolerance::resolve(&mut style.props, border_image_root);
     crate::border_image::resolve_properties(&mut style.props, border_image_root);
+    style.resolve_text_indent(border_image_root);
     position_values::resolve(&mut style.props, border_image_root);
     border_radius::resolve(&mut style.props, border_image_root);
     let image_font=style.props.get("font-size").and_then(|s|s.strip_suffix("px")).and_then(|s|s.parse().ok()).unwrap_or(16.0);
@@ -3491,3 +3511,30 @@ pub(crate) mod font_synthesis;
 #[cfg(test)]
 #[path = "used_context_tests.rs"]
 mod used_context_tests;
+
+/// Whitespace separates shorthand components only outside functions and
+/// strings: `calc(1em / 8)` is one component, not three.
+fn split_top_level_whitespace(value: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let (mut depth, mut start, mut quote) = (0i32, None::<usize>, None::<char>);
+    let mut escaped = false;
+    for (index, ch) in value.char_indices() {
+        if ch.is_ascii_whitespace() && depth == 0 && quote.is_none() {
+            if let Some(begin) = start.take() { parts.push(&value[begin..index]); }
+            escaped = false;
+            continue;
+        }
+        if start.is_none() { start = Some(index); }
+        if escaped { escaped = false; continue; }
+        match ch {
+            '\\' => escaped = true,
+            '"' | '\'' if quote == Some(ch) => quote = None,
+            '"' | '\'' if quote.is_none() => quote = Some(ch),
+            '(' if quote.is_none() => depth += 1,
+            ')' if quote.is_none() => depth = (depth - 1).max(0),
+            _ => {}
+        }
+    }
+    if let Some(begin) = start { parts.push(&value[begin..]); }
+    parts
+}

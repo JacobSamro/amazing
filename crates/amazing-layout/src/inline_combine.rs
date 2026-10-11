@@ -77,6 +77,9 @@ pub(super) fn shape_combined_text(
     inner_style.writing_mode = amazing_text::WritingMode::HorizontalTb;
     inner_style.text_combine = amazing_text::TextCombine::None;
     let mut combined = crate::RubyText {
+        // Combined upright content is one typographic unit; its inner
+        // horizontal fitting pass must not introduce inter-character gaps.
+        autospace_scopes: Vec::new(),
         source_orders: Vec::new(),
         node,
         raw_text: text.to_owned(),
@@ -160,6 +163,7 @@ pub(super) fn shape_combined_text(
         overhang_spaces: false,
         font_size,
         glyphs,
+        decorations: Vec::new(),
         line_over: 0.0,
         line_under: 0.0,
         break_after: true,

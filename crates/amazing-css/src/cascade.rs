@@ -1511,6 +1511,7 @@ s, strike, del { text-decoration: line-through; }
 a:link { color: #0000ee; text-decoration: underline; }
 a:visited { color: #551a8b; text-decoration: underline; }
 code, kbd, samp, tt { font-family: monospace; }
+pre, code, kbd, samp, tt, listing, xmp, plaintext { text-spacing: none; }
 small { font-size: 0.83em; }
 big { font-size: 1.17em; }
 center { text-align: center; }

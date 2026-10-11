@@ -501,3 +501,38 @@ fn padded_min_content_float_widths_match_actual_mandatory_break_runs() {
         }
     }
 }
+
+#[test]
+fn sliced_margin_and_padding_intrinsics_match_the_whole_forced_break_selection() {
+    // Each reference expresses the same minimum-content opportunity explicitly.
+    // Preserve source spaces inside/outside scopes, including opening scope
+    // edges that precede a break inside that scope.
+    let cases = [
+        ("<span>aaa</span><span>aaa</span>", "<span>aaa</span><span>aaa</span>"),
+        ("<span>aaa</span>aa<span>aaa</span>", "<span>aaa</span>aa<span>aaa</span>"),
+        ("<span>aaa</span> <span>aaa</span>", "<span>aaa</span><br><span>aaa</span>"),
+        ("<span>aaa </span><span>aaa</span>", "<span>aaa</span><br><span>aaa</span>"),
+        ("<span>aaa</span><span> aaa</span>", "<span>aaa</span><span><br>aaa</span>"),
+        ("<span>aaa</span> aa<span>aaa</span>", "<span>aaa</span><br>aa<span>aaa</span>"),
+        ("<span>aaa </span>aa<span>aaa</span>", "<span>aaa</span><br>aa<span>aaa</span>"),
+        ("<span>aaa</span>aa<span> aaa</span>", "<span>aaa</span>aa<span><br>aaa</span>"),
+        ("<span>aaa</span> aa <span>aaa</span>", "<span>aaa</span><br>aa<br><span>aaa</span>"),
+        ("<span>aaa</span>aa <span>aaa</span>", "<span>aaa</span>aa<br><span>aaa</span>"),
+        ("<span>aaa</span>aa ", "<span>aaa</span>aa"),
+    ];
+    for shaped in [false, true] {
+        for margin in ["0", "0 4px 0 3px", "0 -4px 0 -3px"] {
+            for (actual, reference) in cases {
+                let css = format!("p{{float:left;width:min-content;height:auto;white-space:normal}}span{{padding-left:6px;padding-right:10px;margin:{margin};background:yellow;box-decoration-break:slice}}");
+                let actual = page(actual, &css, shaped);
+                let reference = page(reference, &format!("{css}p{{white-space:pre}}"), shaped);
+                let width = |root: &LayoutBox| match &root.flow {
+                    Flow::Blocks(children) => children[0].border_box.w,
+                    _ => root.border_box.w,
+                };
+                assert!((width(&actual) - width(&reference)).abs() < 0.05,
+                    "shaped={shaped};margin={margin}: {} != {}", width(&actual), width(&reference));
+            }
+        }
+    }
+}

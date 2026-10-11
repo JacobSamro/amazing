@@ -243,20 +243,26 @@ fn layout_block_in_context(
     // half is merged into `def_h` further down, which already outranks
     // content-based auto height.
     let (contain_width_override, contain_height_override) = crate::containment::intrinsic_inner_sizes(&b.style, font_units, None);
+    let intrinsic_indent = crate::inline::Indentation::from_style_with_units(&b.style, 0.0, b.first_formatted_line_eligible, true, Some(font_units));
     let shaped_intrinsic = if let Some(width) = contain_width_override {
         let outer = width + bl + pl + pr + br_;
         Some((outer, outer))
     } else if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
-        (has_ruby || floating || b.inline_atomic || vertical_text || width_keyword).then(|| {
-            crate::inline::intrinsic_widths_shaped(items,
-                b.font_metric_style.as_ref().map(|style| style.direction).unwrap_or_default(), text)
+        (has_ruby || floating || b.inline_atomic || vertical_text || width_keyword || !intrinsic_indent.is_zero()).then(|| {
+            crate::inline::intrinsic_widths_shaped_with_indentation(items,
+                b.font_metric_style.as_ref().map(|style| style.direction).unwrap_or_default(), text, intrinsic_indent)
         }).flatten().map(|(min, max)| (min + bl + pl + pr + br_, max + bl + pl + pr + br_))
+    } else if let Flow::Inlines(items) = &b.flow {
+        if !intrinsic_indent.is_zero() {
+            crate::inline::intrinsic_padding_widths_legacy_with_indentation(items, fonts, intrinsic_indent)
+                .map(|(min,max)| (min + bl + pl + pr + br_, max + bl + pl + pr + br_))
+        } else { None }
     } else { None };
     // Ruby and an explicit width keyword both need the accurate shaped
     // measurement for the `intrinsic` closure below; ordinary shrink-to-fit
     // (floats/atomic/vertical) keeps using shaped_intrinsic directly where
     // it already applies, without forcing every such box through this path.
-    let keyword_shaped_intrinsic = shaped_intrinsic.filter(|_| has_ruby || width_keyword);
+    let keyword_shaped_intrinsic = shaped_intrinsic.filter(|_| has_ruby || width_keyword || !intrinsic_indent.is_zero());
     let intrinsic = |b: &LayoutBox, minimum| contain_width_override.map(|w| w + bl + pl + pr + br_)
         .or_else(|| keyword_shaped_intrinsic.map(|pair| if minimum {pair.0} else {pair.1}))
         .unwrap_or_else(|| if minimum { crate::flex::min_content_width(b, fonts) }
@@ -555,7 +561,7 @@ fn layout_block_in_context(
             }
         },
         Flow::Blocks(children) if !children.is_empty() => stack_blocks(
-            children, content_x, content_y, content_w, ctx, fonts, floats, text,
+            children, content_x, content_y, content_w, ctx, fonts, floats, text, &b.style,
         ),
         Flow::Inlines(items) => {
             crate::replaced::resolve(
@@ -572,8 +578,9 @@ fn layout_block_in_context(
             let soft_wrap = !b.style.get("white-space").is_some_and(|value| {
                 value.eq_ignore_ascii_case("nowrap") || value.eq_ignore_ascii_case("pre")
             });
-            let lines = crate::inline::layout_lines_with_floats(
+            let lines = crate::inline::layout_lines_with_indentation(
                 items, content_x, content_y, content_w, &strut, fonts, floats, soft_wrap,
+                crate::inline::Indentation::from_style_with_units(&b.style, content_w, b.first_formatted_line_eligible, false, Some(font_units)),
             );
             let height = lines
                 .last()
@@ -753,7 +760,10 @@ fn vertical_inline_measure(b: &LayoutBox, available: f32, text: Option<&dyn amaz
     if !style.writing_mode.is_vertical_flow() { return None; }
     let Flow::Inlines(items) = &b.flow else { return None; };
     if items.iter().any(|item| matches!(item, crate::InlineNode::Atomic { size, .. } if size.width == 0.0 && size.height == 0.0)) { return None; }
-    let (_, max) = crate::inline::intrinsic_widths_shaped(items, style.direction, text)?;
+    let units = values::FontRelativeUnits::from_text_system(Some(text), Some(style), b.root_font_metric_style.as_ref(), style.size)
+        .with_line_heights(b.line_height, b.root_line_height);
+    let (_, max) = crate::inline::intrinsic_widths_shaped_with_indentation(items, style.direction, text,
+        crate::inline::Indentation::from_style_with_units(&b.style, 0.0, b.first_formatted_line_eligible, true, Some(units)))?;
     let inline = specified_height(b, b.font_size).unwrap_or_else(|| {
         b.containing_block_height.or(b.available_height).map_or(max, |limit| max.min(limit.max(0.0)))
     });
@@ -762,12 +772,13 @@ fn vertical_inline_measure(b: &LayoutBox, available: f32, text: Option<&dyn amaz
         font_size: style.size, line_height: b.line_height, ascent: metrics.ascent, descent: metrics.descent,
         vertical_ascent: metrics.vertical_ascent, vertical_descent: metrics.vertical_descent,
     };
-    let lines = crate::inline::layout_lines_shaped(items,
+    let lines = crate::inline::layout_lines_shaped_with_indentation(items,
         crate::inline::InlineContainingBlock { x:0.0,y:0.0,width:available,height:inline },
         &strut, style.direction, style.writing_mode, text, &FloatContext::default(),
         !matches!(b.style.get("white-space"), Some("nowrap" | "pre")), None,
         "start", "auto", "auto", b.style.get("unicode-bidi") == Some("plaintext"),
-        b.root_font_metric_style.as_ref(), b.root_line_height)?;
+        b.root_font_metric_style.as_ref(), b.root_line_height,
+        crate::inline::Indentation::from_style_with_units(&b.style, inline, b.first_formatted_line_eligible, false, Some(units)))?;
     let cross = lines.iter().map(|line| line.replaced.iter().map(|fragment| fragment.width)
         .fold(b.line_height, f32::max)).sum();
     Some((cross, inline))
@@ -932,6 +943,7 @@ fn stack_blocks(
     fonts: &FontSource,
     floats: &mut FloatContext,
     text: Option<&dyn amazing_text::TextSystem>,
+    parent_style: &amazing_css::ComputedStyle,
 ) -> StackResult {
     let mut cursor = content_y;
     let mut pending = CollapsedMargin::default();
@@ -939,6 +951,19 @@ fn stack_blocks(
     let mut trailing_clearance = false;
     let mut first_in_flow = true;
     for child in children.iter_mut() {
+        if child.node.is_none() {
+            child.first_formatted_line_eligible = first_in_flow;
+            if parent_style.get("text-indent").and_then(amazing_css::TextIndent::parse).is_some_and(|value| !value.is_zero()) {
+                child.style.inherit_used_context_from(parent_style);
+                // Anonymous runs inherit the active paragraph policy, not box sizes.
+                // A zero policy retains the original anonymous layout behavior.
+                for property in ["font-size", "line-height", "text-indent", "direction", "writing-mode", "text-align", "text-align-last", "text-justify", "white-space"] {
+                    if let Some(value) = parent_style.get(property) { child.style.set(property, value); }
+                }
+                child.line_height = values::resolve_used_line_height(parent_style, child.font_size,
+                    fonts.scaled_metrics(child.font_size).line_height);
+            }
+        }
         // Child margins resolve against THIS containing block's width.
         let cm = values::resolve_margins(&child.style, child.font_size, content_w);
         let cmt = cm.top.unwrap_or(0.0);
