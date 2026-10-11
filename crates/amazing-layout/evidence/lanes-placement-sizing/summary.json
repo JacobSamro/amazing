@@ -1,0 +1,134 @@
+{
+ "base": "8c69cc89120ced6ab09cbc3f3a5fc21f86613c2f",
+ "dirs": {
+  "css-CSS2-floats": {
+   "counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 9,
+    "pass": 30,
+    "timeout": 0,
+    "unsupported": 0
+   },
+   "gained": [],
+   "lost": [],
+   "changed": [],
+   "raw_sha256": "f4dfaf9596c1d8e3bf77c1b2dce35ba2d9162a91f37fee781d477f9863bbe540",
+   "raw_host_path": "/home/user/amazing/out/resume-layout/render-gate/render-20261011T015746-690-after/53e0959c6aabcfde264c709d938ed6205f7fa558/css-CSS2-floats.compact.json"
+  },
+  "css-CSS2-normal-flow": {
+   "counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 5,
+    "pass": 24,
+    "timeout": 0,
+    "unsupported": 0
+   },
+   "gained": [],
+   "lost": [],
+   "changed": [],
+   "raw_sha256": "26cb7cbe9df95acf5541fd9fa3f1624dae704489d1dc8a376fe6a60bc6e55fc5",
+   "raw_host_path": "/home/user/amazing/out/resume-layout/render-gate/render-20261011T015746-690-after/53e0959c6aabcfde264c709d938ed6205f7fa558/css-CSS2-normal-flow.compact.json"
+  },
+  "css-css-flexbox": {
+   "counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 174,
+    "pass": 349,
+    "timeout": 0,
+    "unsupported": 0
+   },
+   "gained": [],
+   "lost": [],
+   "changed": [],
+   "raw_sha256": "93757ba9f68a73d691b4cf59cce2f973af77ce5aa9e03389fb89ac8fde64d042",
+   "raw_host_path": "/home/user/amazing/out/resume-layout/render-gate/render-20261011T015746-690-after/53e0959c6aabcfde264c709d938ed6205f7fa558/css-css-flexbox.compact.json"
+  },
+  "css-css-grid": {
+   "counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 484,
+    "pass": 461,
+    "timeout": 0,
+    "unsupported": 0
+   },
+   "gained": [
+    "css__css-grid__alignment__grid-self-alignment-stretch-input-range.html",
+    "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-007a.html",
+    "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-007b.html",
+    "css__css-grid__grid-lanes__gap__grid-lanes-gap-001.html",
+    "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-001.html",
+    "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-002.html",
+    "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-003.html",
+    "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-004.html",
+    "css__css-grid__grid-lanes__item-placement__grid-lanes-item-placement-001.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-writing-direction-001.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-001a.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-001b.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-001c.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-001d.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002a.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002b.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002c.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002d.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002e.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002f.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-subgrid-auto-fill-005.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-subgrid-auto-fill-007.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid-flex.html",
+    "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid.html",
+    "css__css-grid__subgrid__overflow-hidden-does-not-prohibit-subgrid.html"
+   ],
+   "lost": [],
+   "changed": [],
+   "raw_sha256": "f22785809094ebbdc59c57290ebcb08d4ba9b5574f05fe6e842051795d03e322",
+   "raw_host_path": "/home/user/amazing/out/resume-layout/render-gate/render-20261011T015746-690-after/53e0959c6aabcfde264c709d938ed6205f7fa558/css-css-grid.compact.json"
+  },
+  "css-css-sizing": {
+   "counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 39,
+    "pass": 99,
+    "timeout": 0,
+    "unsupported": 0
+   },
+   "gained": [],
+   "lost": [],
+   "changed": [],
+   "raw_sha256": "a107f67aa9853804ccb88d2797ae26285c28776189811d64aa2977d589c8d1eb",
+   "raw_host_path": "/home/user/amazing/out/resume-layout/render-gate/render-20261011T015746-690-after/53e0959c6aabcfde264c709d938ed6205f7fa558/css-css-sizing.compact.json"
+  },
+  "css-css-tables": {
+   "counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 22,
+    "pass": 60,
+    "timeout": 0,
+    "unsupported": 0
+   },
+   "gained": [],
+   "lost": [],
+   "changed": [],
+   "raw_sha256": "283144806cef896b4e10a031f76d5c76fd8b3e1a7ad50bd2b72271e63e1eb92f",
+   "raw_host_path": "/home/user/amazing/out/resume-layout/render-gate/render-20261011T015746-690-after/53e0959c6aabcfde264c709d938ed6205f7fa558/css-css-tables.compact.json"
+  }
+ },
+ "workspace": {
+  "nextest": {
+   "passed": 5561,
+   "failed": 0,
+   "skipped": 17
+  },
+  "doctests": {
+   "passed": 39,
+   "failed": 0
+  }
+ },
+ "note": "before side = 8c69cc891; before css-grid compact omitted (435 pass), listed via gained/lost"
+}

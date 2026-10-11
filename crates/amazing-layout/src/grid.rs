@@ -1950,6 +1950,19 @@ pub(crate) fn intrinsic_lanes_width(box_: &LayoutBox, fonts: &FontSource, minimu
         + spec.col_gap * tracks.saturating_sub(1) as f32
 }
 
+/// Max-content inner width of an ordinary grid container with explicit
+/// column tracks (Grid 1 §11.5): the sum of the sized tracks plus gaps, not
+/// the widest single item. `None` leaves implicit-only grids on the legacy path.
+pub(crate) fn intrinsic_grid_inner_width(box_: &LayoutBox, fonts: &FontSource) -> Option<f32> {
+    if typed_subgrid(&box_.style, "grid-template-columns") { return None; }
+    let spec = GridSpec::of(&box_.style, None, box_.font_size, 0.0, None);
+    if spec.cols.is_empty() { return None; }
+    let padding = values::resolve_padding(&box_.style, box_.font_size, 0.0);
+    let border = values::resolve_borders(&box_.style, box_.font_size);
+    let chrome = padding.left + padding.right + border.left + border.right;
+    Some((intrinsic_lanes_width(box_, fonts, false) - chrome).max(0.0))
+}
+
 /// Grid 3 §4.4: the best position is the shortest span. Positions within
 /// `tolerance` of it tie; the auto-placement cursor chooses the first tied
 /// start at or after itself, wrapping to the first when needed.

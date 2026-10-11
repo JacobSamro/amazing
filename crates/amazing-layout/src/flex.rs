@@ -1482,6 +1482,8 @@ pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 
             }
             best
         }
+        Flow::Grid(_) if crate::grid::intrinsic_grid_inner_width(b, fonts).is_some() =>
+            crate::grid::intrinsic_grid_inner_width(b, fonts).unwrap_or(0.0),
         Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
             .map(|child| {
