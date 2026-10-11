@@ -7,7 +7,7 @@ use amazing_dom::{collection::CollectionFilter, element_internals::SubmissionVal
 use std::sync::Arc;
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::HTMLElementAttachInternals | O::FieldsetElements | O::InternalsShadowRoot | O::InternalsForm
+    matches!(op, O::HTMLElementAttachInternals | O::DocumentDir | O::DocumentSetDir | O::FieldsetElements | O::InternalsShadowRoot | O::InternalsForm
         | O::InternalsSetFormValue | O::InternalsSetValidity | O::InternalsWillValidate
         | O::InternalsValidity | O::InternalsValidationMessage | O::InternalsCheckValidity
         | O::InternalsReportValidity | O::InternalsLabels | O::InternalsStates | O::InternalsBehaviors
@@ -79,6 +79,29 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         })?;
         let key = host.node_platform_key(node);
         return host.wrap_platform_object(key, B::ELEMENT_INTERNALS);
+    }
+    if matches!(op, O::DocumentDir | O::DocumentSetDir) {
+        // Document.dir reflects the `dir` attribute of the document's html element.
+        let document = host.node_brand(&receiver).ok_or_else(|| host.type_error("Illegal invocation"))?;
+        let root = host.with_dom(|dom| {
+            if !matches!(dom.get(document).kind, NodeKind::Document) { return Err(DomError::TypeError); }
+            Ok(dom.document_element(document)?.filter(|root| dom.html_tag(*root, "html")
+                && dom.namespace(*root) == Some(amazing_dom::Namespace::Html)))
+        })?;
+        if op == O::DocumentSetDir {
+            let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
+            let units = host.to_dom_string(value)?;
+            if let Some(root) = root {
+                host.with_dom(|dom| dom.set_attribute_ns_units(root, None, "dir", units))?;
+            }
+            return Ok(host.undefined());
+        }
+        let value = match root {
+            Some(root) => host.with_dom(|dom| Ok(dom.attribute_utf16(root, "dir")))?.unwrap_or_default(),
+            None => Vec::new(),
+        };
+        let value = crate::html_reflection::keyword(&value, &["ltr", "rtl", "auto"]).unwrap_or_default();
+        return host.string(&value);
     }
     if op == O::FieldsetElements {
         let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Illegal invocation"))?;

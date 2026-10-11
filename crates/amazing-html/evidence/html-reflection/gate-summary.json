@@ -1,0 +1,24 @@
+{
+ "schema": 1,
+ "ticket": "html-reflection-missing-attributes",
+ "depends_on": "lane/html-element-internals-ready (c9ac54bb2): Document.dir lives in internals_bindings.rs and the diff is stacked on its host.rs/interfaces.rs",
+ "gated_code_commit": "fd44f1ab7752a032c1e19b47b92d0a23b1469935 (WIP history on lane/r2-html-20261011; tree = ticket 1 + this ticket)",
+ "gated_on_base": "bfb2c57aded60fe28855fab9235ce4875825ee99",
+ "host": "Boat 4 vCPU sandbox, lane r2-html, release amazing wpt-harness 800x600",
+ "workspace": {"nextest": "5701 passed (5 slow), 17 skipped, 0 failed", "doctests": "pass (rc 0)"},
+ "wpt": {
+  "corpus": "dom/ + html/dom/ + custom-elements/ (1001 files), pinned c2a2fce, native wpt-harness, 4 jobs, 20000 ms, same runner sha 4b719dce...",
+  "before_bfb2c57ad": {"pass_files": 457, "pass_subtests": 103633},
+  "after_fd44f1ab7": {"pass_files": 505, "pass_subtests": 113034, "file_status": {"pass": 505, "fail": 328, "timeout": 109, "error": 57, "unsupported": 2}},
+  "vs_dev_before": {"files_gained": 48, "files_lost": 0, "subtests_gained": 10106, "subtests_lost": 705, "lost_by_file": {"dom/ranges/Range-set.html": 617, "dom/ranges/Range-mutations-dataChange.html": 88}},
+  "incremental_vs_ticket1_after_6b3547434": {"files": [482, 505], "files_lost": 0, "subtests": [102819, 113034], "subtests_lost": 0, "subtests_gained": 10215},
+  "range_120s_control_pass_counts_before_vs_after": {"Range-compareBoundaryPoints": [9313, 9313], "Range-set": [10920, 10920], "Range-mutations-dataChange": [2808, 2808]},
+  "range_120s_completion_seconds_before_vs_after": {"Range-compareBoundaryPoints": [17.3, 16.4], "Range-set": [19.7, 21.1], "Range-mutations-dataChange": [32.2, 32.6]},
+  "note": "an intermediate run of the same reflection code lost Range-compareBoundaryPoints.html at the 4-job 20 s deadline; the file passes 9313/9313 in 7 of 7 sequential 20 s runs (15.6-18.4 s) for both binaries and in the final corpus run",
+  "gained_by_file_top": {"html/dom/reflection-embedded.html": 3082, "reflection-text": 1464, "reflection-misc": 1068, "reflection-tabular": 826, "reflection-metadata": 784, "reflection-sections": 638, "reflection-obsolete": 634, "reflection-grouping": 614, "reflection-forms": 532},
+  "binary_sha256": {"before": "4fbe9da98ac9f0590b9f15fd0ea2e68e0d503183df2309faecaa8db2331fb2c3", "after": "4eba12eff67ed58d27bee1c2e0fc2f806fb5dc109d8cce63c04bd9976ca4f4b8"},
+  "after_manifest_sha256": "09b95c51de2177e79f4804e7a487d9ed7d9b5c1662cd75f9aff77c35e6d60673",
+  "raw_host_paths": {"before": "/home/user/amazing/out/r2-html/before", "after": "/home/user/amazing/out/r2-html/t2f"},
+  "evidence_file": "wpt-after-passset.compact.json: AFTER pass-files, per-file passing-subtest counts with sha256-16 of the ordered passing names, lost/gained lists"
+ }
+}

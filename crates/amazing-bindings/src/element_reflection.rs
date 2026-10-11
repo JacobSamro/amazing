@@ -1,9 +1,9 @@
 //! Element-specific reflected attributes, using the shared DOM-8 converters.
-use crate::{host::{Interface, InterfaceBrand, LegacyReflectionKind as L, Operation as O, UrlReflection}, html_reflection};
+use crate::{host::{EnumSpec, Interface, InterfaceBrand, LegacyReflectionKind as L, Operation as O, UrlReflection}, html_reflection};
 use amazing_dom::{DomError, Namespace, NodeKind};
 
 #[derive(Clone, Copy)]
-enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, ReflectedUnsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList, LimitedKnownValues(&'static [&'static str]) }
+enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, ReflectedUnsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList, LimitedKnownValues(&'static [&'static str]), Enum(&'static EnumSpec), UnsignedDefault(u32) }
 #[derive(Clone, Copy)]
 struct Spec { interface: Option<Interface>, attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
 const HYPERLINK: &[&str] = &["a", "area"];
@@ -14,7 +14,9 @@ fn spec(op: O) -> Option<Spec> {
         let kind = match kind { L::String => K::String, L::LegacyString => K::LegacyString,
             L::Url => K::Url, L::UsvUrl => K::UsvUrl, L::Boolean => K::Boolean,
             L::Unsigned => K::ReflectedUnsigned, L::Signed => K::Signed(0),
-            L::LimitedKnownValues(keywords) => K::LimitedKnownValues(keywords) };
+            L::LimitedKnownValues(keywords) => K::LimitedKnownValues(keywords),
+            L::Enum(spec) => K::Enum(spec), L::UnsignedDefault(default) => K::UnsignedDefault(default),
+            L::Span => K::ColSpan };
         return Some(Spec { interface: Some(interface), attribute, tags: &[], kind,
             setter: matches!(op, O::LegacyReflectSet(..)) });
     }
@@ -87,6 +89,21 @@ fn spec(op: O) -> Option<Spec> {
     Some(Spec { interface: None, attribute, tags, kind, setter })
 }
 pub(crate) fn handles(op: O) -> bool { spec(op).is_some() }
+/// A member declared on `expected` applies to the element whose own interface is
+/// `actual`: exact match, or every HTML element for `HTMLElement`, or audio and
+/// video for `HTMLMediaElement`.
+fn interface_matches(expected: Interface, actual: Interface) -> bool {
+    expected == actual || expected == Interface::HTMLElement
+        || (expected == Interface::HTMLMediaElement
+            && matches!(actual, Interface::HTMLVideoElement | Interface::HTMLAudioElement))
+}
+fn enum_value(spec: &EnumSpec, value: &[u16]) -> Vec<u16> {
+    let lower: Vec<u16> = value.iter().map(|&unit| if (65..=90).contains(&unit) { unit + 32 } else { unit }).collect();
+    let matches = |candidate: &str| candidate.encode_utf16().eq(lower.iter().copied());
+    if let Some(keyword) = spec.keywords.iter().find(|keyword| matches(keyword)) { return keyword.encode_utf16().collect(); }
+    if let Some((_, keyword)) = spec.non_canon.iter().find(|(spelling, _)| matches(spelling)) { return keyword.encode_utf16().collect(); }
+    spec.invalid.encode_utf16().collect()
+}
 fn unsigned(number: f64) -> u32 {
     if number.is_finite() { number.trunc().rem_euclid(4_294_967_296.) as u32 } else { 0 }
 }
@@ -104,7 +121,7 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
     html_reflection::with_element(host, &capture, |dom| match &dom.get(node).kind {
         NodeKind::Element { namespace: Namespace::Html, .. }
             if spec.interface.map_or_else(|| spec.tags.contains(&dom.local_name(node).unwrap()),
-                |interface| crate::html_element_interface(dom.local_name(node).unwrap()) == interface) => Ok(()),
+                |interface| interface_matches(interface, crate::html_element_interface(dom.local_name(node).unwrap()))) => Ok(()),
         _ => Err(DomError::TypeError),
     })?;
     if matches!(spec.kind, Kind::TokenList) {
@@ -115,6 +132,12 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
     }
     if spec.setter {
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
+        if let Kind::Enum(enumerated) = spec.kind {
+            if enumerated.nullable && host.is_nullish(value) {
+                html_reflection::with_element(host, &capture, |dom| dom.remove_attribute(node, spec.attribute))?;
+                return Ok(host.undefined());
+            }
+        }
         if matches!(spec.kind, Kind::Boolean) {
             let enabled = host.to_boolean(value);
             // HTML-35: HTMLScriptElement.async's setter must clear the
@@ -128,11 +151,12 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
             } else { dom.remove_attribute(node, spec.attribute) })?;
         } else {
             let units = match spec.kind {
-                Kind::Unsigned | Kind::ReflectedUnsigned | Kind::ColSpan | Kind::RowSpan | Kind::Signed(_) => {
+                Kind::Unsigned | Kind::ReflectedUnsigned | Kind::UnsignedDefault(_) | Kind::ColSpan | Kind::RowSpan | Kind::Signed(_) => {
                     let number = host.to_number(value)?;
                     let unsigned = unsigned(number);
                     let value = match spec.kind {
                         Kind::ReflectedUnsigned => (if unsigned <= i32::MAX as u32 { unsigned } else { 0 }).to_string(),
+                        Kind::UnsignedDefault(default) => (if unsigned <= i32::MAX as u32 { unsigned } else { default }).to_string(),
                         Kind::ColSpan => unsigned.clamp(1, 1000).to_string(),
                         Kind::RowSpan => unsigned.min(65534).to_string(),
                         Kind::Signed(_) => (unsigned as i32).to_string(),
@@ -161,6 +185,13 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         Kind::Boolean => Ok(host.boolean(value.is_some())),
         Kind::ReflectedUnsigned => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
             .filter(|value| *value <= i32::MAX as u32).unwrap_or(0) as f64)),
+        Kind::UnsignedDefault(default) => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
+            .filter(|value| *value <= i32::MAX as u32).unwrap_or(default) as f64)),
+        Kind::Enum(enumerated) => match value {
+            None if enumerated.nullable => Ok(host.null()),
+            None => host.string(&enumerated.missing.encode_utf16().collect::<Vec<_>>()),
+            Some(value) => host.string(&enum_value(enumerated, &value)),
+        },
         Kind::Unsigned => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long).unwrap_or(0) as f64)),
         Kind::ColSpan => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
             .unwrap_or(1).clamp(1, 1000) as f64)),

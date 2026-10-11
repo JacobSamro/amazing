@@ -178,6 +178,7 @@ pub enum Interface {
     HTMLAreaElement,
     HTMLPictureElement,
     HTMLMenuElement,
+    HTMLMarqueeElement,
     HTMLUnknownElement,
     HTMLDirectoryElement,
     HTMLFontElement,
@@ -255,8 +256,27 @@ pub enum FormAttribute {
     Cols, Rows, Wrap, Label, Value, Command, HtmlFor,
 }
 
+/// An enumerated attribute reflected as a canonical keyword (HTML "reflect"
+/// with a known-values list): matching is ASCII case-insensitive, `non_canon`
+/// maps extra spellings onto a keyword, and the missing/invalid value defaults
+/// are explicit. A nullable attribute returns null when absent.
+#[derive(Debug, PartialEq, Eq)]
+pub struct EnumSpec {
+    pub keywords: &'static [&'static str],
+    pub non_canon: &'static [(&'static str, &'static str)],
+    pub missing: &'static str,
+    pub invalid: &'static str,
+    pub nullable: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LegacyReflectionKind {
+    /// Enumerated attribute with canonical keywords (see [`EnumSpec`]).
+    Enum(&'static EnumSpec),
+    /// `unsigned long` reflection whose missing/out-of-range default is not 0.
+    UnsignedDefault(u32),
+    /// `unsigned long` clamped to [1, 1000], default 1 (`span`).
+    Span,
     String, LegacyString, Url, UsvUrl, Boolean, Unsigned, Signed,
     /// A `DOMString` attribute "limited to only known values" whose missing
     /// value default is the empty string (unlike `Loading`/`Decoding` in
@@ -854,6 +874,7 @@ pub enum Operation {
     /// `HTMLElement.attachInternals()` and `ElementInternals` (HTML §4.13.7).
     /// See `internals_bindings.rs`.
     HTMLElementAttachInternals,
+    DocumentDir, DocumentSetDir,
     FieldsetElements,
     InternalsShadowRoot, InternalsForm, InternalsSetFormValue, InternalsSetValidity,
     InternalsWillValidate, InternalsBehaviors, InternalsValidity, InternalsValidationMessage,
