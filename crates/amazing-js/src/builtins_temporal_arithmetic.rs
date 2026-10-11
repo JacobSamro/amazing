@@ -273,6 +273,9 @@ fn std_temporal_add_calendar_cal(cal: &str, base: &[i64; 10], duration: &[i64; 1
 
 fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, factor: i64) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
+    if data.kind == StdTemporalKind::Duration {
+        return std_temporal_duration_add_wide(i, data, std_reflect_arg(&args, 0), factor);
+    }
     let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0), false)?.0;
     let mut result = data.fields;
     match data.kind {
@@ -385,21 +388,6 @@ fn std_temporal_add(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
 }
 fn std_temporal_subtract(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     std_temporal_add_values(i, this, args, -1)
-}
-
-fn std_temporal_split_duration_ns(total: i128, largest: usize) -> [i64; 10] {
-    let mut fields = [0; 10];
-    let sign = total.signum();
-    let mut remaining = total.abs();
-    for (index, unit) in [(2, 7 * STD_TEMPORAL_NS_DAY), (3, STD_TEMPORAL_NS_DAY), (4, 3_600 * STD_TEMPORAL_NS_SECOND),
-        (5, 60 * STD_TEMPORAL_NS_SECOND), (6, STD_TEMPORAL_NS_SECOND),
-        (7, 1_000_000), (8, 1_000), (9, 1)] {
-        if index == 2 && largest != 2 { continue; }
-        if index < largest { continue; }
-        fields[index] = (remaining / unit * sign) as i64;
-        remaining %= unit;
-    }
-    fields
 }
 
 // GetDifferenceSettings (spec): the four option properties are read and cast
@@ -1247,6 +1235,7 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
         && data.calendar != "iso8601" {
         return std_temporal_merge_calendar_fields(i, data, bag, std_reflect_arg(&args, 1));
     }
+    if data.kind == StdTemporalKind::Duration { return std_temporal_duration_with(i, &data, &bag); }
     let fields: &[(&str, StdWithField)] = std_temporal_field_table(data.kind);
     let mut result = data.fields;
     let mut present = false;
@@ -1398,6 +1387,9 @@ fn std_temporal_unit_ns(name: &str) -> Option<i128> {
 fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let fields = std_temporal_record(&this, Some(StdTemporalKind::Duration))?.fields;
     let option = std_reflect_arg(&args, 0);
+    if !option.is_object() && !matches!(option, JsValue::Str(_)) {
+        return Err(Throw::type_error("total requires an options object or unit string"));
+    }
     // relativeTo is read (and, per ToRelativeTemporalObject, fully resolved
     // -- so a malformed value must throw here) BEFORE `unit`, confirmed by
     // options-read-before-algorithmic-validation.js's exact property-read
@@ -1430,9 +1422,13 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
         let target = std_temporal_add_calendar(base, &fields, 1, false)?;
         let days = std_temporal_epoch_day(target[0], target[1], target[2])
             - std_temporal_epoch_day(base[0], base[1], base[2]);
-        days as i128 * STD_TEMPORAL_NS_DAY
+        let span = days as i128 * STD_TEMPORAL_NS_DAY
             + std_temporal_duration_time_ns(&fields)
-            - (fields[2] as i128 * 7 + fields[3] as i128) * STD_TEMPORAL_NS_DAY
+            - (fields[2] as i128 * 7 + fields[3] as i128) * STD_TEMPORAL_NS_DAY;
+        if span.unsigned_abs() > STD_TEMPORAL_DURATION_MAX_NS as u128 {
+            return Err(Throw::range_error("duration is out of range for relativeTo"));
+        }
+        span
     } else { std_temporal_duration_time_ns(&fields) };
     if matches!(unit.as_str(), "year" | "years" | "month" | "months") {
         // A year/month has no fixed length, so the fractional part of the
@@ -1449,7 +1445,7 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
         return Ok(JsValue::num(std_temporal_total_calendar_unit(base, total_ns, calendar_unit)?));
     }
     let unit_ns = std_temporal_unit_ns(&unit).ok_or_else(|| Throw::range_error("invalid unit"))?;
-    Ok(JsValue::num(total_ns as f64 / unit_ns as f64))
+    Ok(JsValue::num(std_temporal_exact_ratio(total_ns, unit_ns)))
 }
 
 // The real-valued position of `total_ns` (an exact epoch-nanosecond offset
@@ -1757,7 +1753,7 @@ fn std_temporal_round_to_calendar_unit(base: &[i64; 10], target_ns: i128, smalle
 // calendar unit (or being re-expressed through one) resolves through
 // `relativeTo` and real calendar arithmetic instead of a flat nanosecond
 // count.
-fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &JsValue) -> Result<JsValue, Throw> {
+fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], wide: StdDuration, option: &JsValue) -> Result<JsValue, Throw> {
     // Every option property is read (and, for relativeTo, fully resolved --
     // so a malformed value must throw here) in this exact order --
     // largestUnit, relativeTo, roundingIncrement, roundingMode,
@@ -1798,7 +1794,7 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
         if std_temporal_unit_rank(unit).is_none() { return Err(Throw::range_error("invalid Temporal unit")); }
     }
     let smallest = smallest_raw.unwrap_or_else(|| "nanosecond".to_string());
-    let existing_largest = std_temporal_unit_name(fields.iter().position(|v| *v != 0).unwrap_or(9));
+    let existing_largest = std_temporal_unit_name(wide.iter().position(|v| *v != 0).unwrap_or(9));
     let largest = largest_opt.unwrap_or_else(|| std_temporal_larger_unit(existing_largest, &smallest));
     let (smallest_index, largest_index) = (std_temporal_unit_rank(&smallest).unwrap(), std_temporal_unit_rank(&largest).unwrap());
     if largest_index > smallest_index {
@@ -1814,23 +1810,12 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
         let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
             * increment as i128;
         let rounded = std_temporal_round_integer(std_temporal_duration_time_ns(&fields), step, &mode)?;
-        let split = std_temporal_split_duration_ns(rounded, largest_index);
-        // BalanceTimeDuration's own float64-safe-integer requirement on the
-        // field(s) it produces, stricter than (and on top of)
-        // IsValidDuration's total-based bound in std_temporal_validate --
-        // confirmed by round/out-of-range-when-converting-from-normalized-
-        // duration.js, where Number.MAX_SAFE_INTEGER seconds (a legal total)
-        // collapsed to largestUnit "nanoseconds" overflows float64 precision
-        // in that one surviving field even though the total in seconds
-        // stays within std_temporal_validate's own bound. Unlike
-        // since/until's Duration output (`largestunit-plurals-accepted.js`/
-        // `float64-representable-integer.js`), which never routes through
-        // here, this check is specific to round()'s own conversion, not
-        // Duration validity in general.
-        if split.iter().any(|v| v.abs() > 9_007_199_254_740_991) {
-            return Err(Throw::range_error("invalid Temporal duration"));
-        }
-        return std_temporal_make(i, StdTemporalKind::Duration, split);
+        let split = std_temporal_split_duration_ns_wide(rounded, largest_index);
+        // CreateTemporalDuration canonicalizes each field to a float64 and
+        // re-validates the exact total, which is what rejects a balanced
+        // field that rounds up past 2**53 seconds (round/out-of-range-when-
+        // converting-from-normalized-duration.js).
+        return std_temporal_make_duration(i, split);
     }
     let base = base.ok_or_else(|| Throw::range_error("calendar units require relativeTo"))?;
     let target_ns = std_temporal_duration_apply(&base, &fields)?;
@@ -1855,7 +1840,7 @@ fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     let option = std_reflect_arg(&args, 0);
     if option.is_undefined() { return Err(Throw::type_error("round options are required")); }
     if data.kind == StdTemporalKind::Duration {
-        return std_temporal_round_duration(i, data.fields, &option);
+        return std_temporal_round_duration(i, data.fields, data.wide, &option);
     }
     // Duration is fully handled by std_temporal_round_duration above; only
     // PlainTime/PlainDateTime (day and finer, no calendar units) reach here.

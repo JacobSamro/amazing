@@ -1400,7 +1400,7 @@ fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
     }
     let delta = if since { data.epoch_ns - other } else { other - data.epoch_ns };
     let rounded = std_temporal_round_integer(delta, step * increment as i128, &mode_for_fixed)?;
-    std_temporal_make(i, StdTemporalKind::Duration, std_temporal_split_duration_ns(rounded, index))
+    std_temporal_make_duration(i, std_temporal_split_duration_ns_wide(rounded, index))
 }
 fn std_epoch_until(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     std_epoch_difference(i, this, args, false)
