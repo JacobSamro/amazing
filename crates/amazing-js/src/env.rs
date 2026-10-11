@@ -13,6 +13,7 @@
 //!   [`Env::this_binding`] empty and resolution walks outward (§8.1.1).
 
 use std::cell::RefCell;
+use crate::fast_hash::FastMap;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -145,7 +146,7 @@ pub enum EnvKind {
 #[derive(Default)]
 struct GlobalDeclarationRecord {
     var_names: HashSet<String>,
-    lexicals: HashMap<String, BindingCell>,
+    lexicals: FastMap<String, BindingCell>,
 }
 
 pub struct Env {
@@ -157,7 +158,7 @@ pub struct Env {
     /// Per-binding cells: assignment mutates through `&self` without
     /// borrowing the whole frame, so a held `borrow()` on the frame never
     /// conflicts with an inner write.
-    vars: HashMap<String, BindingCell>,
+    vars: FastMap<String, BindingCell>,
     /// Live binding object for an HTML handler (a with-environment record).
     pub(crate) binding_object: Option<Obj>,
     /// Receiver recorded by a call (`None` = transparent frame).
@@ -355,7 +356,7 @@ impl EnvHandle {
             global_declarations: (kind == EnvKind::Global).then(|| Rc::new(RefCell::new(GlobalDeclarationRecord::default()))),
             kind,
             parent,
-            vars: HashMap::new(),
+            vars: FastMap::default(),
             binding_object: None,
             this_binding: None,
             this_uninitialized: false,

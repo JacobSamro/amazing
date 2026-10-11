@@ -34,6 +34,7 @@
 //! integer-indexed exotics, shared array buffers.
 
 use std::cell::RefCell;
+use crate::fast_hash::FastMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
@@ -60,8 +61,57 @@ impl JsString {
     }
 }
 
+/// Short strings that name properties and bindings (`length`, `prototype`,
+/// identifiers from source) are converted from `&str` on hot paths. A small
+/// direct-mapped per-thread cache hands back one shared `Rc<[u16]>` instead
+/// of allocating and copying each time; a miss just replaces the slot, so
+/// memory is bounded and a stream of unique strings costs one hash and store.
+/// The table sits in `ManuallyDrop` so thread exit never decrements strings
+/// that another (coroutine-handoff) thread may still be using.
+const KEY_CACHE_SLOTS: usize = 1024;
+const KEY_CACHE_MAX_BYTES: usize = 32;
+
+thread_local! {
+    static KEY_CACHE: std::mem::ManuallyDrop<RefCell<Vec<Option<JsString>>>> =
+        const { std::mem::ManuallyDrop::new(RefCell::new(Vec::new())) };
+}
+
+fn units_from_str(value: &str) -> JsString {
+    if value.is_ascii() {
+        // Exact-size iterator: one allocation, no intermediate Vec.
+        JsString(value.bytes().map(u16::from).collect())
+    } else {
+        JsString::from_units(value.encode_utf16().collect::<Vec<_>>())
+    }
+}
+
 impl From<&str> for JsString {
-    fn from(value: &str) -> Self { Self::from_units(value.encode_utf16().collect::<Vec<_>>()) }
+    fn from(value: &str) -> Self {
+        let bytes = value.as_bytes();
+        if bytes.is_empty() || bytes.len() > KEY_CACHE_MAX_BYTES || !value.is_ascii() {
+            return units_from_str(value);
+        }
+        let mut hash = bytes.len() as u32;
+        for &byte in bytes {
+            hash = (hash ^ byte as u32).wrapping_mul(0x0100_0193);
+        }
+        let slot = (hash ^ (hash >> 15)) as usize & (KEY_CACHE_SLOTS - 1);
+        KEY_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.is_empty() {
+                cache.resize(KEY_CACHE_SLOTS, None);
+            }
+            if let Some(hit) = &cache[slot] {
+                let units = hit.units();
+                if units.len() == bytes.len() && units.iter().zip(bytes).all(|(&unit, &byte)| unit == byte as u16) {
+                    return hit.clone();
+                }
+            }
+            let fresh = units_from_str(value);
+            cache[slot] = Some(fresh.clone());
+            fresh
+        })
+    }
 }
 impl From<String> for JsString {
     fn from(value: String) -> Self { Self::from(value.as_str()) }
@@ -999,6 +1049,11 @@ pub struct PendingReaction {
     pub is_reject_handler: bool,
 }
 
+/// Objects with at most this many own properties have no hash index: lookups
+/// scan `props` directly. Invariant: `prop_index` is non-empty only while
+/// `props.len() > SMALL_OBJECT_PROPS`, and then indexes every property.
+const SMALL_OBJECT_PROPS: usize = 8;
+
 /// A JavaScript object: own properties in insertion order, a prototype
 /// slot, and an exotic payload.
 #[derive(Debug, Clone)]
@@ -1007,7 +1062,7 @@ pub struct JsObject {
     /// `key -> index into props`, kept in sync by every mutator below
     /// (JSRT-20). O(1) lookup; `props` stays the source of truth for order
     /// and for slot-index stability (see the module doc comment above).
-    prop_index: HashMap<PropertyKey, usize>,
+    prop_index: FastMap<PropertyKey, usize>,
     /// Changes when the indexed layout or a property's descriptor changes.
     pub(crate) shape_version: u64,
     /// Object literals constructed by the VM can use ordinary-own-property caches.
@@ -1075,7 +1130,7 @@ impl JsObject {
     pub fn ordinary() -> JsObject {
         JsObject {
             props: Vec::new(),
-            prop_index: HashMap::new(),
+            prop_index: FastMap::default(),
             shape_version: 0,
             vm_cacheable: false,
             realm: None,
@@ -1130,8 +1185,27 @@ impl JsObject {
     /// `define` (which already does its own existing-key check).
     fn push_prop(&mut self, key: PropertyKey, prop: Property) {
         let slot = self.props.len();
-        self.prop_index.insert(key.clone(), slot);
+        if slot >= SMALL_OBJECT_PROPS {
+            if self.prop_index.is_empty() {
+                // Crossing the threshold: index everything already stored.
+                self.prop_index = self.props.iter().enumerate()
+                    .map(|(index, (k, _))| (k.clone(), index))
+                    .collect();
+            }
+            self.prop_index.insert(key.clone(), slot);
+        }
         self.props.push((key, prop));
+    }
+
+    /// Slot of an own property. Objects with at most `SMALL_OBJECT_PROPS`
+    /// properties are scanned linearly (no hashing, no index allocation).
+    #[inline]
+    fn slot_of(&self, key: &PropertyKey) -> Option<usize> {
+        if self.props.len() <= SMALL_OBJECT_PROPS {
+            self.props.iter().position(|(existing, _)| existing == key)
+        } else {
+            self.prop_index.get(key).copied()
+        }
     }
 
     pub fn array() -> JsObject {
@@ -1217,7 +1291,7 @@ impl JsObject {
     /// (preserving its position). Infallible for our ordinary-model subset.
     pub fn define(&mut self, key: impl Into<PropertyKey>, prop: Property) -> Result<(), ()> {
         let key = key.into();
-        if let Some(&slot) = self.prop_index.get(&key) {
+        if let Some(slot) = self.slot_of(&key) {
             let existing = &mut self.props[slot].1;
             if existing.writable != prop.writable || existing.enumerable != prop.enumerable
                 || existing.configurable != prop.configurable
@@ -1243,7 +1317,7 @@ impl JsObject {
     }
 
     pub(crate) fn own_slot_index(&self, key: &PropertyKey) -> Option<usize> {
-        self.prop_index.get(key).copied()
+        self.slot_of(key)
     }
 
     pub(crate) fn set_own_data_slot(&mut self, key: &PropertyKey, slot: usize, value: JsValue) -> bool {
@@ -1260,19 +1334,19 @@ impl JsObject {
 
     pub fn get_own(&self, key: impl Into<PropertyKey>) -> Option<JsValue> {
         let key = key.into();
-        let &slot = self.prop_index.get(&key)?;
+        let slot = self.slot_of(&key)?;
         Some(self.props[slot].1.value.clone())
     }
 
     pub fn own_prop(&self, key: impl Into<PropertyKey>) -> Option<&Property> {
         let key = key.into();
-        let &slot = self.prop_index.get(&key)?;
+        let slot = self.slot_of(&key)?;
         Some(&self.props[slot].1)
     }
 
     pub fn delete_own(&mut self, key: impl Into<PropertyKey>) -> bool {
         let key = key.into();
-        if let Some(&pos) = self.prop_index.get(&key) {
+        if let Some(pos) = self.slot_of(&key) {
             if !self.props[pos].1.configurable {
                 return false;
             }
@@ -1287,6 +1361,11 @@ impl JsObject {
                 self.prop_index = self.props.iter().enumerate()
                     .map(|(index, (k, _))| (k.clone(), index))
                     .collect();
+            }
+            if self.props.len() <= SMALL_OBJECT_PROPS {
+                // Small objects are scanned; keep the index empty so that
+                // `push_prop` rebuilds it when the threshold is crossed again.
+                self.prop_index = FastMap::default();
             }
             self.shape_version = self.shape_version.wrapping_add(1);
             if let Exotic::Arguments(map) = &mut self.exotic { map.remove(&key); }
@@ -1519,6 +1598,65 @@ mod tests {
         assert_eq!(cb.lookup("absent"), None);
         assert!(cb.has_property("inherited"));
         assert!(!cb.has_property("absent"));
+    }
+}
+
+#[cfg(test)]
+mod small_object_index_tests {
+    use super::*;
+
+    fn check(o: &JsObject, live: &[usize]) {
+        for index in 0..40 {
+            let key = format!("p{index}");
+            assert_eq!(o.get_own(key.as_str()).is_some(), live.contains(&index), "{key}");
+            if live.contains(&index) {
+                assert!(matches!(o.get_own(key.as_str()), Some(JsValue::Num(n)) if n == index as f64), "{key}");
+            }
+        }
+        assert_eq!(o.props.len(), live.len());
+        assert_eq!(o.prop_index.is_empty(), live.len() <= SMALL_OBJECT_PROPS);
+    }
+
+    #[test]
+    fn index_appears_above_threshold_and_stays_consistent_through_deletes() {
+        let mut o = JsObject::ordinary();
+        let mut live: Vec<usize> = Vec::new();
+        for index in 0..30 {
+            o.set_own(format!("p{index}"), JsValue::num(index as f64));
+            live.push(index);
+            check(&o, &live);
+        }
+        // Interior, tail and head deletions across the threshold, both ways.
+        for index in [12usize, 29, 0, 28, 5, 13, 14, 15, 16, 17, 18, 19, 20] {
+            assert!(o.delete_own(format!("p{index}")));
+            live.retain(|&x| x != index);
+            check(&o, &live);
+        }
+        for index in 30..40 {
+            o.set_own(format!("p{index}"), JsValue::num(index as f64));
+            live.push(index);
+            check(&o, &live);
+        }
+        // Redefining an existing key keeps its slot.
+        o.set_own("p33", JsValue::num(33.0));
+        check(&o, &live);
+    }
+
+    #[test]
+    fn short_ascii_strings_share_storage_and_compare_equal_to_uncached_ones() {
+        let a = JsString::from("length");
+        let b = JsString::from("length");
+        assert!(std::ptr::eq(a.units().as_ptr(), b.units().as_ptr()));
+        assert_eq!(a, JsString::from_units("length".encode_utf16().collect::<Vec<_>>()));
+        let long = "x".repeat(100);
+        assert_eq!(JsString::from(long.as_str()).len(), 100);
+        assert_eq!(JsString::from("h\u{e9}llo \u{1f600}").units(), "h\u{e9}llo \u{1f600}".encode_utf16().collect::<Vec<_>>().as_slice());
+        assert_eq!(JsString::from("").len(), 0);
+        // Colliding slots must not return the wrong string.
+        for index in 0..5000 {
+            let text = format!("k{index}");
+            assert_eq!(JsString::from(text.as_str()).to_utf8_lossy(), text);
+        }
     }
 }
 
