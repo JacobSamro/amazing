@@ -57,6 +57,11 @@ use crate::values::{self, MaybeLen};
 mod repeat;
 #[path = "grid_named.rs"]
 mod named;
+#[path = "grid_lanes_packing.rs"]
+mod lanes_packing;
+#[path = "grid_lanes_measure.rs"]
+mod lanes_measure;
+use lanes_measure::{measure_column_lane, measure_row_lane, row_lane_lead};
 use repeat::{auto_fit_tracks, repeat_counts, ActiveAxis};
 #[path = "grid_baseline.rs"]
 mod row_baseline;
@@ -354,12 +359,21 @@ fn top_tokens(value: &str) -> Vec<String> {
                 cur.push(ch);
             }
             '[' => {
+                // A line-name block is its own component even without CSS
+                // whitespace. Keep blocks inside function arguments intact;
+                // their recursively parsed track lists split them later.
+                if paren_depth == 0 && bracket_depth == 0 && !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
                 bracket_depth += 1;
                 cur.push(ch);
             },
             ']' => {
                 bracket_depth -= 1;
                 cur.push(ch);
+                if paren_depth == 0 && bracket_depth == 0 {
+                    out.push(std::mem::take(&mut cur));
+                }
             },
             c if c.is_whitespace() && paren_depth <= 0 && bracket_depth <= 0 => {
                 if !cur.is_empty() {
@@ -1907,6 +1921,11 @@ fn container_self_align(it: &LayoutBox, prop: &str) -> Option<ItemAlign> {
     }
 }
 
+fn lanes_pack_dense(style: &ComputedStyle) -> bool {
+    style.get("grid-lanes-pack")
+        .is_some_and(|v| v.split_whitespace().any(|t| t.eq_ignore_ascii_case("dense")))
+}
+
 pub(crate) fn is_grid_lanes(style: &ComputedStyle) -> bool {
     matches!(style.typed("display"),
         Some(ComputedValue::Display(CssDisplay::GridLanes | CssDisplay::InlineGridLanes)))
@@ -2002,7 +2021,9 @@ pub(crate) fn layout_grid_lanes(
     definite_height: Option<f32>,
     fonts: &FontSource,
 ) -> (f32, GridTracks) {
+    if items.len() > MAX_OCCUPIED_CELLS { return (0.0, GridTracks::default()); }
     let mut spec = GridSpec::of(container, None, font_px, content_w, definite_height);
+    spec.flow_dense |= lanes_pack_dense(container);
     let fill_reverse = container.get("grid-lanes-direction")
         .is_some_and(|value| value.split_whitespace().any(|token| token.eq_ignore_ascii_case("fill-reverse")));
     let row_lanes = spec.cols.is_empty() && !spec.rows.is_empty();
@@ -2044,6 +2065,7 @@ pub(crate) fn layout_grid_lanes(
     }
     let positions = axis.positions(&sizes, spec.col_gap, spec.justify_content, content_w, content_x, spec.rtl);
     let mut running = axis.lane_positions();
+    let mut spaces = lanes_packing::Spaces::new(tracks);
     let tolerance = flow_tolerance(container, font_px, content_w);
     let mut cursor = 0usize;
     let mut order = (0..items.len()).collect::<Vec<_>>();
@@ -2058,58 +2080,52 @@ pub(crate) fn layout_grid_lanes(
         } else {
             choose_lane(&running, span, tolerance, cursor)
         };
-        cursor = start + span;
-        let x = positions[start..start + span].iter().copied().fold(f32::INFINITY, f32::min);
-        let right = (start..start + span).map(|track| positions[track] + sizes[track])
-            .fold(f32::NEG_INFINITY, f32::max);
-        let area_w = (right - x).max(0.0);
+        let Some((_, area_w)) = lanes_packing::extent(&positions, &sizes, start, span) else {
+            return (0.0, GridTracks::default());
+        };
         let it = &mut items[index];
-        let cols = subgrid_axis_for_item(it, "grid-template-columns", &sizes,
-            spec.col_gap, &spec.col_line_names, start + 1, span);
-        it.grid_subgrid = cols.map(|cols| SubgridContext { cols: Some(cols), rows: None });
-        it.margin = values::resolve_margins(&it.style, it.font_size, area_w);
-        it.padding = values::resolve_padding(&it.style, it.font_size, area_w);
-        it.border = values::resolve_borders(&it.style, it.font_size);
-        let available = (area_w - it.margin.left.unwrap_or(0.0)
-            - it.margin.right.unwrap_or(0.0) - h_chrome(it)).max(0.0);
-        // Grid Lanes 3 §alignment: the grid axis aligns each item inside its
-        // lane area with justify-self / justify-items; only `stretch` fills.
-        let mut justify = container_self_align(it, "justify-self").unwrap_or(spec.justify_items);
-        let width = match crate::used_size::extent(it,"width",area_w) {
-            MaybeLen::Px(width) => {
-                if justify == ItemAlign::Stretch { justify = ItemAlign::Start; }
-                width.max(0.0)
-            }
-            MaybeLen::Auto if justify == ItemAlign::Stretch => available,
-            MaybeLen::Auto => (crate::flex::max_content_width(it, fonts) - h_chrome(it)).max(0.0)
-                .min(available),
-        };
-        if spec.rtl {
-            justify = match justify {
-                ItemAlign::Start => ItemAlign::End,
-                ItemAlign::End => ItemAlign::Start,
-                other => other,
+        let mut x_offset = measure_column_lane(it, &spec, &sizes, start, span, area_w, fonts);
+        let outer = outer_h(it).max(0.0);
+        let subgrid = it.grid_subgrid.is_some();
+        let selected = if spec.flow_dense {
+            let compatible = |candidate| lanes_packing::extent(&positions, &sizes, candidate, span)
+                .is_some_and(|(_, width)| width == area_w);
+            let result = if subgrid {
+                // Equal total area does not imply equal inherited subgrid
+                // tracks/names. Measure the authentic remapped context, not
+                // a translated copy of the ordinary placement's descendants.
+                spaces.find_measured(span, stack, tolerance,
+                    p.col.map(|_| start), compatible, |candidate| {
+                        let _ = measure_column_lane(it, &spec, &sizes, candidate, span, area_w, fonts);
+                        Some(outer_h(it).max(0.0))
+                    })
+            } else {
+                spaces.find(span, outer, stack, tolerance, p.col.map(|_| start), compatible)
             };
+            let Some(selected) = result else { return (0.0, GridTracks::default()); };
+            selected
+        } else { None };
+        let (placed_start, placed_stack) = selected.unwrap_or((start, stack));
+        if subgrid && spec.flow_dense {
+            x_offset = measure_column_lane(it, &spec, &sizes, placed_start, span, area_w, fonts);
         }
-        crate::block::layout_block_with_used_content_size(it,0.0,0.0,area_w,fonts,None,
-            crate::UsedContentSize{width:Some(width),height:None});
-        let y = content_y + stack + it.margin.top.unwrap_or(0.0);
-        let (ml, mr) = (it.margin.left.unwrap_or(0.0), it.margin.right.unwrap_or(0.0));
-        let free = area_w - ml - mr - it.border_box.w;
-        let offset = if margin_is_auto(&it.style, "left") || margin_is_auto(&it.style, "right") {
-            ml
-        } else {
-            match justify {
-                ItemAlign::End => ml + free.max(0.0),
-                ItemAlign::Center => ml + (free / 2.0).max(0.0),
-                _ => ml,
+        let outer = outer_h(it).max(0.0);
+        if selected.is_some() {
+            if spaces.occupy(placed_start, span, placed_stack, outer, spec.row_gap).is_none() {
+                return (0.0, GridTracks::default());
             }
-        };
-        crate::flex::translate(it, x + offset - it.border_box.x, y - it.border_box.y);
-        let advance = outer_h(it).max(0.0) + spec.row_gap;
-        for position in &mut running[start..start + span] {
-            *position = stack + advance;
+        } else {
+            if spec.flow_dense && spaces.skipped(&running, start, span, stack, spec.row_gap).is_none() {
+                return (0.0, GridTracks::default());
+            }
+            cursor = start + span;
+            for position in &mut running[start..start + span] { *position = stack + (outer + spec.row_gap); }
         }
+        let Some((x, _)) = lanes_packing::extent(&positions, &sizes, placed_start, span) else {
+            return (0.0, GridTracks::default());
+        };
+        let y = content_y + placed_stack + it.margin.top.unwrap_or(0.0);
+        crate::flex::translate(it, x + x_offset - it.border_box.x, y - it.border_box.y);
     }
     let natural_height = (running.into_iter().filter(|value| value.is_finite()).fold(0.0, f32::max) - spec.row_gap).max(0.0);
     if let Some(height) = definite_height {
@@ -2155,6 +2171,7 @@ fn layout_row_lanes(
     fonts: &FontSource,
 ) -> (f32, GridTracks) {
     let mut spec = spec.clone();
+    spec.flow_dense |= lanes_pack_dense(container);
     let raw = named::prepare(&mut spec, items, None);
     let tracks = raw.iter().map(|p| p.row.map_or(p.row_span as usize,
         |start| (start + p.row_span - 1) as usize))
@@ -2201,6 +2218,7 @@ fn layout_row_lanes(
     let mut area_tops = vec![0.0; items.len()];
     let mut area_heights = vec![0.0; items.len()];
     let mut running = axis.lane_positions();
+    let mut spaces = lanes_packing::Spaces::new(tracks);
     let tolerance = flow_tolerance(container, font_px, definite_height.unwrap_or(content_w));
     let mut cursor = 0usize;
     let mut order = (0..items.len()).collect::<Vec<_>>();
@@ -2215,62 +2233,60 @@ fn layout_row_lanes(
         } else {
             choose_lane(&running, span, tolerance, cursor)
         };
-        cursor = start + span;
-        let area_y = positions[start];
-        let end = start + span - 1;
-        let area_h = positions[end] + sizes[end] - area_y;
-        resolved[index].row = Some(start as u32 + 1);
+        let Some((_, area_h)) = lanes_packing::extent(&positions, &sizes, start, span) else {
+            return (0.0, GridTracks::default());
+        };
+        let it = &mut items[index];
+        measure_row_lane(it, &spec, container, &sizes, start, span, area_h, content_w, fonts);
+        let margin = values::resolve_margins(&it.style, it.font_size, content_w);
+        let outer = (it.border_box.w + margin.left.unwrap_or(0.0)
+            + margin.right.unwrap_or(0.0)).max(0.0);
+        let subgrid = it.grid_subgrid.is_some();
+        let selected = if spec.flow_dense {
+            let compatible = |candidate| lanes_packing::extent(&positions, &sizes, candidate, span)
+                .is_some_and(|(_, height)| height == area_h);
+            let result = if subgrid {
+                spaces.find_measured(span, stack, tolerance,
+                    p.row.map(|_| start), compatible, |candidate| {
+                        measure_row_lane(it, &spec, container, &sizes, candidate, span, area_h, content_w, fonts);
+                        let margin = values::resolve_margins(&it.style, it.font_size, content_w);
+                        Some((it.border_box.w + margin.left.unwrap_or(0.0)
+                            + margin.right.unwrap_or(0.0)).max(0.0))
+                    })
+            } else {
+                spaces.find(span, outer, stack, tolerance, p.row.map(|_| start), compatible)
+            };
+            let Some(selected) = result else { return (0.0, GridTracks::default()); };
+            selected
+        } else { None };
+        let (placed_start, placed_stack) = selected.unwrap_or((start, stack));
+        if subgrid && spec.flow_dense {
+            measure_row_lane(it, &spec, container, &sizes, placed_start, span, area_h, content_w, fonts);
+        }
+        let margin = values::resolve_margins(&it.style, it.font_size, content_w);
+        let outer = (it.border_box.w + margin.left.unwrap_or(0.0)
+            + margin.right.unwrap_or(0.0)).max(0.0);
+        if selected.is_some() {
+            if spaces.occupy(placed_start, span, placed_stack, outer, spec.col_gap).is_none() {
+                return (0.0, GridTracks::default());
+            }
+        } else {
+            if spec.flow_dense && spaces.skipped(&running, start, span, stack, spec.col_gap).is_none() {
+                return (0.0, GridTracks::default());
+            }
+            cursor = start + span;
+            for position in &mut running[start..start + span] { *position = stack + outer + spec.col_gap; }
+        }
+        let Some((area_y, _)) = lanes_packing::extent(&positions, &sizes, placed_start, span) else {
+            return (0.0, GridTracks::default());
+        };
+        let x = content_x + placed_stack + margin.left.unwrap_or(0.0);
+        resolved[index].row = Some(placed_start as u32 + 1);
         resolved[index].row_span = span as u32;
         area_tops[index] = area_y;
         area_heights[index] = area_h;
-
-        let it = &mut items[index];
-        it.containing_block_height = Some(area_h);
-        let rows = subgrid_axis_for_item(it, "grid-template-rows", &sizes,
-            spec.row_gap, &spec.row_line_names, start + 1, span);
-        it.grid_subgrid = rows.map(|rows| SubgridContext { cols: None, rows: Some(rows) });
-        let width = match crate::used_size::extent(it,"width",content_w) {
-            MaybeLen::Px(width) => width.max(0.0),
-            MaybeLen::Auto => (crate::flex::max_content_width(it, fonts) - h_chrome(it)).max(0.0)
-                .min((content_w - h_chrome(it)).max(0.0)),
-        };
-        let mut used=crate::UsedContentSize{width:Some(width),height:None};
-        let align = container_self_align(it, "align-self").unwrap_or(spec.align_items);
-        if height_is_auto(it) && row_baseline::preference(it, container).is_none()
-            && align == ItemAlign::Stretch
-            && !margin_is_auto(&it.style, "top") && !margin_is_auto(&it.style, "bottom") {
-            let margin = values::resolve_margins(&it.style, it.font_size, content_w);
-            let padding = values::resolve_padding(&it.style, it.font_size, content_w);
-            let border = values::resolve_borders(&it.style, it.font_size);
-            let chrome = margin.top.unwrap_or(0.0) + margin.bottom.unwrap_or(0.0)
-                + padding.top + padding.bottom + border.top + border.bottom;
-            used.height=Some((area_h-chrome).max(0.0));
-        }
-        crate::block::layout_block_with_used_content_size(it,0.0,0.0,content_w,fonts,None,used);
-        let margin = values::resolve_margins(&it.style, it.font_size, content_w);
-        let x = content_x + stack + margin.left.unwrap_or(0.0);
-        let auto_top = margin_is_auto(&it.style, "top");
-        let auto_bottom = margin_is_auto(&it.style, "bottom");
-        let free = (area_h - it.border_box.h - margin.top.unwrap_or(0.0)
-            - margin.bottom.unwrap_or(0.0)).max(0.0);
-        let auto_lead = if auto_top && auto_bottom { free * 0.5 }
-            else if auto_top { free } else { 0.0 };
-        let align_lead = if auto_top || auto_bottom || row_baseline::preference(it, container).is_some() {
-            0.0
-        } else {
-            match align {
-                ItemAlign::End => free,
-                ItemAlign::Center => free / 2.0,
-                _ => 0.0,
-            }
-        };
-        let y = area_y + margin.top.unwrap_or(0.0) + auto_lead + align_lead;
+        let y = area_y + row_lane_lead(it, &spec, container, area_h, content_w);
         crate::flex::translate(it, x - it.border_box.x, y - it.border_box.y);
-        let outer_width = (it.border_box.w + margin.left.unwrap_or(0.0)
-            + margin.right.unwrap_or(0.0)).max(0.0);
-        for position in &mut running[start..start + span] {
-            *position = stack + outer_width + spec.col_gap;
-        }
     }
     let widths = vec![content_w; items.len()];
     let final_metrics = grid_row_baseline_metrics(items, &resolved, &kinds,
@@ -2301,6 +2317,10 @@ fn layout_row_lanes(
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+#[cfg(test)]
+#[path = "grid_lanes_dense_tests.rs"]
+mod lanes_dense_tests;
 
 #[cfg(test)]
 mod tests {

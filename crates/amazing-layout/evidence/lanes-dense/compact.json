@@ -1,0 +1,81 @@
+{
+ "ticket": "layout-lanes-dense",
+ "source": "4259331cd0d766e81cfd880f1a816a14cbc3be0a",
+ "base": "d813a21774750085bc5648af30d2c09c2d5516f7",
+ "host_path": "amazing/out/r2-layout/render-gate/r3a-{before,after}/<sha>/",
+ "workspace": {
+  "nextest_passed": 5788,
+  "nextest_failed": 0,
+  "doctests_passed": 39,
+  "doctests_failed": 0
+ },
+ "dirs": {
+  "CSS2-normal-flow": {
+   "before_pass": 24,
+   "after_pass": 24,
+   "lost": [],
+   "gained": [],
+   "before_sha256": "3371dadd9fe835308f437bd3e34863190700587bf5539c115a9f20a9f59da020",
+   "after_sha256": "cdeea1df6bd4622e5b92e5a830edeb45f3e50ab42242cffd91c7391978d050b4"
+  },
+  "css-flexbox": {
+   "before_pass": 350,
+   "after_pass": 350,
+   "lost": [],
+   "gained": [],
+   "before_sha256": "80ed927d8af76de27977a423135ed339be5514b8e7021851d29f153c5f68d483",
+   "after_sha256": "39164f2d6eb0c7ef373150de528cf91a9ac4e0590828c6761b8935759f0961f7"
+  },
+  "css-grid": {
+   "before_pass": 461,
+   "after_pass": 487,
+   "lost": [],
+   "gained": [
+    "css__css-grid__grid-lanes__alignment__column-dense-packing-align-items-multi-span-003.html",
+    "css__css-grid__grid-lanes__alignment__row-dense-packing-justify-items-multi-span-003.html",
+    "css__css-grid__grid-lanes__baseline__column-grid-lanes-item-baseline-004a.html",
+    "css__css-grid__grid-lanes__baseline__column-grid-lanes-item-baseline-004b.html",
+    "css__css-grid__grid-lanes__baseline__row-grid-lanes-item-baseline-004.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-002.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-004.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-005.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-006.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-007.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-008.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-flow-tolerance-002.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-001.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-002.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-003.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-004.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-006.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-007.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-008.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-009.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__column-fill-reverse-dense-packing-flow-tolerance-001.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-004.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-flow-tolerance-002.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-multi-span-001.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-multi-span-003.html",
+    "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-multi-span-005.html"
+   ],
+   "before_sha256": "7aa460e5d6e4ca17ada29d1876c739d80391708e021ef5dd39c51d5ed9eb35ba",
+   "after_sha256": "f6c003a05c2e9e930dbb46d2e22530571d837009a787fed6e08e2766f6b43992"
+  },
+  "css-sizing": {
+   "before_pass": 100,
+   "after_pass": 100,
+   "lost": [],
+   "gained": [],
+   "before_sha256": "ca6c2c88bc51fb52ce87cd9559db20ceb441c34fd26adc8931952a4745794179",
+   "after_sha256": "263f3be458f388ada7913378bb79278d75ab636c2d3d929a2d4c709a92471979"
+  },
+  "css-tables": {
+   "before_pass": 60,
+   "after_pass": 60,
+   "lost": [],
+   "gained": [],
+   "before_sha256": "3ac1f5a6198239c3801318d7a375db0dfaf4c470d8889e8730abbdcbe697bbd7",
+   "after_sha256": "de326e75971176c89bb0b800250393a25d7b7e8d9a08d3dffd97534168d85396"
+  }
+ }
+}
