@@ -14,6 +14,11 @@ pub(crate) fn complete<H: BindingHost>(host: &mut H, dispatch: &mut Dispatch) ->
         crate::event_bindings::dispatch_user_agent_event(host, EventTarget::Node(node), "change",
             EventInit { bubbles: true, cancelable: false, composed: false })?;
     }
+    let forwarded = host.with_dom(|dom| Ok(dom.take_forwarded_label_clicks()))?;
+    for control in forwarded {
+        crate::event_bindings::dispatch_user_agent_event(host, EventTarget::Node(control), "click",
+            EventInit { bubbles: true, cancelable: true, composed: true })?;
+    }
     Ok(())
 }
 pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H::Value]) -> Result<H::Value, H::Error> {

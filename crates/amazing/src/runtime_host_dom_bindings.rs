@@ -205,7 +205,8 @@ impl RuntimeBindingHost<'_> {
             | InterfaceBrand::OPTIONS | InterfaceBrand::RADIO_NODE_LIST
             | InterfaceBrand::NODE_LIST | InterfaceBrand::STATIC_NODE_LIST
             | InterfaceBrand::FILTERED_NODE_LIST | InterfaceBrand::NAMED_NODE_MAP
-            | InterfaceBrand::DOM_TOKEN_LIST | InterfaceBrand::DOM_STRING_LIST)
+            | InterfaceBrand::DOM_TOKEN_LIST | InterfaceBrand::DOM_STRING_LIST
+            | InterfaceBrand::ELEMENT_INTERNALS | InterfaceBrand::CUSTOM_STATE_SET)
     }
 
     pub(super) fn dom_install_dataset_hooks(&mut self) -> Result<(), Throw> {

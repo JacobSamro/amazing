@@ -14,6 +14,10 @@ pub enum CollectionFilter {
     Links,
     Anchors,
     Empty,
+    /// `label` elements whose labeled control is this node (`labels`).
+    Labels(NodeIdx),
+    /// Listed elements below a `fieldset` (`fieldset.elements`).
+    FieldsetElements,
 }
 
 #[derive(Debug)]
@@ -82,6 +86,9 @@ impl Dom {
                     CollectionFilter::Name(query) => *namespace == Namespace::Html &&
                         self.attribute_utf16(*node, "name").as_deref() == Some(query),
                     CollectionFilter::Empty => false,
+                    CollectionFilter::FieldsetElements => self.is_listed_element(*node),
+                    CollectionFilter::Labels(control) => *namespace == Namespace::Html && name == "label"
+                        && self.label_control(*node).ok().flatten() == Some(*control),
                     CollectionFilter::Anchors => *namespace == Namespace::Html && name == "a"
                         && self.get_attribute_ns(*node, None, "name").is_some(),
                     CollectionFilter::Links => *namespace == Namespace::Html &&

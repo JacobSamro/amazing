@@ -278,6 +278,7 @@ fn invoke_custom_element_reaction<H: BindingHost>(host: &mut H, capture: &H::Dom
                     };
                     let finish = host.with_captured_dom(capture, |dom|
                         dom.finish_custom_element_upgrade(element, definition, same));
+                    if same { if let Ok(value) = &constructed { pin_constructed_wrapper(host, value); } }
                     if let Err(error) = constructed {
                         let _ = host.report_custom_element_constructor_exception(exception_context, error);
                         Ok(())
@@ -302,6 +303,16 @@ fn invoke_custom_element_reaction<H: BindingHost>(host: &mut H, capture: &H::Dom
                         None => host.null() };
                     callback_value_captured(host, capture, callback, element, &[name, old, new, namespace])
                 }
+                CustomElementReaction::FormAssociated { element, callback, form } => {
+                    let form = match form { Some(form) => frame_wrap_node(host, capture, form)?, None => host.null() };
+                    callback_value_captured(host, capture, callback, element, &[form])
+                }
+                CustomElementReaction::FormDisabled { element, callback, disabled } => {
+                    let disabled = host.boolean(disabled);
+                    callback_value_captured(host, capture, callback, element, &[disabled])
+                }
+                CustomElementReaction::FormReset { element, callback } =>
+                    callback_value_captured(host, capture, callback, element, &[]),
             }
 }
 
@@ -323,6 +334,13 @@ pub fn deliver_custom_element_reaction_frame<H: BindingHost>(host: &mut H,
     Ok(())
 }
 
+/// A successfully constructed custom element's `this` wrapper carries the
+/// author class prototype and own properties. The runtime's wrapper cache is
+/// weak, so pin it for the document's lifetime or a later lookup would return
+/// a plain HTMLElement wrapper.
+fn pin_constructed_wrapper<H: BindingHost>(host: &mut H, value: &H::Value) {
+    let _ = host.retain_value(value.clone());
+}
 fn creation_error<H: BindingHost>(host: &mut H, capture: &H::DomCapture, error: DomError) -> H::Error {
     match host.with_captured_dom::<()>(capture, |_| Err(error)) { Err(error) => error, Ok(()) => unreachable!() }
 }
@@ -331,6 +349,9 @@ fn creation_error<H: BindingHost>(host: &mut H, capture: &H::DomCapture, error: 
 pub fn create_element_from_plan<H: BindingHost>(host: &mut H, capture: &H::DomCapture,
     arena: u64, plan: amazing_dom::custom_elements::ElementCreationPlan) -> Result<H::Value, H::Error> {
     use amazing_dom::custom_elements::{ElementCreationPlan as Plan, CustomElementCreationCompletion as Completion};
+    // The constructor's `this` wrapper (and its author-defined own properties)
+    // must stay alive until the result is wrapped, or a fresh wrapper is returned.
+    let mut keep_alive: Option<H::Value> = None;
     let element = match plan {
         Plan::Element(element) => element,
         Plan::Upgrade { element, definition, constructor } => {
@@ -343,8 +364,14 @@ pub fn create_element_from_plan<H: BindingHost>(host: &mut H, capture: &H::DomCa
             let same = constructed.as_ref().is_ok_and(|value| host.same_value(value, &expected));
             let finished = host.with_captured_dom(capture, |dom|
                 dom.finish_custom_element_upgrade(element.node, definition, same));
-            if let Err(error) = constructed { let _ = host.report_custom_element_constructor_exception(exception_context, error); }
-            else if let Err(error) = finished { let _ = host.report_custom_element_constructor_exception(exception_context, error); }
+            match constructed {
+                Err(error) => { let _ = host.report_custom_element_constructor_exception(exception_context, error); }
+                Ok(value) => {
+                    if same { pin_constructed_wrapper(host, &value); }
+                    keep_alive = Some(value);
+                    if let Err(error) = finished { let _ = host.report_custom_element_constructor_exception(exception_context, error); }
+                }
+            }
             element
         }
         Plan::Autonomous(context) => {
@@ -357,7 +384,11 @@ pub fn create_element_from_plan<H: BindingHost>(host: &mut H, capture: &H::DomCa
                     .map(|node| amazing_dom::render_mutation::NodeGeneration { node: NodeIdx(node), generation: key.generation }));
             let completed = host.with_captured_dom(capture, |dom| dom.complete_custom_element_creation(context, returned))?;
             match completed {
-                Completion::Created(element) => element,
+                Completion::Created(element) => {
+                    keep_alive = constructed.ok();
+                    if let Some(value) = &keep_alive { pin_constructed_wrapper(host, value); }
+                    element
+                }
                 Completion::Failed(failure) => {
                     let error = match constructed { Err(error) => error, Ok(_) => creation_error(host, capture, failure.reason()) };
                     let _ = host.report_custom_element_constructor_exception(exception_context, error);
@@ -366,5 +397,7 @@ pub fn create_element_from_plan<H: BindingHost>(host: &mut H, capture: &H::DomCa
             }
         }
     };
-    host.wrap_node_in_captured_dom(capture, PlatformKey { arena, slot: u64::from(element.node.0), generation: element.generation })
+    let wrapped = host.wrap_node_in_captured_dom(capture, PlatformKey { arena, slot: u64::from(element.node.0), generation: element.generation });
+    drop(keep_alive);
+    wrapped
 }

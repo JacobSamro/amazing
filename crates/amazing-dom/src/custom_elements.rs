@@ -64,6 +64,9 @@ pub enum CustomElementReaction {
     Adopted { element: NodeIdx, callback: CallbackId, old_document: NodeIdx, new_document: NodeIdx },
     AttributeChanged { element: NodeIdx, callback: CallbackId, name: String,
         old_value: Option<Vec<u16>>, new_value: Option<Vec<u16>>, namespace: Option<String> },
+    FormAssociated { element: NodeIdx, callback: CallbackId, form: Option<NodeIdx> },
+    FormDisabled { element: NodeIdx, callback: CallbackId, disabled: bool },
+    FormReset { element: NodeIdx, callback: CallbackId },
 }
 
 /// Move-only popped queue from this exact native arena. Its immutable node
@@ -86,8 +89,14 @@ struct QueuedCustomElementReaction {
 
 #[derive(Debug, Default)]
 pub struct CustomElements {
-    definitions: Vec<CustomElementDefinition>,
-    element_states: Vec<(crate::render_mutation::NodeGeneration, usize, CustomElementState)>,
+    pub(crate) definitions: Vec<CustomElementDefinition>,
+    pub(crate) element_states: Vec<(crate::render_mutation::NodeGeneration, usize, CustomElementState)>,
+    /// ElementInternals native state (HTML §4.13.7), one entry per attached element.
+    pub(crate) internals: Vec<(crate::render_mutation::NodeGeneration, crate::element_internals::InternalsState)>,
+    /// Last form owner and actually-disabled state notified to each form-associated element.
+    pub(crate) face_last: Vec<(crate::render_mutation::NodeGeneration, Option<crate::render_mutation::NodeGeneration>, bool)>,
+    pub(crate) face_definitions: usize,
+    pub(crate) label_clicks: Vec<NodeIdx>,
     upgrade_reactions: Vec<(crate::render_mutation::NodeGeneration, usize, Vec<CustomElementReaction>)>,
     reaction_frames: Vec<Vec<QueuedCustomElementReaction>>,
     backup_queue: Vec<CustomElementReaction>,
@@ -127,6 +136,7 @@ impl Dom {
         let id = self.custom_elements.definitions.len();
         let document = definition.document;
         let local_name = definition.local_name.clone();
+        if definition.form_associated { self.custom_elements.face_definitions += 1; }
         self.custom_elements.definitions.push(definition);
         for element in self.shadow_including_tree_order(document) {
             if self.local_name(element) == Some(local_name.as_str()) {
@@ -241,6 +251,11 @@ impl Dom {
         entry.2 = CustomElementState::Custom;
         self.record_render_full(element, "custom element upgrade state");
         for reaction in reactions { self.enqueue_custom_element_reaction(reaction); }
+        if self.custom_elements.definitions.get(definition).is_some_and(|def| def.form_associated) {
+            // Listed-element membership changed without a tree mutation.
+            self.mutation_generation = self.mutation_generation.wrapping_add(1);
+        }
+        self.face_sync_all();
         Ok(())
     }
     pub fn custom_element_push_reaction_frame(&mut self) {
@@ -278,7 +293,7 @@ impl Dom {
         }
         Ok(None)
     }
-    fn enqueue_custom_element_reaction(&mut self, reaction: CustomElementReaction) {
+    pub(crate) fn enqueue_custom_element_reaction(&mut self, reaction: CustomElementReaction) {
         let nodes = if self.custom_elements.reaction_frames.is_empty() { Vec::new() } else {
             let mut nodes = vec![match &reaction {
                 CustomElementReaction::Upgrade { element, .. }
@@ -286,7 +301,10 @@ impl Dom {
                 | CustomElementReaction::Disconnected { element, .. }
                 | CustomElementReaction::ConnectedMove { element, .. }
                 | CustomElementReaction::Adopted { element, .. }
-                | CustomElementReaction::AttributeChanged { element, .. } => *element,
+                | CustomElementReaction::AttributeChanged { element, .. }
+                | CustomElementReaction::FormAssociated { element, .. }
+                | CustomElementReaction::FormDisabled { element, .. }
+                | CustomElementReaction::FormReset { element, .. } => *element,
             }];
             match &reaction {
                 CustomElementReaction::Upgrade { definition, .. } => {
@@ -417,6 +435,7 @@ impl Dom {
     pub(crate) fn custom_element_attribute_changed(&mut self, element: NodeIdx,
         namespace: Option<&str>, name: &str, old_value: Option<Vec<u16>>, new_value: Option<Vec<u16>>) {
         if self.custom_elements_idle() { return; }
+        if namespace.is_none() && matches!(name, "form" | "id" | "disabled") { self.face_sync_all(); }
         if self.custom_element_state(element) != CustomElementState::Custom { return; }
         let Some(id) = self.custom_element_definition_of(element) else { return };
         let def = &self.custom_elements.definitions[id];

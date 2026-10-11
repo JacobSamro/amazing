@@ -1,0 +1,25 @@
+{
+ "schema": 1,
+ "ticket": "html-element-internals",
+ "gated_code_commit": "6b354743475b8551e635b8981f4251241484be4f",
+ "gated_on_base": "bfb2c57aded60fe28855fab9235ce4875825ee99",
+ "ready_on_base": "00d6e73fc3df994c383796f8a45cf16e7daa2c81 (drift vs gated base touches only amazing-layout flex.rs/grid.rs, disjoint)",
+ "host": "Boat 4 vCPU sandbox, lane r2-html, release amazing wpt-harness 800x600",
+ "workspace": {"nextest": "5701 passed (5 slow), 17 skipped, 0 failed", "doctests": "pass (rc 0)", "new_unit_tests": "amazing-dom element_internals 2, amazing html_internals 5"},
+ "wpt": {
+  "corpus": "dom/ + html/dom/ + custom-elements/ (1001 files), pinned c2a2fce, native wpt-harness, 4 jobs, 20000 ms, scripts/html-constructor-wpt-corpus.py + html-constructor-wpt-pair.py (same runner sha 4b719dce...)",
+  "before_bfb2c57ad": {"pass_files": 457, "pass_subtests": 103633},
+  "after_6b3547434": {"pass_files": 482, "pass_subtests": 102819, "file_status": {"pass": 482, "fail": 351, "timeout": 109, "error": 57, "unsupported": 2}},
+  "files": {"gained": 25, "lost": 0},
+  "subtests": {"gained": 290, "lost": 1104},
+  "lost_subtests_by_file": {"dom/ranges/Range-set.html": 940, "dom/ranges/Range-mutations-dataChange.html": 164},
+  "range_120s_control_pass_counts_before_vs_after": {"Range-compareBoundaryPoints": [9313, 9313], "Range-set": [10920, 10920], "Range-mutations-dataChange": [2808, 2808]},
+  "range_120s_completion_seconds_before_vs_after": {"Range-compareBoundaryPoints": [17.9, 19.2], "Range-set": [27.8, 25.5], "Range-mutations-dataChange": [41.0, 46.7]},
+  "range_note": "the two files with lost subtests cannot finish inside the 20 s deadline on this host; with a 120 s deadline both builds pass identical totals",
+  "html_semantics_forms_informational": {"dirs": "the-form-element, the-fieldset-element, the-label-element (45 files)", "pass_files": [18, 18], "pass_subtests": [213, 216], "lost": 0},
+  "binary_sha256": {"before": "4fbe9da98ac9f0590b9f15fd0ea2e68e0d503183df2309faecaa8db2331fb2c3", "after": "6ebe476ac0529208d46ca1678f8f40cbb0714cb868245920e665333608c5110e"},
+  "after_manifest_sha256": "5b72e081a81db7c0d8ff22102fb891ae09279a298324c9658a784b2037893468",
+  "raw_host_paths": {"before": "/home/user/amazing/out/r2-html/before", "after": "/home/user/amazing/out/r2-html/final"},
+  "evidence_file": "wpt-after-passset.compact.json: AFTER pass-files, per-file passing-subtest counts with sha256-16 of the ordered passing names, full passing names for custom-elements/, lost and gained lists"
+ }
+}

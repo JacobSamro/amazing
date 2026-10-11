@@ -67,6 +67,8 @@ use self::compositor::{CanvasObject, CanvasTarget};
 
 #[path = "runtime_host_dom_bindings.rs"]
 mod dom_bindings;
+#[path = "runtime_host_html_internals.rs"]
+mod html_internals;
 #[path = "runtime_host_inline_events.rs"]
 mod inline_events;
 #[path = "runtime_host_cssom.rs"]
@@ -671,6 +673,8 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::SELECTED_OPTIONS => Interface::HTMLCollection,
             InterfaceBrand::RADIO_NODE_LIST => Interface::RadioNodeList,
             InterfaceBrand::VALIDITY_STATE => Interface::ValidityState,
+            InterfaceBrand::ELEMENT_INTERNALS => Interface::ElementInternals,
+            InterfaceBrand::CUSTOM_STATE_SET => Interface::CustomStateSet,
             InterfaceBrand::CUSTOM_ELEMENT_REGISTRY => Interface::CustomElementRegistry,
             InterfaceBrand::NODE_LIST => Interface::NodeList,
             InterfaceBrand::STATIC_NODE_LIST => Interface::NodeList,
@@ -1161,6 +1165,12 @@ impl BindingHost for RuntimeBindingHost<'_> {
         };
         let prototype = self.prototype(interface).ok_or_else(|| Throw::type_error("Missing iterable prototype"))?;
         self.js.binding_define_iterable(brand.0, &prototype)
+    }
+    fn define_array_values_iterator(&mut self, interface: Interface) -> Result<OptionalHookInstall, Throw> {
+        self.dom_define_array_values_iterator(interface)
+    }
+    fn define_set_like_iterator(&mut self, interface: Interface) -> Result<OptionalHookInstall, Throw> {
+        self.dom_define_set_like_iterator(interface)
     }
     fn get_property(&mut self, object: &JsValue, name: &str) -> Result<JsValue, Throw> {
         self.js.binding_get_property(object, name)

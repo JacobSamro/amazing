@@ -55,6 +55,7 @@ impl Dom {
                 ancestor = self.get(parent).parent;
             }
         }
+        if html && self.is_form_associated_custom_element(node) && self.is_actually_disabled(node) { return false; }
         if html && name == "input" && self.attribute_utf16(node, "type")
             .is_some_and(|value| String::from_utf16_lossy(&value).eq_ignore_ascii_case("hidden")) { return false; }
         if self.attribute_utf16(node, "tabindex").is_some_and(|value| {

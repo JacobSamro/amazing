@@ -35,6 +35,7 @@ pub mod mutation;
 pub mod shadow;
 mod flat_tree;
 pub mod custom_elements;
+pub mod element_internals;
 pub mod forms;
 mod template;
 mod template_patching;

@@ -485,7 +485,7 @@ fn validity<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<ValidityState
     };
     host.with_dom(|dom| dom.validity(node, |_, _| match_result))
 }
-fn validate<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<bool, H::Error> {
+pub(crate) fn validate<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<bool, H::Error> {
     // A control that is not a candidate for constraint validation satisfies its
     // constraints for the purposes of checkValidity/reportValidity and does not
     // fire an invalid event, even though validity flags may still be set.
@@ -554,6 +554,19 @@ fn autocomplete_value(raw: &[u16], form: bool, hidden: bool) -> Vec<u16> {
     if tokens.get(at).is_some_and(|token| token == "webauthn") { at += 1; }
     if at == tokens.len() { tokens.join(" ").encode_utf16().collect() } else { Vec::new() }
 }
+/// Entry creation: a lone CR or LF becomes CRLF.
+fn normalize_newlines(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\r' => { out.push_str("\r\n"); if chars.peek() == Some(&'\n') { chars.next(); } }
+            '\n' => out.push_str("\r\n"),
+            other => out.push(other),
+        }
+    }
+    out
+}
 fn submission_data(dom: &amazing_dom::Dom, form: NodeIdx,
     submitter: Option<NodeIdx>) -> Result<FormData, DomError> {
     let mut data = FormData::default();
@@ -561,6 +574,28 @@ fn submission_data(dom: &amazing_dom::Dom, form: NodeIdx,
     if let Some(submitter) = submitter.filter(|node| dom.html_tag(*node, "input")
         && dom.input_type(*node).ok() == Some("image")) { controls.push(submitter); }
     for control in controls {
+        if dom.is_form_associated_custom_element(control) {
+            if dom.is_actually_disabled(control) { continue; }
+            let name = String::from_utf16_lossy(&dom.attribute_utf16(control, "name").unwrap_or_default());
+            match dom.internals_submission_value(control) {
+                Some(amazing_dom::element_internals::SubmissionValue::Text(text)) if !name.is_empty() =>
+                    data.append_text(&normalize_newlines(&name), &normalize_newlines(&String::from_utf16_lossy(&text))),
+                Some(amazing_dom::element_internals::SubmissionValue::Opaque(value)) => {
+                    if let Some(file) = value.downcast_ref::<File>() {
+                        if !name.is_empty() { data.append_file(&normalize_newlines(&name), file.clone(), None); }
+                    } else if let Some(entries) = value.downcast_ref::<FormData>() {
+                        data.entries.extend(entries.entries.iter().map(|(entry_name, entry_value)| (
+                            normalize_newlines(entry_name), match entry_value {
+                                amazing_fetch::api::FormValue::Text(text) =>
+                                    amazing_fetch::api::FormValue::Text(normalize_newlines(text)),
+                                other => other.clone(),
+                            })));
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
         if dom.get_attribute_ns(control, None, "disabled").is_some() { continue; }
         let name = dom.attribute_utf16(control, "name").unwrap_or_default();
         let name = String::from_utf16_lossy(&name);

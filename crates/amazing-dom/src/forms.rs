@@ -857,6 +857,7 @@ impl Dom {
         ]
         .iter()
         .any(|tag| self.html_tag(node, tag))
+            && !self.is_form_associated_custom_element(node)
         {
             return None;
         }
@@ -887,8 +888,16 @@ impl Dom {
         }
         None
     }
+    /// HTML "listed elements": the form-associated elements that appear in
+    /// `form.elements` / `fieldset.elements` (image buttons included here).
+    pub fn is_listed_element(&self, node: NodeIdx) -> bool {
+        ["input", "button", "select", "textarea", "fieldset", "output", "object"]
+            .iter().any(|tag| self.html_tag(node, tag))
+            || self.is_form_associated_custom_element(node)
+    }
     /// Whether a node may be the labeled control of a label.
     fn labelable(&self, node: NodeIdx) -> bool {
+        if self.is_form_associated_custom_element(node) { return true; }
         if self.html_tag(node, "input") {
             return self.input_type(node).ok() != Some("hidden");
         }
@@ -934,11 +943,12 @@ impl Dom {
                 self.form_owner(*node) == Some(form)
                     && !(self.html_tag(*node, "input")
                         && self.input_type(*node).ok() == Some("image"))
-                    && [
+                    && ([
                         "input", "button", "select", "textarea", "fieldset", "output", "object",
                     ]
                     .iter()
                     .any(|tag| self.html_tag(*node, tag))
+                        || self.is_form_associated_custom_element(*node))
             })
             .collect())
     }
@@ -1322,6 +1332,9 @@ impl Dom {
         Ok(())
     }
     pub fn validation_message(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
+        if self.is_form_associated_custom_element(node) {
+            return Ok(self.face_validation_message(node));
+        }
         self.require_tag(
             node,
             &[
@@ -1334,6 +1347,9 @@ impl Dom {
             .unwrap_or_default())
     }
     pub fn will_validate(&self, node: NodeIdx) -> Result<bool, DomError> {
+        if self.is_form_associated_custom_element(node) {
+            return Ok(self.face_will_validate(node));
+        }
         self.require_tag(
             node,
             &[
@@ -1388,6 +1404,9 @@ impl Dom {
         node: NodeIdx,
         pattern_matches: impl Fn(&str, &str) -> Option<bool>,
     ) -> Result<ValidityState, DomError> {
+        if self.is_form_associated_custom_element(node) {
+            return Ok(self.face_validity(node));
+        }
         // Most validity states are computed regardless of whether the control is
         // a candidate for constraint validation; disabled/readonly only gate the
         // mutability-dependent states (value missing). The candidate check still
@@ -1597,6 +1616,10 @@ impl Dom {
             .collect();
         controls.extend(options);
         for node in controls {
+            if self.is_form_associated_custom_element(node) {
+                self.face_reset(node);
+                continue;
+            }
             let state = self.form_state_mut(node);
             state.value = None;
             state.dirty_value = false;

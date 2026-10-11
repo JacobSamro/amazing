@@ -2,7 +2,7 @@
 use super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ActivationKind { Checkbox, Radio, Other }
+enum ActivationKind { Checkbox, Radio, Other, LabelForward }
 
 /// The radio button that was checked in the group before pre-click activation,
 /// snapshotted by its OWN identity (name/form/root), not the clicked node's.
@@ -27,6 +27,11 @@ pub struct InputActivation {
     previous_radio: Option<RadioGroupPeer>,
 }
 impl Dom {
+    /// Controls (form-associated custom elements) a completed label click must
+    /// forward a synthetic `click` to.
+    pub fn take_forwarded_label_clicks(&mut self) -> Vec<NodeIdx> {
+        std::mem::take(&mut self.custom_elements.label_clicks)
+    }
     pub fn input_indeterminate(&self, node: NodeIdx) -> Result<bool, DomError> {
         self.require_tag(node, &["input"])?;
         Ok(self.form_state(node).is_some_and(|state| state.indeterminate))
@@ -95,6 +100,13 @@ impl Dom {
             // outside this fix's scope.
             let control = self.label_control(node).ok()??;
             if self.form_control_disabled(control) { return None; }
+            if self.is_form_associated_custom_element(control) {
+                // A form-associated custom element has no built-in activation
+                // behavior; the label fires a synthetic click at it afterwards.
+                if self.is_actually_disabled(control) { return None; }
+                return Some(InputActivation { node: control, generation: self.node_generation(control)?,
+                    kind: ActivationKind::LabelForward, checked: false, indeterminate: false, previous_radio: None });
+            }
             return self.prepare_input_activation(control);
         }
         if !self.html_tag(node, "input") { return None; }
@@ -126,7 +138,7 @@ impl Dom {
                 self.set_input_indeterminate(node, false).ok()?;
             }
             ActivationKind::Radio => self.set_input_checked(node, true).ok()?,
-            ActivationKind::Other => {},
+            ActivationKind::Other | ActivationKind::LabelForward => {},
         }
         Some(InputActivation { node, generation: self.node_generation(node)?, kind, checked, indeterminate, previous_radio })
     }
@@ -155,8 +167,12 @@ impl Dom {
                         self.set_input_checked(peer.node, true).ok()?;
                     }
                 }
-                ActivationKind::Other => {},
+                ActivationKind::Other | ActivationKind::LabelForward => {},
             }
+            return None;
+        }
+        if state.kind == ActivationKind::LabelForward {
+            self.custom_elements.label_clicks.push(node);
             return None;
         }
         if !self.is_connected(node) { return None; }

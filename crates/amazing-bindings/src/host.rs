@@ -89,6 +89,8 @@ impl InterfaceBrand {
     pub const ANIMATION: Self = Self(41);
     pub const CLIPBOARD: Self = Self(42);
     pub const CSS_STYLE_DECLARATION: Self = Self(43);
+    pub const ELEMENT_INTERNALS: Self = Self(44);
+    pub const CUSTOM_STATE_SET: Self = Self(45);
     pub const XML_SERIALIZER: Self = Self(60);
 }
 
@@ -239,6 +241,8 @@ pub enum Interface {
     Clipboard,
     CSSStyleDeclaration,
     CSSStyleProperties,
+    ElementInternals,
+    CustomStateSet,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -847,6 +851,20 @@ pub enum Operation {
     /// tag/interface. See `aria_reflection.rs`.
     AriaGet(&'static str),
     AriaSet(&'static str),
+    /// `HTMLElement.attachInternals()` and `ElementInternals` (HTML §4.13.7).
+    /// See `internals_bindings.rs`.
+    HTMLElementAttachInternals,
+    FieldsetElements,
+    InternalsShadowRoot, InternalsForm, InternalsSetFormValue, InternalsSetValidity,
+    InternalsWillValidate, InternalsBehaviors, InternalsValidity, InternalsValidationMessage,
+    InternalsCheckValidity, InternalsReportValidity, InternalsLabels, InternalsStates,
+    InternalsAriaGet(&'static str),
+    InternalsAriaSet(&'static str),
+    InternalsAriaElementGet(&'static str),
+    InternalsAriaElementSet(&'static str),
+    /// `CustomStateSet` (setlike<DOMString>).
+    StateSetSize, StateSetAdd, StateSetDelete, StateSetHas, StateSetClear,
+    StateSetForEach, StateSetValues, StateSetEntries,
     /// `Element.prototype.animate()` (Animatable mixin) and the minimal
     /// `Animation` object it returns. See `animation_bindings.rs`.
     ElementAnimate,
@@ -1169,6 +1187,14 @@ pub trait BindingHost: Sized {
     fn define_iterable(&mut self, interface: Interface, kind: IterableKind) -> Result<(), Self::Error>;
     /// Pair iterables need a runtime iterator whose values are live [key, value]
     /// arrays. Older runtimes report this optional capability as unsupported.
+    /// A setlike interface exposes `@@iterator` as the same function object as `values`.
+    /// `@@iterator` as the realm's `Array.prototype.values` (HTMLCollection).
+    fn define_array_values_iterator(&mut self, _interface: Interface) -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
+    }
+    fn define_set_like_iterator(&mut self, _interface: Interface) -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
+    }
     fn define_pair_iterable(&mut self, _interface: Interface) -> Result<OptionalHookInstall, Self::Error> {
         Ok(OptionalHookInstall::NotSupported)
     }

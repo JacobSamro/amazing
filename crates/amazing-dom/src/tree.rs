@@ -528,6 +528,7 @@ impl Dom {
         self.reassign_all_slots();
         self.custom_element_tree_inserted(node);
         self.form_tree_inserted(node);
+        self.face_sync_all();
         if signal_fallback { self.queue_slotchange(parent); }
     }
     pub(crate) fn remove_internal(&mut self, node: NodeIdx, suppress: bool) {
@@ -572,6 +573,7 @@ impl Dom {
         if !suppress {
             self.queue_tree_record(parent, vec![], vec![node], prev, next);
         }
+        self.face_sync_all();
     }
 }
 

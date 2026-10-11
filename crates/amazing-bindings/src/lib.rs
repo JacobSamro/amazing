@@ -57,6 +57,7 @@ mod mutation_bindings;
 mod shadow_bindings;
 mod custom_element_bindings;
 mod form_bindings;
+mod internals_bindings;
 mod form_reflection;
 mod web_bindings;
 mod location_bindings;
