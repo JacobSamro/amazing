@@ -1050,6 +1050,23 @@ fn any_window_wrapper(js: &str, test: &str) -> Result<String, String> {
         attr_escape(&path)
     ))
 }
+/// `Throw::describe` cannot call accessors, so host objects such as DOMException
+/// (name/message live on the prototype as getters) print as `[object]`.
+fn describe_throw(js: &mut amazing_js::Interpreter, throw: &Throw) -> String {
+    let base = throw.describe();
+    if base != "[object]" {
+        return base;
+    }
+    let read = |js: &mut amazing_js::Interpreter, key: &str| {
+        js.binding_get_property(&throw.0, key).ok().filter(|v| matches!(v, JsValue::Str(_)))
+            .map(|v| amazing_js::value::to_display_string(&v))
+    };
+    match (read(js, "name"), read(js, "message")) {
+        (Some(name), Some(message)) => format!("{name}: {message}"),
+        (Some(name), None) => name,
+        _ => base,
+    }
+}
 fn resolve_page_url(base: &str, value: &str) -> Result<String, String> {
     let base = amazing_net::Url::parse(base).map_err(|error| error.to_string())?;
     amazing_net::resolve(value, &base)
@@ -1381,7 +1398,7 @@ fn execute_page(
     scheduler.set_location_url(&url);
     // DOMContentLoaded is a Document event; the Window's load waits for
     // dependent child documents and uses the root Document as its legacy target.
-    scheduler.finish_parser_document(amazing_dom::NodeIdx(0)).map_err(|e| e.describe())?;
+    scheduler.finish_parser_document(amazing_dom::NodeIdx(0)).map_err(|e| describe_throw(&mut scheduler.js, &e))?;
     // WPT runs against a deterministic 60 Hz virtual display. Each completed
     // turn gets one rendering opportunity, including a stable rAF timestamp.
     let mut clock = IoAwareClock::default();
@@ -1487,7 +1504,7 @@ fn execute_page(
         if pending_io { std::thread::sleep(Duration::from_millis(1)); }
         let (now, render) = clock.advance(pending_io, Instant::now());
         scheduler.pump_at(now, render)
-            .map_err(|e| e.describe())?;
+            .map_err(|e| describe_throw(&mut scheduler.js, &e))?;
     }
     Ok(())
 }

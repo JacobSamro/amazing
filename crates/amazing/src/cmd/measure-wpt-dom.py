@@ -13,8 +13,12 @@ import html.parser
 import json
 import math
 from pathlib import Path
+import os
 import re
 import subprocess
+import sys
+import tempfile
+import threading
 
 REVISION = 'c2a2fce69e5c2509d9dc28440ec8b42532e5c293'
 FILE_STATUSES = ('pass', 'fail', 'timeout', 'error', 'unsupported')
@@ -96,7 +100,7 @@ def list_tree(root, suite, marker_pinned):
     return git(root, 'ls-tree', '-r', '--name-only', REVISION, '--', suite + '/').decode().splitlines()
 
 
-def inventory(root, suite='dom'):
+def inventory(root, suite='dom', served=False):
     marker_pinned = checkout_is_marker_pinned(root)
     selected, excluded = [], []
     for name in list_tree(root, suite, marker_pinned):
@@ -104,7 +108,7 @@ def inventory(root, suite='dom'):
                 'url/url-setters-stripping.any.js') or re.fullmatch(r'url/urlsearchparams-[^/]+\.any\.js', name)):
             continue
         parts = Path(name).parts
-        if any(p in ('resources', 'support') for p in parts):
+        if any(p in ('resources', 'support') or (served and p in ('tools', 'templates')) for p in parts):
             excluded.append({'test': name, 'reason': 'support resource'})
             continue
         suffix = Path(name).suffix
@@ -127,11 +131,11 @@ def inventory(root, suite='dom'):
             reason = 'generated JavaScript test globals/worker wrappers are unsupported'
         elif any_window and re.search(rb'^//\s*META:\s*global=(.*)$', data, re.M) and not re.search(rb'^//\s*META:\s*global=.*\bwindow\b', data, re.M):
             reason = 'window global not selected by upstream metadata'
-        elif suffix != '.html' and not any_window:
+        elif suffix != '.html' and not any_window and not (served and suffix == '.htm'):
             reason = 'XML/SVG/non-HTML document parsing is unsupported'
         elif '.manual.' in name or '-manual.' in name:
             reason = 'manual interaction is unsupported'
-        elif '.sub.' in name:
+        elif '.sub.' in name and not served:
             reason = 'WPT server template substitution is unsupported'
         elif '.https.' in name:
             reason = 'HTTPS test origin is unsupported by the local runner'
@@ -145,6 +149,44 @@ def inventory(root, suite='dom'):
             'selected': selected, 'excluded': excluded}
 
 
+class WptServe:
+    """One pinned-wptserve process per test file (see wpt-serve.py).
+
+    The engine's token generator is deterministic, so concurrent or successive
+    tests would otherwise share stash keys; a private server (and stash) per file
+    keeps every test hermetic. web-platform.test hosts reach it through
+    AMAZING_WPT_SHIM_ADDR, set on the harness child only.
+    """
+    errors = None  # (lock, path) for server-side handler errors
+
+    def __init__(self, root, test):
+        self.test = test
+        self.log = tempfile.TemporaryFile()
+        self.proc = subprocess.Popen(
+            [sys.executable, str(Path(__file__).with_name('wpt-serve.py')), '--wpt-root', str(root)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log)
+        line = self.proc.stdout.readline().decode().strip()
+        if not line.startswith('ADDR '):
+            self.proc.kill()
+            raise RuntimeError('wptserve failed to start')
+        self.addr = line[5:]
+
+    def close(self):
+        self.proc.stdin.close()
+        try:
+            self.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+        self.log.seek(0)
+        text = self.log.read().decode('utf-8', 'replace')
+        self.log.close()
+        if WptServe.errors and ('Internal server error' in text or os.environ.get('WPT_SERVE_TRACE')):
+            lock, path = WptServe.errors
+            with lock:
+                with open(path, 'a') as out:
+                    out.write('### ' + self.test + '\n' + text[:60000] + '\n')
+
+
 def unsupported(entry, timeout):
     return {'schema': 1, 'suite': 'wpt', 'wpt_revision': REVISION, 'test': entry['test'],
             'viewport': [800, 600], 'timeout_ms': timeout, 'status': 'unsupported',
@@ -153,11 +195,18 @@ def unsupported(entry, timeout):
             'counts': {s: 0 for s in SUBTEST_STATUSES}, 'subtests': []}
 
 
-def run(exe, root, entry, timeout):
+def run(exe, root, entry, timeout, served=False):
     if entry.get('unsupported'):
         return unsupported(entry, timeout)
-    proc = subprocess.run([str(exe), 'wpt-harness', str(root), entry['test'], '800', '600', str(timeout)],
-                          capture_output=True, encoding='utf-8', errors='strict', timeout=timeout / 1000 + 30)
+    server = WptServe(root, entry['test']) if served else None
+    env = dict(os.environ, AMAZING_WPT_SHIM_ADDR=server.addr) if server else None
+    try:
+        proc = subprocess.run([str(exe), 'wpt-harness', str(root), entry['test'], '800', '600', str(timeout)],
+                              capture_output=True, encoding='utf-8', errors='strict',
+                              timeout=timeout / 1000 + 30, env=env)
+    finally:
+        if server:
+            server.close()
     result = json.loads(proc.stdout)
     if result.get('suite') != 'wpt' or result.get('wpt_revision') != REVISION:
         raise RuntimeError('Missing provenance: ' + proc.stdout)
@@ -224,6 +273,11 @@ def main():
     ap.add_argument('--proof-only', action='store_true')
     ap.add_argument('--suite', choices=('dom', 'url', 'xhr', 'fetch'), default='dom')
     ap.add_argument('--jobs', type=int, default=3)
+    ap.add_argument('--only', default='', help='comma-separated exact test paths (exploratory runs only)')
+    ap.add_argument('--rounds', type=int, choices=(1, 2), default=2,
+                    help='1 skips the repeat-stability round (exploratory runs only)')
+    ap.add_argument('--wptserve', choices=('auto', 'on', 'off'), default='auto',
+                    help="serve resources with the pinned wptserve (auto: xhr and fetch suites)")
     ap.add_argument('--timeout-multiplier', type=float, default=1.0,
                     help='multiply normal and long WPT deadlines (default: 1)')
     args = ap.parse_args()
@@ -253,17 +307,24 @@ def main():
     if args.proof_only:
         print(json.dumps(summary), flush=True)
         return
-    selection = inventory(root, args.suite)
+    served = args.wptserve == 'on' or (args.wptserve == 'auto' and args.suite in ('xhr', 'fetch'))
+    if served:
+        WptServe.errors = (threading.Lock(), output / 'wptserve-errors.log')
+    selection = inventory(root, args.suite, served)
+    if args.only:
+        wanted = set(args.only.split(','))
+        selection['selected'] = [e for e in selection['selected'] if e['test'] in wanted]
+    selection['wptserve'] = served
     (output / 'selection.json').write_bytes(encoded(selection))
     summary['selection_sha256'] = digest(encoded(selection))
     summary['selected_source_files'] = len(selection['selected'])
     summary['excluded_files'] = len(selection['excluded'])
     rounds, results = [], []
-    for number in (1, 2):
+    for number in range(1, args.rounds + 1):
         records = []
         entries = selection['selected']
         def one(entry):
-            return run(exe, root, entry, long_deadline if entry['long_timeout'] else normal_deadline)
+            return run(exe, root, entry, long_deadline if entry['long_timeout'] else normal_deadline, served)
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
             for r in pool.map(one, entries):
                 records.append(r)
@@ -272,7 +333,8 @@ def main():
         results.append(records)
         rounds.append(save_round(output, args.suite + '-' + str(number), records))
         print(json.dumps({'round': number, **rounds[-1]}), flush=True)
-    changes = [a['test'] for a, b in zip(outcomes(results[0]), outcomes(results[1])) if a != b]
+    changes = ([a['test'] for a, b in zip(outcomes(results[0]), outcomes(results[1])) if a != b]
+               if len(results) > 1 else [])
     summary.update(rounds=rounds, stable=not changes, outcome_changes=changes)
     summary['by_directory'] = {}
     for r in results[0]:

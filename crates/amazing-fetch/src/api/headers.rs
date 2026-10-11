@@ -66,7 +66,7 @@ impl ApiHeaders {
     pub fn from_header_list(guard: HeaderGuard, list: &HeaderList) -> Self {
         let mut result = Self::new(guard);
         for ((name, value), (wire_name, _)) in list.iter().zip(list.wire_iter()) {
-            result.entries.push((name.to_owned(), value.to_owned()));
+            result.entries.push((name.to_owned(), isomorphic_header_value(value)));
             result
                 .wire_names
                 .entry(name.to_owned())
@@ -90,6 +90,11 @@ impl ApiHeaders {
     }
     /// Copy a value that has already passed API normalization. XHR may have
     /// deliberately appended `", "` to an empty value; do not trim it again.
+    /// A response header received from the transport (see
+    /// [`isomorphic_header_value`]); the checks of `append_existing` still apply.
+    pub(crate) fn append_network(&mut self, name: &str, value: &str) -> Result<(), ApiError> {
+        self.append_existing(name, &isomorphic_header_value(value))
+    }
     pub(crate) fn append_existing(&mut self, name: &str, value: &str) -> Result<(), ApiError> {
         let wire_name = name;
         let name = valid_name(name)?;
@@ -308,4 +313,34 @@ fn forbidden_request(name: &str, value: &str) -> bool {
             "CONNECT" | "TRACE" | "TRACK"
         )
     })
+}
+
+/// The transport hands header values over as UTF-8 text decoded from the wire
+/// bytes, and the request writer encodes ByteString code points the same way, so
+/// values whose code points all fit a byte round-trip unchanged. A code point
+/// above U+00FF can only come from a multi-byte sequence, which script must see
+/// as its bytes ("isomorphic decode"); rejecting such a header fails the whole
+/// response. TODO(net): make the transport byte-exact (latin-1) in both
+/// directions, then expand every non-ASCII value.
+pub(crate) fn isomorphic_header_value(value: &str) -> String {
+    if value.chars().all(|c| (c as u32) <= 0xFF) {
+        value.to_owned()
+    } else {
+        value.bytes().map(char::from).collect()
+    }
+}
+
+#[cfg(test)]
+mod isomorphic_value_tests {
+    use super::*;
+
+    #[test]
+    fn only_values_that_cannot_be_byte_strings_are_expanded_to_bytes() {
+        assert_eq!(isomorphic_header_value("plain"), "plain");
+        assert_eq!(isomorphic_header_value("\u{ff}"), "\u{ff}");
+        assert_eq!(isomorphic_header_value("\u{2026}"), "\u{e2}\u{80}\u{a6}");
+        let mut headers = ApiHeaders::new(HeaderGuard::None);
+        headers.append_network("X-Bytes", "\u{2026}").unwrap();
+        assert_eq!(headers.get_string("x-bytes").unwrap().as_deref(), Some("\u{e2}\u{80}\u{a6}"));
+    }
 }

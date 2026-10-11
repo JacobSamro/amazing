@@ -110,6 +110,9 @@ pub struct ApiRequest {
     csp_nonce: Option<String>,
     csp_parser_inserted: bool,
     csp_self_origin: Option<Origin>,
+    /// False until `init.referrerPolicy` (or a copied Request) fixed a policy;
+    /// the client's document policy applies otherwise.
+    referrer_policy_set: bool,
 }
 /// Trusted browser navigation inputs. This constructor is outside WebIDL;
 /// JavaScript `new Request(..., { mode: "navigate" })` remains invalid.
@@ -256,6 +259,7 @@ impl ApiRequest {
                     nested_navigation: false,
                     embedding_owner: None,
                     csp_nonce: None, csp_parser_inserted: false, csp_self_origin: None,
+                    referrer_policy_set: false,
                 }
             }
             ApiRequestInput::Request(other) => {
@@ -294,6 +298,7 @@ impl ApiRequest {
                     nested_navigation: other.nested_navigation,
                     embedding_owner: other.embedding_owner.clone(),
                     csp_nonce: other.csp_nonce.clone(), csp_parser_inserted: other.csp_parser_inserted, csp_self_origin: other.csp_self_origin.clone(),
+                    referrer_policy_set: other.referrer_policy_set,
                 }
             }
         };
@@ -323,6 +328,7 @@ impl ApiRequest {
         }
         if let Some(policy) = init.referrer_policy {
             request.referrer_policy = parse_referrer_policy(&policy)?;
+            request.referrer_policy_set = true;
         }
         if let Some(mode) = init.mode {
             request.mode = parse_mode(&mode)?;
@@ -487,6 +493,7 @@ impl ApiRequest {
             nested_navigation: self.nested_navigation,
             embedding_owner: self.embedding_owner.clone(),
             csp_nonce: self.csp_nonce.clone(), csp_parser_inserted: self.csp_parser_inserted, csp_self_origin: self.csp_self_origin.clone(),
+            referrer_policy_set: self.referrer_policy_set,
         })
     }
     /// Native external HTML element preparation before ordinary Fetch dispatch.
@@ -517,6 +524,19 @@ impl ApiRequest {
                 .map(|url|url.serialize()).unwrap_or_default();
         }
         Ok(())
+    }
+    /// `fetch()` main-fetch step: a request whose referrer is still the `client`
+    /// takes the client's document URL (http/https only) and, unless the
+    /// caller fixed one, the client's referrer policy.
+    pub fn apply_fetch_receiving_client<Identity>(&mut self, receiving: &crate::ReceivingDocumentClient<Identity>) {
+        if self.referrer == "about:client" {
+            self.referrer = HttpUrl::from_parsed(receiving.document_url.clone()).ok()
+                .filter(|url| matches!(url.as_parsed().scheme(), "http" | "https"))
+                .map(|url| url.serialize()).unwrap_or_default();
+        }
+        if !self.referrer_policy_set {
+            self.referrer_policy = receiving.referrer_policy;
+        }
     }
     pub(crate) fn can_claim_script_csp_reporting(&self)->bool {
         self.mode!=RequestMode::Navigate && self.embedding_owner.is_none()

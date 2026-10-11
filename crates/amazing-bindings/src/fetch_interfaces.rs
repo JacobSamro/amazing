@@ -81,6 +81,7 @@ pub enum FetchOperation {
     ResponseConstructor,
     ResponseError,
     ResponseRedirect,
+    ResponseJson,
     ResponseClone,
     ResponseType,
     ResponseUrl,
@@ -196,6 +197,8 @@ pub trait FetchHost: BindingHost {
     fn fetch_array_iterator(&mut self, values: Vec<Self::Value>) -> Result<Self::Value, Self::Error>;
     fn fetch_symbol_iterator(&mut self, prototype: &Self::Value, method: Self::Value) -> Result<(), Self::Error>;
     fn fetch_json_parse(&mut self, text: &str) -> Result<Self::Value, Self::Error>;
+    /// `JSON.stringify(value)`; `None` when the result is `undefined`.
+    fn fetch_json_stringify(&mut self, value: &Self::Value) -> Result<Option<String>, Self::Error>;
     fn fetch_range_error(&mut self, message: &str) -> Self::Error;
     fn fetch_type_error(&mut self, message: &str) -> Self::Error;
     fn fetch_number_value(&self, value: &Self::Value) -> Option<f64>;
@@ -363,6 +366,7 @@ pub fn install<H: FetchHost>(host: &mut H) -> Result<(), H::Error> {
                 member(host, &prototype, "clone", O::ResponseClone, 0)?;
                 static_member(host, &constructor, "error", O::ResponseError, 0)?;
                 static_member(host, &constructor, "redirect", O::ResponseRedirect, 1)?;
+                static_member(host, &constructor, "json", O::ResponseJson, 1)?;
                 for (name, op) in [
                     ("type", O::ResponseType),
                     ("url", O::ResponseUrl),
@@ -1040,6 +1044,17 @@ pub fn invoke<H: FetchHost>(
             FetchInterface::Response,
             FetchObject::Response(ApiResponse::error(), None),
         ),
+        O::ResponseJson => {
+            // https://fetch.spec.whatwg.org/#dom-response-json
+            let data = required(host, args, 0)?;
+            let Some(text) = host.fetch_json_stringify(data)? else {
+                return Err(host.fetch_type_error("Response.json: the value is not JSON serializable"));
+            };
+            let init = response_init(host, args.get(1))?;
+            let body = BodyInput::Document { bytes: text.into_bytes(), content_type: "application/json".into() };
+            let value = ApiResponse::new(Some(body), init).map_err(|e| error(host, e))?;
+            host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value, None))
+        }
         O::ResponseRedirect => {
             let target = arg_units(host, args, 0)?;
             let status = if let Some(value) = args.get(1) {

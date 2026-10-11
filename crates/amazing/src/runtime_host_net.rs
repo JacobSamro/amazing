@@ -2,6 +2,8 @@
 use super::*;
 #[path="runtime_host_net/xhr_streaming.rs"]
 mod xhr_streaming;
+#[path="runtime_host_net/base64_globals.rs"]
+mod base64_globals;
 use xhr_streaming::XhrPrepared;
 use super::html::receiving_context::{ReceivingDocumentIdentity,receiving_document_client_from_state};
 use amazing_fetch::{ReceivingDocumentClient,xhr::{XhrServiceRequest,XhrUrlContext}};
@@ -39,6 +41,9 @@ pub(super) enum NetNativeEntry {
     CookieGet,
     CookieSet,
     CookieDeleteAll,
+    /// `window.atob` / `window.btoa`.
+    Atob,
+    Btoa,
 }
 
 #[derive(Clone, Copy)]
@@ -240,6 +245,7 @@ impl RuntimeBindingHost<'_> {
         self.js.global_env = env;
         self.install_websocket()?;
         self.install_document_cookie()?;
+        self.install_base64_globals()?;
         Ok(())
     }
 
@@ -259,6 +265,8 @@ impl RuntimeBindingHost<'_> {
             NetNativeEntry::CookieGet => self.document_cookie_get(),
             NetNativeEntry::CookieSet => self.document_cookie_set(args),
             NetNativeEntry::CookieDeleteAll => self.document_cookie_delete_all(),
+            NetNativeEntry::Atob => self.base64_invoke(false, args),
+            NetNativeEntry::Btoa => self.base64_invoke(true, args),
         }
     }
 
@@ -1427,7 +1435,13 @@ impl FetchHost for RuntimeBindingHost<'_> {
         let reject = self.js.binding_get_property(&promise, "reject")?;
         binding_call(self.js, &reject, &promise, &[reason]).map(Some)
     }
-    fn fetch_start(&mut self, request: ApiRequest, signal: AbortSignalId) -> Result<JsValue, Throw> {
+    fn fetch_start(&mut self, mut request: ApiRequest, signal: AbortSignalId) -> Result<JsValue, Throw> {
+        // Main fetch: an unset referrer is the client's document URL and, unless
+        // the caller chose one, the document's referrer policy.
+        let global = self.js.binding_global_object();
+        if let Ok(client) = self.xhr_receiving_client(&global) {
+            request.apply_fetch_receiving_client(&client);
+        }
         let mut context = ClientContext::default();
         context.now_unix = wall_clock_now_unix();
         let started = self.state.borrow_mut().net.fetch_network.start(request, context);
@@ -1517,6 +1531,16 @@ impl FetchHost for RuntimeBindingHost<'_> {
         self.js.binding_define_symbol_data_property(prototype,
             amazing_js::value::WellKnownSymbol::Iterator.symbol(), method,
             BindingPropertyFlags { writable: true, enumerable: false, configurable: true })
+    }
+    fn fetch_json_stringify(&mut self, value: &JsValue) -> Result<Option<String>, Throw> {
+        let json = self.js.binding_get_property(&self.js.binding_global_object(), "JSON")?;
+        let stringify = self.js.binding_get_property(&json, "stringify")?;
+        let result = binding_call(self.js, &stringify, &json, &[value.clone()])?;
+        if matches!(result, JsValue::Undefined) {
+            return Ok(None);
+        }
+        let units = self.js.binding_to_dom_string(&result)?;
+        Ok(Some(String::from_utf16_lossy(&units)))
     }
     fn fetch_json_parse(&mut self, text: &str) -> Result<JsValue, Throw> {
         let json = self

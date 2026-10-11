@@ -135,7 +135,7 @@ impl Xhr {
                 }
                 let mut headers = ApiHeaders::new(HeaderGuard::None);
                 for (name,value) in &head.headers {
-                    headers.append_existing(name,value).map_err(XhrError::from)?;
+                    headers.append_network(name,value).map_err(XhrError::from)?;
                 }
                 headers.set_guard(HeaderGuard::Immutable);
                 let url = head.final_url.split('#').next().unwrap_or("").to_owned();
