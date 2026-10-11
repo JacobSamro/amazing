@@ -1,0 +1,81 @@
+{
+ "schema": 1,
+ "ticket": "resume-batch7-8-9",
+ "date": "2026-10-11",
+ "published_base": "088c132d7e1b879789f9e44c0f81688f3d34188d",
+ "gated_source_commit": "d8052fa833c01133718a713ce0c2674d5e4e8e03",
+ "tickets": [
+  "0d7acf802 text: installed CJK fallback, text-transform application, language-aware default font",
+  "9a8e820b2 test262 host: IsHTMLDDA, $262.gc, $262.agent with shared-memory agents, CanBlockIsFalse",
+  "d8052fa83 html: native constructors and custom-element checkpoints, idle fast path"
+ ],
+ "workspace": {
+  "merged_head": {
+   "nextest": {
+    "passed": 5694,
+    "failed": 0,
+    "skipped": 17
+   },
+   "doctests": {
+    "passed": 39,
+    "failed": 0
+   }
+  },
+  "0d7acf802": {
+   "nextest_passed": 5577,
+   "failed": 0
+  },
+  "9a8e820b2": {
+   "nextest_passed": 5578,
+   "failed": 0
+  }
+ },
+ "test262": {
+  "shards": 16,
+  "timeout_seconds": 60,
+  "summary": {
+   "files": {
+    "fail": 312,
+    "pass": 53266,
+    "skipped": 294
+   },
+   "variants": {
+    "fail": 611,
+    "pass": 102307
+   }
+  },
+  "gained_files": 171,
+  "lost_files": 0,
+  "lost_variants": 0,
+  "baseline": "t262-16ffccc0-resume-batch6-20261011 (published 088c132d7)",
+  "result_sha256": "1c15711760931d17b28ce06aab26a82cc405a25f5c1409e668e7bdda64675897",
+  "notes": [
+   "unsupported went 171 -> 0: the host now provides every $262 feature the pinned suite uses",
+   "0d7acf802 gated alone: 53095 files, zero lost, result sha256 bba50e063b6be894077afd3455d6e740d01056d99580206bd546090fc89dcaac",
+   "9a8e820b2 alone: Test262 run did not complete (one of four boxes dropped the source upload, ssh 255); covered by this merged-head run"
+  ]
+ },
+ "lane_corpus": {
+  "text": {
+   "css-text": "237->244, 0 lost",
+   "css-ruby": "52->52, 0 lost",
+   "css-fonts": "29->29, 0 lost",
+   "integrator_sweep_088c132d7_vs_0d7acf802": {
+    "CSS2/normal-flow": "24->24",
+    "css-flexbox": "349->349",
+    "css-inline": "1->1",
+    "css-sizing": "99->99",
+    "css-tables": "60->60",
+    "lost": 0
+   }
+  },
+  "html": {
+   "wpt_dirs": "dom/, html/dom/, custom-elements/ (1001 files)",
+   "files": "410->457",
+   "subtests": "101239->102135",
+   "lost_files": 0,
+   "lost_subtests": 0,
+   "note": "measured by the lane on the pre-rebase fix commit c0608a5af; evidence compact in the commit predates the fast path, full pass-set hash in the lane gate summary"
+  }
+ }
+}
