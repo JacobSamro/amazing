@@ -85,8 +85,19 @@ fn intl_calendar_supported(value: &str) -> bool {
 }
 
 fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
+    let state = intl_date_create_state(i, args.first().unwrap_or(&JsValue::Undefined),
+        args.get(1).unwrap_or(&JsValue::Undefined), None)?;
+    intl_chain_construct(i, this, "DateTimeFormat", IntlState::DateTime(state))
+}
+
+// CreateDateTimeFormat. `mode` is the Temporal `toLocaleString` (required,
+// defaults) pair ("date" | "time" | "any", and "date" | "time" | "all" |
+// "year-month" | "month-day"); None is the plain Intl.DateTimeFormat
+// constructor, whose (any, date) defaulting keeps its own historical rule.
+fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &JsValue,
+    mode: Option<(&str, &str)>) -> Result<IntlDateState, Throw> {
+    let requested = intl_canonical_locale_list(i, locales)?;
+    let options = Some(options_arg).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
     let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
@@ -156,11 +167,39 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     // count as "something else was requested" -- see the intl402/
     // DateTimeFormat/prototype/*/temporal-plain*-formatting-timezonename.js
     // tests, which construct exactly that and expect a non-throwing result.
-    let ymd_defaulted = date_style.is_none() && time_style.is_none()
-        && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
-            hour.as_ref(), minute.as_ref(), second.as_ref()].iter().all(|field| field.is_none())
-        && fractional_second_digits.is_none();
-    if ymd_defaulted {
+    let mut hour = hour;
+    let mut minute = minute;
+    let mut second = second;
+    let ymd_defaulted = match mode {
+        None => date_style.is_none() && time_style.is_none()
+            && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
+                hour.as_ref(), minute.as_ref(), second.as_ref()].iter().all(|field| field.is_none())
+            && fractional_second_digits.is_none(),
+        Some((required, defaults)) => {
+            if (required == "date" && time_style.is_some()) || (required == "time" && date_style.is_some()) {
+                return Err(Throw::type_error("dateStyle/timeStyle does not apply to this Temporal type"));
+            }
+            let mut need = date_style.is_none() && time_style.is_none();
+            if matches!(required, "date" | "any")
+                && [weekday.as_ref(), year.as_ref(), month.as_ref(), day.as_ref()].iter().any(|f| f.is_some()) {
+                need = false;
+            }
+            if matches!(required, "time" | "any")
+                && ([day_period.as_ref(), hour.as_ref(), minute.as_ref(), second.as_ref()].iter().any(|f| f.is_some())
+                    || fractional_second_digits.is_some()) {
+                need = false;
+            }
+            if need {
+                let numeric = || Some("numeric".to_string());
+                if matches!(defaults, "date" | "all") { year = numeric(); month = numeric(); day = numeric(); }
+                if defaults == "year-month" { year = numeric(); month = numeric(); }
+                if defaults == "month-day" { month = numeric(); day = numeric(); }
+                if matches!(defaults, "time" | "all") { hour = numeric(); minute = numeric(); second = numeric(); }
+            }
+            need
+        }
+    };
+    if mode.is_none() && ymd_defaulted {
         year = Some("numeric".into());
         month = Some("numeric".into());
         day = Some("numeric".into());
@@ -182,12 +221,11 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     if let Some(value) = hc_retained { retained.push(("hc", value)); }
     if let Some(value) = nu_retained { retained.push(("nu", value)); }
     let resolved_locale = intl_locale_with_extensions(&locale, &retained);
-    let state = IntlDateState {
+    Ok(IntlDateState {
         locale, resolved_locale, calendar, numbering_system, time_zone,
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
         second, fractional_second_digits, time_zone_name, hour_cycle, ymd_defaulted,
-    };
-    intl_chain_construct(i, this, "DateTimeFormat", IntlState::DateTime(state))
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -277,7 +315,12 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
         date.push_str(&fields.join(if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) { "." } else { "/" }));
     }
     let mut time = String::new();
-    if let Some(hour) = &state.hour { time.push_str(if hour == "2-digit" { "HH" } else { "H" }); }
+    if let Some(hour) = &state.hour {
+        // CLDR 24-hour skeletons ("Hms", "Hm") use a two-digit hour in every
+        // locale this table covers except Japanese.
+        let two_digit_24h = ["h23", "h24"].contains(&state.hour_cycle.as_str()) && state.locale != "ja";
+        time.push_str(if hour == "2-digit" || two_digit_24h { "HH" } else { "H" });
+    }
     if let Some(minute) = &state.minute {
         if !time.is_empty() { time.push(':'); }
         // ECMA-402 keeps minute and second two-digit whenever they are part of
@@ -400,6 +443,25 @@ fn intl_temporal_adapt_state(state: &IntlDateState, kind: IntlTemporalKind) -> R
     let has_month = has_date;
     let has_day = matches!(kind, IntlTemporalKind::Date | IntlTemporalKind::DateTime | IntlTemporalKind::MonthDay);
     let mut adapted = state.clone();
+    if state.ymd_defaulted {
+        // Nothing was asked for explicitly: each Temporal type gets its own
+        // defaults (PlainDate: date, PlainTime: time, PlainDateTime: both,
+        // PlainYearMonth: year+month, PlainMonthDay: month+day) rather than
+        // the Date-oriented year/month/day the constructor synthesized.
+        for field in [&mut adapted.year, &mut adapted.month, &mut adapted.day,
+            &mut adapted.hour, &mut adapted.minute, &mut adapted.second] { *field = None; }
+        let numeric = || Some("numeric".to_string());
+        match kind {
+            IntlTemporalKind::Date => { adapted.year = numeric(); adapted.month = numeric(); adapted.day = numeric(); }
+            IntlTemporalKind::Time => { adapted.hour = numeric(); adapted.minute = numeric(); adapted.second = numeric(); }
+            IntlTemporalKind::DateTime => {
+                adapted.year = numeric(); adapted.month = numeric(); adapted.day = numeric();
+                adapted.hour = numeric(); adapted.minute = numeric(); adapted.second = numeric();
+            }
+            IntlTemporalKind::YearMonth => { adapted.year = numeric(); adapted.month = numeric(); }
+            IntlTemporalKind::MonthDay => { adapted.month = numeric(); adapted.day = numeric(); }
+        }
+    }
     adapted.time_zone_name = None;
     if !has_date { adapted.date_style = None; }
     if !has_time { adapted.time_style = None; }
@@ -436,10 +498,15 @@ fn intl_temporal_adapt_state(state: &IntlDateState, kind: IntlTemporalKind) -> R
 // of the five implemented Temporal Plain* kinds, carrying its own
 // already-computed civil date (never routed through millisecond TimeClip,
 // so it works past the legacy Date range -- see days_from_civil above).
-enum IntlDateInput { Legacy(f64), Temporal(IntlTemporalKind, IntlCivilDate, String) }
+enum IntlDateInput { Legacy(f64), Instant(f64), Temporal(IntlTemporalKind, IntlCivilDate, String) }
 
 fn intl_date_input(i: &mut Interpreter, value: Option<&JsValue>) -> Result<IntlDateInput, Throw> {
     if let Some(value @ JsValue::Object(_)) = value {
+        // HandleDateTimeValue: a Temporal.Instant formats as its epoch time
+        // (ZonedDateTime deliberately falls through to the valueOf TypeError).
+        if let Ok(record) = std_epoch_record(value, Some(StdEpochKind::Instant)) {
+            return Ok(IntlDateInput::Instant(record.epoch_ns.div_euclid(1_000_000) as f64));
+        }
         if let Some((kind, date, calendar)) = intl_temporal_lookup(value) {
             return Ok(IntlDateInput::Temporal(kind, date, calendar));
         }
@@ -539,9 +606,21 @@ fn intl_date_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) 
     Ok(function)
 }
 
+// A Temporal.Instant formats with both date and time defaults (required "any",
+// defaults "all"), unlike a Date, whose bare format is date-only.
+fn intl_instant_state(state: &IntlDateState) -> IntlDateState {
+    let mut instant = state.clone();
+    if instant.ymd_defaulted {
+        let numeric = || Some("numeric".to_string());
+        instant.hour = numeric(); instant.minute = numeric(); instant.second = numeric();
+    }
+    instant
+}
+
 fn intl_render_input(state: &IntlDateState, input: IntlDateInput) -> Result<Vec<(&'static str, String)>, Throw> {
     match input {
         IntlDateInput::Legacy(milliseconds) => Ok(intl_render_date(state, milliseconds)),
+        IntlDateInput::Instant(milliseconds) => Ok(intl_render_date(&intl_instant_state(state), milliseconds)),
         IntlDateInput::Temporal(kind, date, _calendar) => Ok(intl_render_civil(&intl_temporal_adapt_state(state, kind)?, date, 0)),
     }
 }
@@ -554,6 +633,9 @@ fn intl_date_range_input(
     state: &IntlDateState, left: IntlDateInput, right: IntlDateInput,
 ) -> Result<Vec<(&'static str, String, &'static str)>, Throw> {
     match (left, right) {
+        (IntlDateInput::Instant(start), IntlDateInput::Instant(end)) => {
+            Ok(intl_date_range_parts(&intl_instant_state(state), start, end))
+        }
         (IntlDateInput::Legacy(start), IntlDateInput::Legacy(end)) => {
             if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
             Ok(intl_date_range_parts(state, start, end))
@@ -701,7 +783,7 @@ mod intl_date_tests {
     fn iana_zone_observes_dst_transition() {
         let mut i = Interpreter::new();
         let value = i.run_script("let d=new Intl.DateTimeFormat('en',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hourCycle:'h23'}); d.format(1710053940000)+'|'+d.format(1710054000000)").unwrap();
-        assert_eq!(i.to_string(&value).unwrap(), "1:59|3:00");
+        assert_eq!(i.to_string(&value).unwrap(), "01:59|03:00");
     }
 
     #[test]
@@ -710,4 +792,54 @@ mod intl_date_tests {
         let value = i.run_script("let d=new Intl.DateTimeFormat('en',{timeZone:'UTC',year:'numeric',month:'short',day:'numeric'}); d.formatRangeToParts(1546473600000,1546646400000).map(p=>p.type+':'+p.source).join('|')").unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "month:shared|literal:shared|day:startRange|literal:shared|day:endRange|literal:shared|year:shared");
     }
+}
+
+// Temporal.*.prototype.toLocaleString (locales, options): CreateDateTimeFormat
+// with the type's (required, defaults) pair, the calendar compatibility check,
+// then the same adapted rendering DateTimeFormat.prototype.format applies to a
+// Temporal value. `zone` is the ZonedDateTime's own time zone, if any.
+fn intl_temporal_to_locale_string(i: &mut Interpreter, value: &JsValue, locales: &JsValue, options: &JsValue) -> Result<JsValue, Throw> {
+    let plain = intl_temporal_lookup(value);
+    let instant = std_epoch_record(value, Some(StdEpochKind::Instant)).ok();
+    let zoned = std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)).ok();
+    let mode = match plain.as_ref().map(|(kind, ..)| *kind) {
+        Some(IntlTemporalKind::Date) => ("date", "date"),
+        Some(IntlTemporalKind::Time) => ("time", "time"),
+        Some(IntlTemporalKind::YearMonth) => ("date", "year-month"),
+        Some(IntlTemporalKind::MonthDay) => ("date", "month-day"),
+        _ => ("any", "all"),
+    };
+    if zoned.is_some() && !options.is_undefined() && options.is_object() {
+        let zone = i.get_prop(options, "timeZone")?;
+        if !zone.is_undefined() {
+            return Err(Throw::type_error("ZonedDateTime.toLocaleString does not accept a timeZone option"));
+        }
+    }
+    let mut state = intl_date_create_state(i, locales, options, Some(mode))?;
+    if let Some(data) = &zoned {
+        state.time_zone = data.zone_id.clone();
+        if state.time_zone_name.is_none() && state.date_style.is_none() && state.time_style.is_none() {
+            state.time_zone_name = Some("short".to_string());
+        }
+    }
+    if let Some((kind, date, calendar)) = plain {
+        // PlainYearMonth/PlainMonthDay have no calendar-independent reading,
+        // so even the ISO calendar must match the formatter's own.
+        let strict = matches!(kind, IntlTemporalKind::YearMonth | IntlTemporalKind::MonthDay);
+        if (calendar != "iso8601" || strict) && calendar != state.calendar {
+            return Err(Throw::range_error("Temporal calendar does not match the DateTimeFormat calendar"));
+        }
+        let parts = intl_render_input(&state, IntlDateInput::Temporal(kind, date, calendar))?;
+        return Ok(JsValue::str(parts.iter().map(|(_, text)| text.as_str()).collect::<String>()));
+    }
+    let epoch_ns = if let Some(data) = instant.as_ref().or(zoned.as_ref()) { data.epoch_ns } else {
+        return Err(Throw::type_error("incompatible Temporal receiver"));
+    };
+    if let Some(data) = &zoned {
+        if data.calendar != "iso8601" && data.calendar != state.calendar {
+            return Err(Throw::range_error("Temporal calendar does not match the DateTimeFormat calendar"));
+        }
+    }
+    let parts = intl_render_input(&state, IntlDateInput::Instant(epoch_ns.div_euclid(1_000_000) as f64))?;
+    Ok(JsValue::str(parts.iter().map(|(_, text)| text.as_str()).collect::<String>()))
 }

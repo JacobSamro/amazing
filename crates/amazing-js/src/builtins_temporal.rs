@@ -1859,8 +1859,12 @@ fn std_temporal_to_json(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> 
     std_temporal_to_string(i, this, vec![])
 }
 
-fn std_temporal_to_locale_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    std_temporal_to_string(i, this, vec![])
+fn std_temporal_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let data = std_temporal_record(&this, None)?;
+    // Duration.prototype.toLocaleString formats through Intl.DurationFormat,
+    // which is not wired here; it keeps returning the ISO string.
+    if data.kind == StdTemporalKind::Duration { return std_temporal_to_string(i, this, vec![]); }
+    intl_temporal_to_locale_string(i, &this, &std_reflect_arg(&args, 0), &std_reflect_arg(&args, 1))
 }
 
 fn std_temporal_value_of(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {

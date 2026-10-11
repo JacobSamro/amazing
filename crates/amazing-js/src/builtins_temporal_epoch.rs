@@ -833,15 +833,11 @@ fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
     else { Ok(format!("{date}T{time}{}[{}]", std_epoch_offset_text(std_epoch_offset(data)),
         data.zone_id)) }
 }
-// toLocaleString(locale, options) takes an Intl.DateTimeFormat-style options
-// bag (dateStyle/timeStyle/...), NOT toString's own (calendarName/offset/
-// timeZoneName/...) options -- passing it straight through to
-// std_epoch_to_string would misinterpret it (or reject a non-object locale
-// argument as an invalid Temporal option). No locale-sensitive formatting is
-// implemented; this only has to return *a* string, per the spec's minimal
-// requirement absent a full Intl.DateTimeFormat.
-fn std_epoch_to_locale_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    std_epoch_to_string(i, this, vec![])
+// toLocaleString(locales, options) takes Intl.DateTimeFormat constructor
+// options, not toString's own; see intl_temporal_to_locale_string.
+fn std_epoch_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    std_epoch_record(&this, None)?;
+    intl_temporal_to_locale_string(i, &this, &std_reflect_arg(&args, 0), &std_reflect_arg(&args, 1))
 }
 
 fn std_epoch_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
