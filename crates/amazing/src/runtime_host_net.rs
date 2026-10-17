@@ -151,6 +151,7 @@ pub(super) struct NetRuntime {
     pub(super) fetch_resolver_capture: Option<(JsValue, JsValue)>,
     fetch_pending: Vec<(ServiceId, JsValue, JsValue, AbortSignalId)>,
     fetch_pump_scheduled: bool,
+    fetch_head: std::collections::HashSet<ServiceId>,
     xhr_pending: Vec<XhrPending>,
     xhr_prepared: Vec<XhrPrepared>,
     fetch_event_inbox: VecDeque<ServiceEvent>,
@@ -176,6 +177,7 @@ impl NetRuntime {
             fetch_resolver_capture: None,
             fetch_pending: Vec::new(),
             fetch_pump_scheduled: false,
+            fetch_head: std::collections::HashSet::new(),
             xhr_pending: Vec::new(),
             xhr_prepared: Vec::new(),
             fetch_event_inbox: VecDeque::new(),
@@ -349,7 +351,11 @@ impl RuntimeBindingHost<'_> {
                 Err(ApiError::Aborted)
             } else { result };
             match result {
-                Ok(response) => {
+                Ok(mut response) => {
+                    let head = self.state.borrow_mut().net.fetch_head.remove(&id);
+                    if head || matches!(response.status, 101 | 103 | 204 | 205 | 304) {
+                        response.body = amazing_fetch::api::ApiBody::empty();
+                    }
                     let value = self.fetch_allocate(FetchInterface::Response, FetchObject::Response(response, Some(signal)))?;
                     binding_call(self.js, &resolve, &JsValue::Undefined, &[value])?;
                 }
@@ -1457,6 +1463,7 @@ impl FetchHost for RuntimeBindingHost<'_> {
         }
         let mut context = ClientContext::default();
         context.now_unix = wall_clock_now_unix();
+        let is_head = request.method() == "HEAD";
         let started = self.state.borrow_mut().net.fetch_network.start(request, context);
         let id = match started {
             Ok(id) => id,
@@ -1476,6 +1483,7 @@ impl FetchHost for RuntimeBindingHost<'_> {
         let promise = self.js.binding_construct(&promise_class, vec![executor])?;
         let (resolve, reject) = self.state.borrow_mut().net.fetch_resolver_capture.take()
             .ok_or_else(|| Throw::type_error("Promise did not supply resolvers"))?;
+        if is_head { self.state.borrow_mut().net.fetch_head.insert(id); }
         self.state.borrow_mut().net.fetch_pending.push((id, resolve, reject, signal));
         self.schedule_fetch_pump()?;
         Ok(promise)
@@ -1741,6 +1749,9 @@ impl FetchHost for RuntimeBindingHost<'_> {
         self.js.binding_define_data_property(&result, "value", value, BindingPropertyFlags::METHOD)?;
         self.js.binding_define_data_property(&result, "done", JsValue::Bool(done), BindingPropertyFlags::METHOD)?;
         Ok(result)
+    }
+    fn fetch_stream_hook(&mut self, name: &str, args: &[JsValue]) -> Result<Option<JsValue>, Throw> {
+        self.streams_hook(name, args)
     }
     fn fetch_sequence(&mut self, value: &JsValue) -> Result<Option<Vec<Vec<JsValue>>>, Throw> {
         let JsValue::Object(object) = value else { return Ok(None); };

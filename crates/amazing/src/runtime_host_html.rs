@@ -813,6 +813,7 @@ impl RuntimeBindings {
             adapter.install_window_event_target()?;
             adapter.install_selection_global()?;
             adapter.install_net()?;
+            adapter.install_streams()?;
             adapter.install_module_loader()?;
             adapter.install_storage_interfaces()?;
             adapter.install_messaging()?;

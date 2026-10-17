@@ -59,6 +59,10 @@ use runtime_host_messaging::MessagingOp;
 mod runtime_host_encoding;
 use runtime_host_encoding::EncodingOp;
 
+#[path = "runtime_host_streams.rs"]
+mod runtime_host_streams;
+use runtime_host_streams::StreamsOp;
+
 use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
 use self::compositor::{CanvasObject, CanvasTarget};
@@ -104,6 +108,7 @@ enum NativeEntry {
     StorageLockSettled(u64, bool),
     IntegratorAssist(IaNativeEntry),
     Encoding(EncodingOp),
+    Streams(StreamsOp),
     CurrentScript,
 }
 
@@ -171,6 +176,7 @@ struct BindingState {
     pending_form_selection_events: Vec<NodeIdx>,
     messaging: Option<runtime_host_messaging::MessagingRealm>,
     encoding: Option<runtime_host_encoding::EncodingRealm>,
+    streams_hooks: HashMap<RealmHandle, JsValue>,
     net: NetRuntime,
     integrator_assist: IaRuntime,
     modules: modules::ModuleRuntime,
@@ -810,6 +816,7 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             NativeEntry::IntegratorAssist(entry) => adapter.invoke_integrator_assist(entry, this, &args),
             NativeEntry::CurrentScript => adapter.module_current_script(this),
             NativeEntry::Encoding(op) => adapter.invoke_encoding(op, this, &args),
+            NativeEntry::Streams(op) => adapter.invoke_streams(op, &args),
         }
     })
 }
@@ -869,6 +876,7 @@ pub(crate) fn install(
         pending_form_selection_events: Vec::new(),
         messaging: None,
         encoding: None,
+        streams_hooks: HashMap::new(),
         net: NetRuntime::new().map_err(|error|Throw::type_error(format!("Native pending network initialization failed: {error}")))?,
         integrator_assist: IaRuntime::new(),
         modules: modules::ModuleRuntime::new(),
@@ -920,6 +928,7 @@ pub(crate) fn install(
     fresh.declare_lexical("sessionStorage",session_storage,false)?;
     adapter.js.global_env = fresh;
     adapter.install_net()?;
+    adapter.install_streams()?;
     adapter.install_module_loader()?;
     // Installed Window uses genuine realm and event-target identity. The
     // legacy DOM-node marker intercepts ordinary body/documentElement names.

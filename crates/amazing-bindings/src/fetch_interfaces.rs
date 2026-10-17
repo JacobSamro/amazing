@@ -238,6 +238,10 @@ pub trait FetchHost: BindingHost {
     fn fetch_header_iterator(&mut self, source: Rc<RefCell<FetchObject>>,
         kind: HeaderIterationKind) -> Result<Self::Value, Self::Error>;
     fn fetch_iterator_result(&mut self, value: Self::Value, done: bool) -> Result<Self::Value, Self::Error>;
+    /// Streams API glue (runtime_host_streams). `None` when the host has no
+    /// Streams support; hook names are defined by the host's prelude.
+    fn fetch_stream_hook(&mut self, _name: &str, _args: &[Self::Value])
+        -> Result<Option<Self::Value>, Self::Error> { Ok(None) }
     fn fetch_sequence(&mut self, value: &Self::Value) -> Result<Option<Vec<Vec<Self::Value>>>, Self::Error>;
 }
 
@@ -613,6 +617,11 @@ fn body_input<H: FetchHost>(host: &mut H, value: &H::Value) -> Result<Option<Bod
     if let Some(bytes) = host.fetch_buffer_source_bytes(value)? {
         return Ok(Some(BodyInput::Bytes(bytes)));
     }
+    if let Some(flag) = host.fetch_stream_hook("isStream", std::slice::from_ref(value))? {
+        if host.to_boolean(&flag) {
+            return Ok(Some(BodyInput::Bytes(Vec::new())));
+        }
+    }
     if host.platform_object(value, InterfaceBrand::BLOB).is_some() {
         return host.blob_record(value).map(|v| Some(BodyInput::Blob(v)));
     }
@@ -776,6 +785,36 @@ fn response_init<H: FetchHost>(
 fn wrap_headers<H: FetchHost>(host: &mut H, headers: FetchHeaders) -> Result<H::Value, H::Error> {
     host.fetch_allocate(FetchInterface::Headers, FetchObject::Headers(headers))
 }
+fn stream_constructed<H: FetchHost>(host: &mut H, object: &H::Value, kind: &str,
+    input: Option<&H::Value>, init: Option<&H::Value>) -> Result<(), H::Error> {
+    let kind = string(host, kind)?;
+    let undefined = host.undefined();
+    let input = input.cloned().unwrap_or_else(|| undefined.clone());
+    let init = init.cloned().unwrap_or(undefined);
+    host.fetch_stream_hook("constructed", &[object.clone(), kind, input, init])?;
+    Ok(())
+}
+fn stream_body<H: FetchHost>(host: &mut H, receiver: &H::Value, present: bool, used: bool)
+    -> Result<H::Value, H::Error> {
+    let present = host.boolean(present);
+    let used = host.boolean(used);
+    match host.fetch_stream_hook("body", &[receiver.clone(), present, used])? {
+        Some(value) => Ok(value),
+        None => Ok(host.null()),
+    }
+}
+fn stream_disturbed<H: FetchHost>(host: &mut H, receiver: &H::Value, used: bool) -> Result<H::Value, H::Error> {
+    if !used {
+        if let Some(flag) = host.fetch_stream_hook("disturbed", std::slice::from_ref(receiver))? {
+            if host.to_boolean(&flag) { return Ok(host.boolean(true)); }
+        }
+    }
+    Ok(host.boolean(used))
+}
+fn content_type_of(headers: &ApiHeaders) -> Option<String> {
+    let name: Vec<u16> = "content-type".encode_utf16().collect();
+    headers.get(&name).ok().flatten()
+}
 fn body<H: FetchHost>(
     host: &mut H,
     op: FetchOperation,
@@ -791,6 +830,28 @@ fn body<H: FetchHost>(
     if let Some(signal) = signal {
         if let Some(rejection) = host.fetch_body_abort_rejection(signal)? {
             return Ok(rejection);
+        }
+    }
+    {
+        let method = match op {
+            FetchOperation::BodyText => "text",
+            FetchOperation::BodyJson => "json",
+            FetchOperation::BodyBlob => "blob",
+            FetchOperation::BodyArrayBuffer => "arrayBuffer",
+            FetchOperation::BodyFormData => "formData",
+            _ => "bytes",
+        };
+        let mime = match &*record.borrow() {
+            FetchObject::Request(request, _) => content_type_of(&request.headers),
+            FetchObject::Response(response, _) => content_type_of(&response.headers),
+            _ => None,
+        };
+        let method = string(host, method)?;
+        let mime = match mime { Some(m) => string(host, &m)?, None => host.undefined() };
+        if let Some(result) = host.fetch_stream_hook("consume", &[receiver.clone(), method, mime])? {
+            if !host.is_undefined(&result) {
+                return Ok(result);
+            }
         }
     }
     let result = {
@@ -948,7 +1009,9 @@ pub fn invoke<H: FetchHost>(
         }
         O::RequestConstructor => {
             let (value, signal) = request(host, args)?;
-            host.fetch_allocate(FetchInterface::Request, FetchObject::Request(value, signal))
+            let object = host.fetch_allocate(FetchInterface::Request, FetchObject::Request(value, signal))?;
+            stream_constructed(host, &object, "request", args.first(), args.get(1))?;
+            Ok(object)
         }
         O::Fetch => {
             if let Some(promise) = host.fetch_local_file(args)? {
@@ -988,10 +1051,13 @@ pub fn invoke<H: FetchHost>(
             };
             match op {
                 O::RequestClone => {
+                    host.fetch_stream_hook("cloneCheck", std::slice::from_ref(&receiver))?;
                     let value = request.clone_request().map_err(|e| error(host, e))?;
                     let signal = host.with_dom(|dom| dom.create_dependent_abort_signal(&[*signal]))?;
                     host.abort_signal_created(signal)?;
-                    host.fetch_allocate(FetchInterface::Request, FetchObject::Request(value, signal))
+                    let clone = host.fetch_allocate(FetchInterface::Request, FetchObject::Request(value, signal))?;
+                    host.fetch_stream_hook("cloned", &[receiver.clone(), clone.clone()])?;
+                    Ok(clone)
                 }
                 O::RequestMethod => string(host, request.method()),
                 O::RequestUrl => string(host, &request.url().serialize()),
@@ -1048,8 +1114,17 @@ pub fn invoke<H: FetchHost>(
                 ),
                 O::RequestIntegrity => string(host, &request.integrity),
                 O::RequestKeepalive => Ok(host.boolean(request.keepalive)),
-                O::RequestBody => Ok(host.null()),
-                O::RequestBodyUsed => Ok(host.boolean(request.body_used())),
+                O::RequestBody => {
+                    let present = request.body.shared_present();
+                    let used = request.body_used();
+                    drop(object);
+                    stream_body(host, &receiver, present, used)
+                }
+                O::RequestBodyUsed => {
+                    let used = request.body_used();
+                    drop(object);
+                    stream_disturbed(host, &receiver, used)
+                }
                 O::RequestSignal => {
                     let key = PlatformKey { arena: host.node_platform_key(host.current_document()).arena,
                         slot: signal.0 as u64, generation: 1 };
@@ -1066,7 +1141,9 @@ pub fn invoke<H: FetchHost>(
                 .flatten();
             let init = response_init(host, args.get(1))?;
             let value = ApiResponse::new(body, init).map_err(|e| error(host, e))?;
-            host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value, None))
+            let object = host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value, None))?;
+            stream_constructed(host, &object, "response", args.first(), None)?;
+            Ok(object)
         }
         O::ResponseError => host.fetch_allocate(
             FetchInterface::Response,
@@ -1112,8 +1189,12 @@ pub fn invoke<H: FetchHost>(
             };
             match op {
                 O::ResponseClone => {
+                    host.fetch_stream_hook("cloneCheck", std::slice::from_ref(&receiver))?;
                     let value = response.clone_response().map_err(|e| error(host, e))?;
-                    host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value, *signal))
+                    let signal = *signal;
+                    let clone = host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value, signal))?;
+                    host.fetch_stream_hook("cloned", &[receiver.clone(), clone.clone()])?;
+                    Ok(clone)
                 }
                 O::ResponseType => string(
                     host,
@@ -1132,8 +1213,17 @@ pub fn invoke<H: FetchHost>(
                 O::ResponseStatusText => string(host, &response.status_text),
                 O::ResponseOk => Ok(host.boolean(response.ok())),
                 O::ResponseHeaders => wrap_headers(host, FetchHeaders::Response(record.clone())),
-                O::ResponseBody => Ok(host.null()),
-                O::ResponseBodyUsed => Ok(host.boolean(response.body_used())),
+                O::ResponseBody => {
+                    let present = response.body.shared_present();
+                    let used = response.body_used();
+                    drop(object);
+                    stream_body(host, &receiver, present, used)
+                }
+                O::ResponseBodyUsed => {
+                    let used = response.body_used();
+                    drop(object);
+                    stream_disturbed(host, &receiver, used)
+                }
                 _ => unreachable!(),
             }
         }
