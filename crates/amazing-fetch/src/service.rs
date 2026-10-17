@@ -841,6 +841,13 @@ impl NetworkService {
         } else {
             String::new()
         };
+        // Fetch: a "default"-mode request carrying a conditional header is treated as "no-store".
+        if request.cache == ApiCache::Default
+            && ["if-none-match", "if-modified-since", "if-unmodified-since", "if-match", "if-range"]
+                .iter().any(|name| request.headers.get_string(name).ok().flatten().is_some())
+        {
+            request.cache = ApiCache::NoStore;
+        }
         if matches!(request.cache, ApiCache::NoCache | ApiCache::NoStore) {
             if request.headers.get_string("cache-control")?.is_none() {
                 let value = if request.cache == ApiCache::NoCache { "max-age=0" } else { "no-cache" };
@@ -852,10 +859,11 @@ impl NetworkService {
         }
         let headers = request.headers.to_header_list()?;
         let cacheable = method == "GET" && matches!(request.cache,
-            ApiCache::Default | ApiCache::NoCache | ApiCache::Reload);
+            ApiCache::Default | ApiCache::NoCache | ApiCache::Reload | ApiCache::ForceCache);
         let mut revalidating = false;
         let mut conditional_headers = HeaderList::default();
-        if cacheable && request.cache != ApiCache::Reload {
+        let mut served: Option<CacheResponse> = None;
+        if (cacheable || request.cache == ApiCache::OnlyIfCached) && request.cache != ApiCache::Reload {
             let mut lookup_headers = headers.clone();
             if request.cache == ApiCache::NoCache {
                 lookup_headers.append("Cache-Control", "no-cache").map_err(ApiError::Network)?;
@@ -866,70 +874,99 @@ impl NetworkService {
                 headers: &lookup_headers,
                 cookie: &cookie,
             };
-            match self
-                .cache
-                .lookup(&cache_request, context.now_unix)
-                .map_err(|_| ApiError::Network(FetchError::Transport))?
-            {
-                CacheLookup::Fresh(entry) => {
-                    if request
-                        .response_body_limit
-                        .is_some_and(|limit| entry.response.body.len() > limit)
-                    {
-                        return Err(ApiError::Network(FetchError::ResponseTooLarge));
+            if matches!(request.cache, ApiCache::ForceCache | ApiCache::OnlyIfCached) {
+                // Any stored representation is used, stale or not; only-if-cached
+                // never reaches the network.
+                match self.cache.lookup_stored(&cache_request)
+                    .map_err(|_| ApiError::Network(FetchError::Transport))? {
+                    Some(entry) => {
+                        if request.response_body_limit.is_some_and(|limit| entry.response.body.len() > limit) {
+                            return Err(ApiError::Network(FetchError::ResponseTooLarge));
+                        }
+                        served = Some(entry.response_at(context.now_unix));
                     }
-                    let cached = entry.response_at(context.now_unix);
-                    let mut policy = request.policy_request()?;
-                    policy.security = context.security;
-                    policy.csp = context.csp.clone();
-                    policy.csp_destination = context.csp_destination;
-                    let prepared=policy.prepare();
-                    *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
-                    let plan=prepared.map_err(ApiError::Network)?;
-                    let internal = InternalResponse {
-                        // Fetch HTTP-network-or-cache step14 applies the real
-                        // current hop decision after selecting a stored response.
-                        request_includes_credentials: plan.credentials,
-                        status: cached.status,
-                        status_text: String::new(),
-                        headers: cached.headers,
-                        body: Some(cached.body),
-                    };
-                    if let Some(settings)=&coep_reporting {
-                        let mut reports=Vec::new();
-                        self.emit_coep_response_reports(id,settings,&policy,&internal.headers,internal.request_includes_credentials,internal.status,now,&mut reports);
-                        self.ready.extend(reports);
-                    }
-                    let metadata = crate::api::NavigationResponseMetadata::capture(
-                        &policy, &internal, plan.referrer.as_deref());
-                    let result = crate::cors::filter_response_with_csp_progress(&policy, &internal, progress)
-                        .map_err(ApiError::Network)
-                        .and_then(ApiResponse::from_policy)
-                        .map(|mut response| { response.navigation_metadata = metadata.map(|head| head.with_csp_receipt(response.csp_provenance.as_ref())); response });
-                    self.ready.push(ServiceEvent::Finished { id, result });
-                    return Ok(id);
+                    None if request.cache == ApiCache::OnlyIfCached =>
+                        return Err(ApiError::Network(FetchError::Transport)),
+                    None => {}
                 }
-                CacheLookup::Validate {
-                    entry,
-                    headers: validators,
-                } => {
-                    if request
-                        .response_body_limit
-                        .is_some_and(|limit| entry.response.body.len() > limit)
-                    {
-                        return Err(ApiError::Network(FetchError::ResponseTooLarge));
+            } else {
+                match self
+                    .cache
+                    .lookup(&cache_request, context.now_unix)
+                    .map_err(|_| ApiError::Network(FetchError::Transport))?
+                {
+                    CacheLookup::Fresh(entry) => {
+                        if request
+                            .response_body_limit
+                            .is_some_and(|limit| entry.response.body.len() > limit)
+                        {
+                            return Err(ApiError::Network(FetchError::ResponseTooLarge));
+                        }
+                        served = Some(entry.response_at(context.now_unix));
                     }
-                    for (name, value) in validators.iter() {
-                        if headers.get(name).is_none() {
-                            conditional_headers
-                                .append(name, value)
-                                .map_err(ApiError::Network)?;
-                            revalidating = true;
+                    CacheLookup::Validate {
+                        entry,
+                        headers: validators,
+                    } => {
+                        if request
+                            .response_body_limit
+                            .is_some_and(|limit| entry.response.body.len() > limit)
+                        {
+                            return Err(ApiError::Network(FetchError::ResponseTooLarge));
+                        }
+                        for (name, value) in validators.iter() {
+                            if headers.get(name).is_none() {
+                                conditional_headers
+                                    .append(name, value)
+                                    .map_err(ApiError::Network)?;
+                                revalidating = true;
+                            }
+                        }
+                    }
+                    CacheLookup::Miss => {
+                        // `Cache-Control: only-if-cached` on the request: unsatisfiable -> 504.
+                        if crate::cache::request_only_if_cached(&headers) {
+                            served = Some(CacheResponse {
+                                request_includes_credentials: false,
+                                status: 504,
+                                headers: HeaderList::default(),
+                                body: Vec::new(),
+                            });
                         }
                     }
                 }
-                CacheLookup::Miss => {}
             }
+        }
+        if let Some(cached) = served {
+            let mut policy = request.policy_request()?;
+            policy.security = context.security;
+            policy.csp = context.csp.clone();
+            policy.csp_destination = context.csp_destination;
+            let prepared=policy.prepare();
+            *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
+            let plan=prepared.map_err(ApiError::Network)?;
+            let internal = InternalResponse {
+                // Fetch HTTP-network-or-cache step14 applies the real
+                // current hop decision after selecting a stored response.
+                request_includes_credentials: plan.credentials,
+                status: cached.status,
+                status_text: crate::cache::reason_phrase(cached.status).into(),
+                headers: cached.headers,
+                body: Some(cached.body),
+            };
+            if let Some(settings)=&coep_reporting {
+                let mut reports=Vec::new();
+                self.emit_coep_response_reports(id,settings,&policy,&internal.headers,internal.request_includes_credentials,internal.status,now,&mut reports);
+                self.ready.extend(reports);
+            }
+            let metadata = crate::api::NavigationResponseMetadata::capture(
+                &policy, &internal, plan.referrer.as_deref());
+            let result = crate::cors::filter_response_with_csp_progress(&policy, &internal, progress)
+                .map_err(ApiError::Network)
+                .and_then(ApiResponse::from_policy)
+                .map(|mut response| { response.navigation_metadata = metadata.map(|head| head.with_csp_receipt(response.csp_provenance.as_ref())); response });
+            self.ready.push(ServiceEvent::Finished { id, result });
+            return Ok(id);
         }
         let pending = PendingFetchApi::start_with_cache_progress(
             &mut request,
@@ -1253,11 +1290,12 @@ impl NetworkService {
                                 headers: &task.headers,
                                 cookie: &task.cookie,
                             };
-                            let updated = self.cache.update_304(
+                            let updated = self.cache.update_304_revalidated(
                                     &request,
                                     response_headers,
                                     task.context.now_unix,
                                     task.context.now_unix,
+                                    task.pending.request_includes_credentials(),
                                 );
                             if updated.as_ref().is_ok_and(Option::is_some) {
                                 self.persist_cache();
@@ -1270,7 +1308,7 @@ impl NetworkService {
                                     let internal = InternalResponse {
                                         request_includes_credentials: task.pending.request_includes_credentials(),
                                         status: merged.status,
-                                        status_text: String::new(),
+                                        status_text: crate::cache::reason_phrase(merged.status).into(),
                                         headers: merged.headers,
                                         body: Some(merged.body),
                                     };

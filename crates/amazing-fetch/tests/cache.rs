@@ -557,3 +557,31 @@ fn storage_seam_restores_owned_entries_and_rechecks_limits() {
         Err(CacheError::TooLarge)
     ));
 }
+
+#[test]
+fn revalidated_304_without_validators_updates_the_only_candidate_and_request_directives_apply() {
+    let mut cache = private();
+    let empty = fields(&[]);
+    let req = request("https://example.test/b", &empty, "");
+    cache
+        .store(&req, response(&[("Cache-Control", "no-cache"), ("ETag", "\"v1\"")], b"body"), 0, 0)
+        .unwrap();
+    let not_modified = fields(&[("Content-Length", "0"), ("Test-Header", "B")]);
+    // The strict entry point still refuses a validator-less 304.
+    assert!(cache.update_304(&req, &not_modified, 1, 1).unwrap().is_none());
+    // A different credentials mode may not adopt it.
+    assert!(cache.update_304_revalidated(&req, &not_modified, 1, 1, false).unwrap().is_none());
+    let merged = cache.update_304_revalidated(&req, &not_modified, 1, 1, true).unwrap().unwrap();
+    assert_eq!(merged.body, b"body");
+    assert_eq!(merged.headers.get("test-header").as_deref(), Some("B"));
+    // Request Cache-Control: min-fresh and only-if-cached.
+    let req2 = request("https://example.test/c", &empty, "");
+    cache.store(&req2, response(&[("Cache-Control", "max-age=100")], b"c"), 0, 0).unwrap();
+    let min_fresh = fields(&[("Cache-Control", "min-fresh=200")]);
+    assert!(matches!(cache.lookup(&request("https://example.test/c", &min_fresh, ""), 1).unwrap(),
+        CacheLookup::Validate { .. }));
+    let only = fields(&[("Cache-Control", "only-if-cached")]);
+    assert!(matches!(cache.lookup(&request("https://example.test/none", &only, ""), 1).unwrap(),
+        CacheLookup::Miss));
+    assert!(amazing_fetch::cache::request_only_if_cached(&only));
+}

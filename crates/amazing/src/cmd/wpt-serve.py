@@ -71,6 +71,12 @@ def main():
         httpd = server.WebTestHttpd(host='127.0.0.1', port=0, doc_root=str(root),
                                     routes=routes.routes, config=config)
         httpd.start()
+        # Pages reach this server as http://web-platform.test (port 80, routed by
+        # AMAZING_WPT_SHIM_ADDR). wptserve builds absolute URLs from the server's own
+        # port, so advertise 80 or Location/Content-Location would leave the page origin.
+        inner = getattr(httpd, 'httpd', None)
+        if inner is not None and hasattr(inner, 'server_address'):
+            inner.server_address = (inner.server_address[0], 80)
         print('ADDR 127.0.0.1:%d' % httpd.port, flush=True)
         sys.stdin.read()
         httpd.stop()

@@ -273,14 +273,23 @@ impl<S: CacheStorage> CacheStore<S> {
         let cc = directives(&entry.response.headers);
         let age = entry.current_age(now);
         let lifetime = entry.freshness_lifetime(self.kind);
-        let request_fresh = req_cc.max_age.is_none_or(|max| age <= max);
+        let request_fresh = req_cc.max_age.is_none_or(|max| age < max);
+        let min_fresh = req_cc.min_fresh.unwrap_or(0);
+        let fresh = age.saturating_add(min_fresh) < lifetime;
+        // max-stale lets a stale response through unless the response forbids it.
+        let stale_ok = !cc.must_revalidate && req_cc.max_stale.is_some_and(|allowed| {
+            allowed.is_none_or(|limit| age.saturating_sub(lifetime) <= limit)
+        });
         if !req_cc.no_cache
             && !cc.no_cache
             && !cc.invalid_freshness
-            && age < lifetime
+            && (fresh || stale_ok)
             && request_fresh
         {
             return Ok(CacheLookup::Fresh(entry));
+        }
+        if req_cc.only_if_cached {
+            return Ok(CacheLookup::Miss);
         }
         let mut headers = HeaderList::default();
         if let Some(etag) = entry.response.headers.get("etag") {
@@ -294,6 +303,15 @@ impl<S: CacheStorage> CacheStore<S> {
                 .map_err(|_| CacheError::InvalidHeader)?;
         }
         Ok(CacheLookup::Validate { entry, headers })
+    }
+    /// Stored representation for the URL regardless of freshness (`force-cache`,
+    /// `only-if-cached` request modes).
+    pub fn lookup_stored(&self, request: &CacheRequest<'_>) -> Result<Option<&CacheEntry>, CacheError> {
+        if !request.method.eq_ignore_ascii_case("GET") {
+            return Ok(None);
+        }
+        let key = request.legacy_key()?;
+        Ok(self.matching_index(request, &key).and_then(|index| self.storage.get(index)))
     }
     /// Takes an already bounded transport response. Rejects size before cache
     /// metadata copies or insertion; transport must enforce its own body cap.
@@ -386,6 +404,30 @@ impl<S: CacheStorage> CacheStore<S> {
         request_time: i64,
         response_time: i64,
     ) -> Result<Option<CacheResponse>, CacheError> {
+        self.update_304_inner(request, headers, request_time, response_time, None)
+    }
+    /// A 304 answering a conditional request this cache itself issued for the
+    /// selected entry: a validator-less 304 identifies it (RFC 9111 4.3.4) as long as
+    /// the stored response was obtained with the same credentials mode.
+    pub fn update_304_revalidated(
+        &mut self,
+        request: &CacheRequest<'_>,
+        headers: &HeaderList,
+        request_time: i64,
+        response_time: i64,
+        request_includes_credentials: bool,
+    ) -> Result<Option<CacheResponse>, CacheError> {
+        self.update_304_inner(request, headers, request_time, response_time, Some(request_includes_credentials))
+    }
+    fn update_304_inner(
+        &mut self,
+        request: &CacheRequest<'_>,
+        headers: &HeaderList,
+        request_time: i64,
+        response_time: i64,
+        revalidated_with: Option<bool>,
+    ) -> Result<Option<CacheResponse>, CacheError> {
+        let revalidated = revalidated_with.is_some();
         if request_time > response_time {
             return Err(CacheError::InvalidTime);
         }
@@ -413,8 +455,11 @@ impl<S: CacheStorage> CacheStore<S> {
             if old.response.headers.get("last-modified").as_deref() != Some(modified.as_str()) {
                 return Ok(None);
             }
-        } else if old.response.headers.get("etag").is_some()
-            || old.response.headers.get("last-modified").is_some()
+        } else if revalidated_with.is_some_and(|credentials| credentials != old.response.request_includes_credentials) {
+            // A validator-less 304 may not cross credentials modes.
+            return Ok(None);
+        } else if (!revalidated && (old.response.headers.get("etag").is_some()
+            || old.response.headers.get("last-modified").is_some()))
             || (0..self.storage.len())
                 .filter(|&i| {
                     self.storage.get(i).is_some_and(|candidate| {
@@ -431,7 +476,8 @@ impl<S: CacheStorage> CacheStore<S> {
             return Ok(None);
         }
         if let Some(length) = headers.get("content-length") {
-            if length.parse::<usize>().ok() != Some(old.response.body.len()) {
+            // A 304 has no body; `Content-Length: 0` (or the 200 length) is not a mismatch.
+            if length != "0" && length.parse::<usize>().ok() != Some(old.response.body.len()) {
                 return Ok(None);
             }
         }
@@ -507,6 +553,26 @@ impl<S: CacheStorage> CacheStore<S> {
     }
 }
 
+/// True when the request asks for `Cache-Control: only-if-cached`.
+pub fn request_only_if_cached(headers: &HeaderList) -> bool {
+    directives(headers).only_if_cached
+}
+
+/// Canonical reason phrase for a stored status (the cache keeps no status text).
+pub fn reason_phrase(status: u16) -> &'static str {
+    match status {
+        200 => "OK", 201 => "Created", 202 => "Accepted", 203 => "Non-Authoritative Information",
+        204 => "No Content", 205 => "Reset Content", 206 => "Partial Content",
+        300 => "Multiple Choices", 301 => "Moved Permanently", 302 => "Found", 303 => "See Other",
+        304 => "Not Modified", 307 => "Temporary Redirect", 308 => "Permanent Redirect",
+        400 => "Bad Request", 401 => "Unauthorized", 403 => "Forbidden", 404 => "Not Found",
+        405 => "Method Not Allowed", 410 => "Gone", 414 => "URI Too Long",
+        500 => "Internal Server Error", 501 => "Not Implemented", 502 => "Bad Gateway",
+        503 => "Service Unavailable", 504 => "Gateway Timeout",
+        _ => "",
+    }
+}
+
 fn storable_status(response: &CacheResponse) -> bool {
     if !(200..=599).contains(&response.status) || matches!(response.status, 206 | 304) {
         return false;
@@ -529,6 +595,9 @@ struct Directives {
     private: bool,
     public: bool,
     invalid_freshness: bool,
+    min_fresh: Option<u64>,
+    max_stale: Option<Option<u64>>,
+    only_if_cached: bool,
 }
 fn directives(headers: &HeaderList) -> Directives {
     let mut out = Directives::default();
@@ -567,6 +636,9 @@ fn directives(headers: &HeaderList) -> Directives {
             "must-revalidate" => out.must_revalidate = true,
             "private" => out.private = true,
             "public" => out.public = true,
+            "min-fresh" => out.min_fresh = number(),
+            "max-stale" => out.max_stale = Some(number()),
+            "only-if-cached" => out.only_if_cached = true,
             _ => {}
         }
     }
