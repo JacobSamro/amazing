@@ -1,0 +1,31 @@
+{
+ "schema": 1,
+ "ticket": "resume-batches-18-19",
+ "date": "2026-10-18",
+ "batches": [
+  {
+   "batch": 18,
+   "published": "498f0165cdc0367442b634daf8d4e6462e016599",
+   "published_base": "fbb640a41359b54f53017747c11c2ceaf701ed15",
+   "tickets": [
+    "6f77f77f7 js: 45 Test262 core and Intl failures (lane ec201121f)",
+    "498f0165c js: per-realm Intl fallback symbol, DisplayNames, bound function toString (lane ed61b0d76)"
+   ],
+   "reviewed_test_changes": "seven unit tests changed to spec behaviour (non-extensible private fields, Proxy(Error.prototype) stack setter RangeError, toLocaleDateString default year, \\u{110000} lexer text, bound toString text, a{999999999} accepted, namespace private field); reviewed by the integrator",
+   "workspace": {"nextest": {"passed": 5774, "failed": 0, "skipped": 17}, "doctests": {"passed": 39, "failed": 0}},
+   "test262": {"shards": 16, "boxes": 4, "summary": {"files": {"pass": 53463, "fail": 115, "skipped": 294}, "variants": {"pass": 102697, "fail": 221}}, "gained_files": 48, "lost_files": 0, "lost_variants": 0, "baseline": "t262-e9d07d89-resume-batch17", "result_sha256": "d8c8080a245bc9275a68a009c96b2293664979d7efd5c9da02bf15571835df84"}
+  },
+  {
+   "batch": 19,
+   "published_base": "498f0165cdc0367442b634daf8d4e6462e016599",
+   "gated_source_commit": "d45bc6b581ed612d4d77edd4bc7a08d49f2e85f8",
+   "tickets": [
+    "3e08caefa Intl.DateTimeFormat non-Gregorian calendars from CLDR names ported from lucid-softworks/lumen @ a0f0314de (MIT), IANA link canonicalization, sub-minute LMT (lane f4c04352b; builtins_intl_locale_methods.rs conflict with 6f77f77f7 resolved to the INTL_DATE_MODE version)",
+    "61c702fcc js: class fields, static blocks and catch patterns on the VM, unmetered VM fuel; VM coverage 93.5% to 97.2% (lane e2780289f)",
+    "d45bc6b58 js: interned member keys, small env var tables, plain-object get/set fast paths, leaner call path; benchmark geomean 1.49x default, 1.97x wrapped (lane 1f0a566ab)"
+   ],
+   "workspace": {"nextest": {"passed": 5774, "failed": 0, "skipped": 17}, "doctests": {"passed": 39, "failed": 0}},
+   "test262": {"shards": 16, "boxes": 4, "summary": {"files": {"pass": 53524, "fail": 54, "skipped": 294}, "variants": {"pass": 102819, "fail": 99}}, "gained_files": 61, "lost_files": 0, "lost_variants": 0, "baseline": "t262-498f0165-resume-batch18", "result_sha256": "bd622bb26f39d743956b7c787ba93c5874b0d5559bf18d3843ae3248e9348591"}
+  }
+ ]
+}
