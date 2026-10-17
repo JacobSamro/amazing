@@ -62,6 +62,7 @@ for K in $(seq 0 $((N - 1))); do
       set -euo pipefail
       export OUT=\"\$OUT/test262-$RUN_ID/$COMMIT\"
       mkdir -p \"\$OUT\"
+      ${T262_EXTRA_ENV:+export $T262_EXTRA_ENV}
       echo $COMPACT_B64 | base64 -d > /tmp/t262compact-$K.py
       echo $COMMAND_B64 | base64 -d > /tmp/t262command-$K.py
       phase=setup

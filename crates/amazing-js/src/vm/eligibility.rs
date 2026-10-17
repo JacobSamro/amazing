@@ -55,10 +55,13 @@ fn class_needs_fallback(class: &ast::ClassItem) -> bool {
     class.super_class.as_ref().is_some_and(expression_needs_fallback)
         || class.members.iter().any(|member| match member {
             ClassMember::Method(method) => method_needs_fallback(method),
-            // Class fields and static blocks are not represented in bytecode
-            // yet: never let compilation silently drop them.
-            ClassMember::StaticBlock(_) => { note("class-static-block"); true }
-            ClassMember::Field(_) => { note("class-field"); true }
+            // Fields, accessors and static blocks are evaluated by the shared
+            // ClassEvaluation machinery; only direct eval inside them needs
+            // the tree-walker fallback.
+            ClassMember::StaticBlock(block) => block_needs_fallback(block),
+            ClassMember::Field(field) => key_needs_fallback(&field.key)
+                || field.decorators.iter().any(expression_needs_fallback)
+                || field.init.as_ref().is_some_and(expression_needs_fallback),
         })
 }
 
@@ -98,11 +101,8 @@ fn statement_needs_fallback(statement: &ast::Stmt) -> bool {
         StmtKind::Labeled { body, .. } => statement_needs_fallback(body),
         StmtKind::Try(try_stmt) => block_needs_fallback(&try_stmt.block)
             || try_stmt.catch.as_ref().is_some_and(|catch| {
-                catch.binding.as_ref().is_some_and(|binding| {
-                    let pattern = !matches!(binding, Binding::Ident(_));
-                    if pattern { note("catch-pattern"); }
-                    pattern
-                }) || block_needs_fallback(&catch.body)
+                catch.binding.as_ref().is_some_and(binding_needs_fallback)
+                    || block_needs_fallback(&catch.body)
             }) || try_stmt.finally.as_ref().is_some_and(block_needs_fallback),
         _ => false,
     }
@@ -173,11 +173,12 @@ mod tests {
             "eval('var x=1')",
             "function f(){ return (eval)('1') }",
             "var o={run(){ eval('1') }}",
-            "try { throw [1] } catch ([x]) { x }",
+            "class C { x = eval('1') }",
         ] {
             assert!(!eligible(&parse_script(source).unwrap()), "{source}");
         }
-        for source in ["var o={x:1}; o.x", "function f(x){return x+1} f(2)", "try { 1 } catch (e) { e }"] {
+        for source in ["var o={x:1}; o.x", "function f(x){return x+1} f(2)", "try { 1 } catch (e) { e }",
+            "try { throw [1] } catch ([x]) { x }", "class C { #a = 1; static b = 2; static { C.c = 3 } }"] {
             assert!(eligible(&parse_script(source).unwrap()), "{source}");
         }
     }

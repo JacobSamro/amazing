@@ -90,10 +90,13 @@ pub(crate) use compiler::{compile_arrow_item, compile_function_item};
 pub(crate) use compiler::{compile_async_body, compile_async_generator_body, compile_generator_body};
 
 pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
+/// Fuel for code the tree walker would also run unmetered: the VM must not
+/// fail a program the tree walker completes.
+pub const UNMETERED_INSTRUCTION_LIMIT: usize = usize::MAX;
 // Ordinary callables previously used the unmetered AST path. A larger internal
 // per-call budget admits substantial finite loops; explicit Program.run fuel
 // remains caller-controlled, and coroutine budgets are unchanged.
-const ORDINARY_FUNCTION_INSTRUCTION_LIMIT: usize = 100_000_000;
+const ORDINARY_FUNCTION_INSTRUCTION_LIMIT: usize = UNMETERED_INSTRUCTION_LIMIT;
 
 pub(crate) fn ordinary_functions_enabled() -> bool {
     // Keep an independent AST-factory baseline for rollout gates/profiling.
@@ -2163,7 +2166,7 @@ impl FunctionCode {
         if self.0.is_generator {
             // Parameters and body lexical instantiation are eager; only
             // execution of the generator statements is deferred.
-            let frame = self.0.program.start_function_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT, self.0.strict)?;
+            let frame = self.0.program.start_function_frame(i, env.clone(), UNMETERED_INSTRUCTION_LIMIT, self.0.strict)?;
             // Read `functionObject.prototype` now, not before parameters were
             // bound: a parameter default can replace it during
             // FunctionDeclarationInstantiation (just above), and per spec
@@ -2249,7 +2252,7 @@ impl FunctionCode {
         i.admit_synchronous_call()?;
         let promise = new_promise(i, PromiseFate::Pending);
         let JsValue::Object(target) = &promise else { unreachable!() };
-        let frame = match self.0.program.start_function_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT, self.0.strict) {
+        let frame = match self.0.program.start_function_frame(i, env.clone(), UNMETERED_INSTRUCTION_LIMIT, self.0.strict) {
             Ok(frame) => Some(frame),
             Err(Throw(error)) => {
                 settle_promise(target, rejection(i, error), i)?;
@@ -2552,7 +2555,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
             state.started = true;
             match state.frame.take() {
                 Some(frame) => frame,
-                None => state.code.0.program.start_function_frame(i, state.env.clone(), DEFAULT_INSTRUCTION_LIMIT, state.code.0.strict)?,
+                None => state.code.0.program.start_function_frame(i, state.env.clone(), UNMETERED_INSTRUCTION_LIMIT, state.code.0.strict)?,
             }
         };
         state.executing = true;
@@ -2731,7 +2734,7 @@ fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>
                 let s = state.borrow();
                 (s.code.clone(), s.env.clone())
             };
-            match code.0.program.start_function_frame(i, env, DEFAULT_INSTRUCTION_LIMIT, code.0.strict) {
+            match code.0.program.start_function_frame(i, env, UNMETERED_INSTRUCTION_LIMIT, code.0.strict) {
                 Ok(frame) => state.borrow_mut().frame = Some(frame),
                 Err(Throw(error)) => {
                     settle_promise(&request.target, rejection(i, error), i)?;

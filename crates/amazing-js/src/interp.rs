@@ -1356,7 +1356,7 @@ impl Interpreter {
                 let previous_strict = self.strict_eval_context;
                 self.strict_eval_context |= has_use_strict_directive(&p.body)
                     || (!self.in_eval && self.global_env.kind() == EnvKind::Module);
-                let result = code.run_in_current_context(self, vm::DEFAULT_INSTRUCTION_LIMIT);
+                let result = code.run_in_current_context(self, vm::UNMETERED_INSTRUCTION_LIMIT);
                 self.strict_eval_context = previous_strict;
                 self.entry_realm = previous_entry;
                 result
@@ -1393,7 +1393,7 @@ impl Interpreter {
                 Ok(code) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM compiled"); }
                     vm_stats::program("vm", "");
-                    return code.run_in_current_context(self, vm::DEFAULT_INSTRUCTION_LIMIT);
+                    return code.run_in_current_context(self, vm::UNMETERED_INSTRUCTION_LIMIT);
                 }
                 Err(error) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM fallback"); }

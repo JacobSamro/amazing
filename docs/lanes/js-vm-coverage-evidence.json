@@ -1,0 +1,212 @@
+{
+ "base": "d813a2177",
+ "source": "6866881dfa324dab4365b9c32131bac2d9294eaa (squashed in ready commit)",
+ "test262": {
+  "default": {
+   "pass_files": [
+    53266,
+    53266
+   ],
+   "pass_variants": [
+    102307,
+    102307
+   ],
+   "lost": 0,
+   "gained": 0,
+   "raw_sha256_new": "ae685f98426f7f0932034ff16d24caf34ab69d70406c823392f97c3587054a17",
+   "raw_sha256_base": "2534e1ca9bc6f1159ea874f3ec3fbfabb2e4d0196761665a50efe5e2261afb62",
+   "host_path": "r4-vmclass box ~/amazing/out/r4-vmclass/{base,new}-def.json"
+  },
+  "vm": {
+   "pass_files": [
+    53260,
+    53265
+   ],
+   "pass_variants": [
+    102295,
+    102305
+   ],
+   "lost": 0,
+   "gained": 15,
+   "raw_sha256_new": "babd3dbaa5ee9c3abaf6bb4deeb37809b797653c4f44376e3f8cb443e59ad3c6",
+   "raw_sha256_base": "169fad1bb55c9e4328b03745b8632f83080e648a8b528d1da9fbc90c179e3de4",
+   "host_path": "~/amazing/out/r4-vmclass/{base,new}-vm.json"
+  }
+ },
+ "coverage_test_bodies": {
+  "base_vm": 88103,
+  "base_total": 94258,
+  "new_vm": 91621,
+  "new_fallback": 2637
+ },
+ "bench_ms_base_new": {
+  "array_loop": {
+   "default": [
+    210.16,
+    154.44
+   ],
+   "vm": [
+    228.32,
+    150.17
+   ],
+   "wrapped": [
+    113.98,
+    82.81
+   ]
+  },
+  "class_inherit": {
+   "default": [
+    187.53,
+    160.35
+   ],
+   "vm": [
+    171.26,
+    150.76
+   ],
+   "wrapped": [
+    131.78,
+    121.62
+   ]
+  },
+  "closures": {
+   "default": [
+    229.38,
+    192.78
+   ],
+   "vm": [
+    203.01,
+    186.4
+   ],
+   "wrapped": [
+    150.34,
+    128.99
+   ]
+  },
+  "fib": {
+   "default": [
+    297.44,
+    261.34
+   ],
+   "vm": [
+    292.27,
+    255.85
+   ],
+   "wrapped": [
+    241.53,
+    223.31
+   ]
+  },
+  "json_roundtrip": {
+   "default": [
+    86.34,
+    81.23
+   ],
+   "vm": [
+    79.62,
+    72.44
+   ],
+   "wrapped": [
+    80.78,
+    71.8
+   ]
+  },
+  "map_set": {
+   "default": [
+    104.57,
+    83.85
+   ],
+   "vm": [
+    114.44,
+    83.33
+   ],
+   "wrapped": [
+    82.72,
+    65.83
+   ]
+  },
+  "method_calls": {
+   "default": [
+    324.7,
+    275.25
+   ],
+   "vm": [
+    325.27,
+    271.15
+   ],
+   "wrapped": [
+    234.85,
+    195.05
+   ]
+  },
+  "prop_access": {
+   "default": [
+    209.15,
+    170.7
+   ],
+   "vm": [
+    181.53,
+    171.56
+   ],
+   "wrapped": [
+    119.17,
+    101.52
+   ]
+  },
+  "regexp": {
+   "default": [
+    137.23,
+    129.18
+   ],
+   "vm": [
+    150.15,
+    131.61
+   ],
+   "wrapped": [
+    111.23,
+    105.49
+   ]
+  },
+  "scheduler": {
+   "default": [
+    212.4,
+    204.97
+   ],
+   "vm": [
+    218.82,
+    186.95
+   ],
+   "wrapped": [
+    210.01,
+    191.62
+   ]
+  },
+  "string_ops": {
+   "default": [
+    149.66,
+    149.58
+   ],
+   "vm": [
+    145.62,
+    141.26
+   ],
+   "wrapped": [
+    73.37,
+    71.78
+   ]
+  },
+  "typed_array": {
+   "default": [
+    365.92,
+    344.65
+   ],
+   "vm": [
+    354.07,
+    337.46
+   ],
+   "wrapped": [
+    141.05,
+    138.84
+   ]
+  }
+ }
+}
