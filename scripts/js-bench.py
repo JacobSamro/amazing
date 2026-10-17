@@ -19,7 +19,7 @@ modes, runs and, when present, Node.js (`node --jitless`, default `node`).
 import argparse, collections, json, os, pathlib, shutil, statistics, subprocess, sys, tempfile, time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MODES = {"default": {}, "vm": {"AMAZING_JS_VM": "1"}, "ast": {"AMAZING_JS_AST_FUNCTIONS": "1"}, "wrapped": {}}
+MODES = {"default": {}, "tree": {"AMAZING_JS_VM": "0"}, "vm": {"AMAZING_JS_VM": "1"}, "ast": {"AMAZING_JS_AST_FUNCTIONS": "1"}, "wrapped": {}}
 NODE_PRELOAD = """globalThis.print = (s) => console.log(String(s));
 const t0 = process.hrtime.bigint();
 process.on('exit', () => { process.stderr.write('BENCH_MS ' + (Number(process.hrtime.bigint() - t0) / 1e6).toFixed(3) + '\\n'); });
@@ -78,7 +78,7 @@ def main():
     ap.add_argument("--programs", default=str(ROOT / "crates/amazing-js/benches/programs"))
     ap.add_argument("--only")
     ap.add_argument("--no-node", action="store_true")
-    ap.add_argument("--modes", default="default,wrapped,vm,ast")
+    ap.add_argument("--modes", default="default,tree,wrapped,vm,ast")
     args = ap.parse_args()
 
     binary = pathlib.Path(args.bin) if args.bin else None

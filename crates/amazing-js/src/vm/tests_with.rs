@@ -122,3 +122,13 @@ fn with_async_iteration_and_disposal_keep_original_object_environment() {
         assert!(i.frames.is_empty());
     }
 }
+
+#[test]
+fn for_let_head_pattern_bindings_survive_per_iteration_copies() {
+    let source = "var out=[]; for (let {a, b: [c]} = {a: 1, b: [2]}, f = () => a + c; a < 3; a++) out.push(f() + ':' + a + c); out.join(',')";
+    for backend in [crate::interp::ExecutionBackend::TreeWalk, crate::interp::ExecutionBackend::Bytecode] {
+        let mut interpreter = Interpreter::new();
+        let result = interpreter.run_script_with_backend(source, backend).unwrap();
+        assert_eq!(crate::value::to_display_string(&result), "3:12,3:22", "{backend:?}");
+    }
+}

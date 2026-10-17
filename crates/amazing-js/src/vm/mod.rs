@@ -98,6 +98,13 @@ pub const UNMETERED_INSTRUCTION_LIMIT: usize = usize::MAX;
 // remains caller-controlled, and coroutine budgets are unchanged.
 const ORDINARY_FUNCTION_INSTRUCTION_LIMIT: usize = UNMETERED_INSTRUCTION_LIMIT;
 
+/// Eligible top-level programs run as bytecode by default; `AMAZING_JS_VM=0`
+/// selects the tree walker (baseline measurement and bisecting).
+pub(crate) fn programs_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("AMAZING_JS_VM").is_none_or(|v| v != "0"))
+}
+
 pub(crate) fn ordinary_functions_enabled() -> bool {
     // Keep an independent AST-factory baseline for rollout gates/profiling.
     std::env::var_os("AMAZING_JS_AST_FUNCTIONS").is_none()

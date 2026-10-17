@@ -854,9 +854,7 @@ impl Compiler {
                     }
                     if declaration.kind == VarKind::Let {
                         for binding in &declaration.decls {
-                            if let Binding::Ident(name) = &binding.binding {
-                                per_iteration.push(name.name.clone());
-                            }
+                            per_iteration.extend(super::super::binding_names(&binding.binding));
                         }
                     }
                 }

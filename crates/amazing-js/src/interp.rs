@@ -434,6 +434,11 @@ pub struct Interpreter {
 
 impl Interpreter {
     #[cfg(test)]
+    fn ast_callables_forced(&self) -> bool { self.force_ast_callables }
+    #[cfg(not(test))]
+    #[inline(always)]
+    fn ast_callables_forced(&self) -> bool { false }
+    #[cfg(test)]
     pub(crate) fn test_force_ast_callables(&mut self, value: bool) {
         self.force_ast_callables = value;
     }
@@ -1388,7 +1393,7 @@ impl Interpreter {
 
     fn run_program_inner(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         let direct_eval_env = self.direct_eval_env.take();
-        let vm_programs = std::env::var_os("AMAZING_JS_VM").is_some();
+        let vm_programs = vm::programs_enabled() && !self.ast_callables_forced();
         if direct_eval_env.is_none() && vm_programs && vm_eligibility::eligible(p) {
             let is_module = !self.in_eval && self.global_env.kind() == EnvKind::Module;
             match vm::compile(p, is_module) {
