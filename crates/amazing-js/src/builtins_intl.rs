@@ -349,7 +349,8 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
         return Err(Throw::range_error("invalid language tag"));
     }
     let language = parts[0];
-    if !(2..=8).contains(&language.len()) || !language.bytes().all(|b| b.is_ascii_alphabetic()) {
+    if !((2..=3).contains(&language.len()) || (5..=8).contains(&language.len()))
+        || !language.bytes().all(|b| b.is_ascii_alphabetic()) {
         return Err(Throw::range_error("invalid language tag"));
     }
     // How many of `parts` the primary unicode_language_id consumes: language,
@@ -552,23 +553,16 @@ fn intl_canonical_locale_list(i: &mut Interpreter, value: &JsValue) -> Result<Ve
         JsValue::Object(object) if matches!(intl_state(object), Some(IntlState::Locale(_))) => push(i, value)?,
         JsValue::Null => return Err(Throw::type_error("locales is null")),
         _ => {
-            // ToObject followed by LengthOfArrayLike. Plain objects use their
-            // own prototype chain, primitives use the matching wrapper
-            // prototype so inherited length/index properties are observed.
-            let prototype = match value {
-                JsValue::Object(object) => object.clone(),
-                JsValue::Num(_) => i.number_proto.clone(),
-                JsValue::Bool(_) => i.boolean_proto.clone(),
-                JsValue::Symbol(_) => i.symbol_proto.clone(),
-                JsValue::BigInt(_) => i.bigint_proto.clone(),
-                _ => return Ok(Vec::new()),
-            };
-            let length = i.get_prop(value, "length")?;
+            // ToObject followed by LengthOfArrayLike; HasProperty is proxy-aware and the
+            // Gets use the wrapper object (not the primitive) as receiver.
+            let object = array_receiver(i, value.clone())?;
+            let JsValue::Object(target) = &object else { return Ok(Vec::new()) };
+            let length = i.get_prop(&object, "length")?;
             let length = i.to_number(&length)?.max(0.0).min(100_000.0) as usize;
             for index in 0..length {
                 let key = index.to_string();
-                if prototype.borrow().has_property(&key) {
-                    let candidate = i.get_prop(value, &key)?;
+                if i.default_has_property(target, &PropertyKey::from(key.as_str()))? {
+                    let candidate = i.get_prop(&object, &key)?;
                     push(i, &candidate)?;
                 }
             }
@@ -986,7 +980,7 @@ fn intl_locale_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
                     subtags.push(values.next().unwrap());
                 }
                 if part == key {
-                    result = Some(if subtags.is_empty() { "true".to_string() } else { subtags.join("-") });
+                    result = Some(if subtags.is_empty() { if key == "kn" { "true".to_string() } else { String::new() } } else { subtags.join("-") });
                     break;
                 }
             }

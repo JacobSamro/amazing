@@ -426,10 +426,7 @@ impl Parser {
         let mut n = 0usize;
         let start = self.pos;
         while let Some(c @ 48..=57) = self.peek() {
-            n = n
-                .checked_mul(10)
-                .and_then(|n| n.checked_add((c - 48) as usize))
-                .ok_or(Error::Limit("quantifier integer"))?;
+            n = n.saturating_mul(10).saturating_add((c - 48) as usize);
             self.pos += 1;
         }
         Ok((self.pos != start).then_some(n))

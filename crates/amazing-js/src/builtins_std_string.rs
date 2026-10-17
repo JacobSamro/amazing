@@ -76,7 +76,86 @@ fn std_string_receiver(i: &mut Interpreter, this: JsValue) -> Result<crate::valu
     string_this_units(i, this)
 }
 
-fn std_string_map_case(source: &crate::value::JsString, upper: bool, turkic: bool) -> crate::value::JsString {
+// Locale-sensitive SpecialCasing.txt rules (tr, az, lt). Context conditions follow
+// Unicode Table 3.17: Before_Dot / After_I / More_Above / After_Soft_Dotted scan over
+// combining marks until a class-0 or class-230 character.
+fn std_case_ccc(c: char) -> u8 { runtime_string_normalization::ccc(c as u32) }
+
+fn std_case_before_dot(chars: &[char], at: usize) -> bool {
+    for &next in &chars[at + 1..] {
+        if next == '\u{307}' { return true; }
+        let class = std_case_ccc(next);
+        if class == 0 || class == 230 { return false; }
+    }
+    false
+}
+
+fn std_case_after_i(chars: &[char], at: usize) -> bool {
+    for &prev in chars[..at].iter().rev() {
+        if prev == 'I' { return true; }
+        let class = std_case_ccc(prev);
+        if class == 0 || class == 230 { return false; }
+    }
+    false
+}
+
+fn std_case_more_above(chars: &[char], at: usize) -> bool {
+    for &next in &chars[at + 1..] {
+        let class = std_case_ccc(next);
+        if class == 230 { return true; }
+        if class == 0 { return false; }
+    }
+    false
+}
+
+fn std_case_soft_dotted(c: char) -> bool {
+    matches!(c as u32, 0x69 | 0x6a | 0x12f | 0x249 | 0x268 | 0x29d | 0x2b2 | 0x3f3 | 0x456 | 0x458
+        | 0x1d62 | 0x1d96 | 0x1da4 | 0x1da8 | 0x1e2d | 0x1ecb | 0x2071 | 0x2148 | 0x2149 | 0x2c7c)
+}
+
+fn std_case_after_soft_dotted(chars: &[char], at: usize) -> bool {
+    for &prev in chars[..at].iter().rev() {
+        if std_case_soft_dotted(prev) { return true; }
+        let class = std_case_ccc(prev);
+        if class == 0 || class == 230 { return false; }
+    }
+    false
+}
+
+fn std_locale_map_case(text: &str, upper: bool, language: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut run = String::new();
+    let flush = |run: &mut String, out: &mut String| {
+        if !run.is_empty() {
+            out.push_str(&if upper { run.to_uppercase() } else { run.to_lowercase() });
+            run.clear();
+        }
+    };
+    for (at, &c) in chars.iter().enumerate() {
+        let special: Option<String> = match (language, upper, c) {
+            ("tr" | "az", false, 'I') => Some(if std_case_before_dot(&chars, at) { "i" } else { "\u{131}" }.into()),
+            ("tr" | "az", false, '\u{130}') => Some("i".into()),
+            ("tr" | "az", false, '\u{307}') if std_case_after_i(&chars, at) => Some(String::new()),
+            ("tr" | "az", true, 'i') => Some("\u{130}".into()),
+            ("lt", false, 'I' | 'J' | '\u{12e}') if std_case_more_above(&chars, at) =>
+                Some(format!("{}\u{307}", c.to_lowercase())),
+            ("lt", false, '\u{cc}') => Some("i\u{307}\u{300}".into()),
+            ("lt", false, '\u{cd}') => Some("i\u{307}\u{301}".into()),
+            ("lt", false, '\u{128}') => Some("i\u{307}\u{303}".into()),
+            ("lt", true, '\u{307}') if std_case_after_soft_dotted(&chars, at) => Some(String::new()),
+            _ => None,
+        };
+        match special {
+            Some(mapped) => { flush(&mut run, &mut out); out.push_str(&mapped); }
+            None => run.push(c),
+        }
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
+fn std_string_map_case(source: &crate::value::JsString, upper: bool, language: &str) -> crate::value::JsString {
     let mut out = Vec::new();
     let units = source.units();
     let mut at = 0;
@@ -93,9 +172,8 @@ fn std_string_map_case(source: &crate::value::JsString, upper: bool, turkic: boo
         }
         if at > start {
             let text = String::from_utf16(&units[start..at]).unwrap_or_default();
-            let mapped = if turkic {
-                if upper { text.replace('i', "İ").replace('ı', "I").to_uppercase() }
-                else { text.replace("I\u{307}", "i").replace('I', "ı").replace('İ', "i").to_lowercase() }
+            let mapped = if matches!(language, "tr" | "az" | "lt") {
+                std_locale_map_case(&text, upper, language)
             } else if upper { text.to_uppercase() } else { text.to_lowercase() };
             out.extend(mapped.encode_utf16());
         }
@@ -106,15 +184,12 @@ fn std_string_map_case(source: &crate::value::JsString, upper: bool, turkic: boo
 
 fn std_string_case(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, upper: bool, locale: bool) -> Result<JsValue, Throw> {
     let source = std_string_receiver(i, this)?;
-    let turkic = if locale {
-        let locale = std_reflect_arg(&args, 0);
-        if locale.is_undefined() { false }
-        else {
-            let locale = i.to_string(&locale)?.to_ascii_lowercase();
-            locale == "tr" || locale.starts_with("tr-") || locale == "az" || locale.starts_with("az-")
-        }
-    } else { false };
-    Ok(JsValue::str(std_string_map_case(&source, upper, turkic)))
+    let language = if locale {
+        // CanonicalizeLocaleList validates every entry; the first one selects the rules.
+        let locales = intl_canonical_locale_list(i, &std_reflect_arg(&args, 0))?;
+        locales.first().map(|tag| tag.split('-').next().unwrap_or("").to_string()).unwrap_or_default()
+    } else { String::new() };
+    Ok(JsValue::str(std_string_map_case(&source, upper, &language)))
 }
 fn std_string_lower(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> { std_string_case(i, this, args, false, false) }
 fn std_string_upper(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> { std_string_case(i, this, args, true, false) }

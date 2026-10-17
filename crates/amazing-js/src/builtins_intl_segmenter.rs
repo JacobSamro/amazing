@@ -86,13 +86,23 @@ fn intl_make_segments(input: &str, granularity: &str) -> Vec<IntlSegment> {
     let mut start_byte = 0;
     let mut start_utf16 = 0;
     let mut current_utf16 = 0;
-    let mut previous = None;
+    let mut previous: Option<char> = None;
     let mut regional_count = 0;
     let mut sentence_end = false;
     let mut word_kind = None;
     let mut chars = input.char_indices().peekable();
     while let Some((byte, ch)) = chars.next() {
-        let is_word = ch.is_alphanumeric() || ch == '_';
+        // UAX #29 WB11/WB12 (MidNum) and WB6/WB7 (MidLetter/MidNumLet): "1.23", "3,000" and
+        // "a.b" stay one word when the separator sits between two characters of that class.
+        let next = chars.peek().map(|(_, next)| *next);
+        let joins = granularity == "word" && match (previous, next) {
+            (Some(left), Some(right)) if matches!(ch, '.' | ',' | '\'' | ';') => {
+                (left.is_numeric() && right.is_numeric() && matches!(ch, '.' | ',' | ';' | '\''))
+                    || (left.is_alphabetic() && right.is_alphabetic() && matches!(ch, '.' | '\''))
+            }
+            _ => false,
+        };
+        let is_word = ch.is_alphanumeric() || ch == '_' || joins;
         let boundary = if byte == 0 { false } else {
             match granularity {
                 "word" => word_kind.is_some_and(|old| old != is_word)

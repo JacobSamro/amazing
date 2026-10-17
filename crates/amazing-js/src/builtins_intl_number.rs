@@ -26,6 +26,20 @@ struct IntlNumberState {
     trailing_zero_display: String,
 }
 
+/// Smallest integer-digit count that is grouped: three plus CLDR minimumGroupingDigits
+/// (locales such as pl and es do not group four-digit integers; `useGrouping: "min2"` forces 2).
+fn intl_grouping_threshold(state: &IntlNumberState) -> usize {
+    let locale = state.resolved_locale.as_str();
+    let language = locale.split('-').next().unwrap_or("");
+    let locale_min = match language {
+        "pl" | "bg" | "et" | "ca" => 2,
+        "es" if !matches!(locale, "es-419" | "es-MX" | "es-US" | "es-AR") => 2,
+        "pt" if locale == "pt-PT" => 2,
+        _ => 1,
+    };
+    3 + locale_min.max(if state.use_grouping == "min2" { 2 } else { 1 })
+}
+
 fn intl_string_option(i: &mut Interpreter, options: &JsValue, key: &str, allowed: &[&str], default: &str) -> Result<String, Throw> {
     let value = i.get_prop(options, key)?;
     if matches!(value, JsValue::Undefined) { return Ok(default.to_string()); }
@@ -599,8 +613,7 @@ fn intl_format_decimal_string(state: &IntlNumberState, text: &str) -> Option<Vec
     };
     if let Some((kind, value)) = sign { parts.push((kind, value.to_string())); }
     let padded = format!("{:0>width$}", whole_text, width = state.min_integer);
-    let grouped = state.use_grouping != "false" && padded.len() >= 4
-        && (state.use_grouping != "min2" || padded.len() >= 5);
+    let grouped = state.use_grouping != "false" && padded.len() >= intl_grouping_threshold(state);
     if grouped {
         let indian = data.decimal_pattern.contains("#,##,##");
         let mut groups = Vec::new();
@@ -705,8 +718,7 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         let (integer, fraction) = digits.split_once('.').unwrap_or((&digits, ""));
         let padded = format!("{:0>width$}", integer, width = state.min_integer);
         let grouped = state.notation == "standard" || state.notation == "compact";
-        let grouped = grouped && state.use_grouping != "false" && padded.len() >= 4
-            && (state.use_grouping != "min2" || padded.len() >= 5);
+        let grouped = grouped && state.use_grouping != "false" && padded.len() >= intl_grouping_threshold(state);
         if grouped {
             let indian = data.decimal_pattern.contains("#,##,##");
             let mut groups = Vec::new();
@@ -851,7 +863,7 @@ fn intl_format_bigint(state: &IntlNumberState, input: &str) -> String {
     }
     let padded = format!("{:0>width$}", digits, width = state.min_integer);
     let mut groups = Vec::new();
-    if state.use_grouping != "false" && padded.len() >= 4 {
+    if state.use_grouping != "false" && padded.len() >= intl_grouping_threshold(state) {
         let mut rest = padded.as_str();
         let mut size = 3;
         while rest.len() > size {

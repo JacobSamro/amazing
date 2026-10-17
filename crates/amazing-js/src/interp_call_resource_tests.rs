@@ -63,10 +63,10 @@ mod call_resource_tests {
                 "function C(){new C()}try{new C();false}catch(e){e instanceof RangeError}",
                 "class C{x=new C()}try{new C();false}catch(e){e instanceof RangeError}",
                 "function f(){return Reflect.apply(f,null,[])}try{f();false}catch(e){e instanceof RangeError}",
-                // Historical semantic-setter recursion is not present in this
-                // published base: its setter writes a raw own property. Retain
-                // the exact call as a nonexhausting control, not a false oracle.
-                "var set=Object.getOwnPropertyDescriptor(Error.prototype,'stack').set;set.call(new Proxy(Error.prototype,{}),'x')===undefined",
+                // SetterThatIgnoresPrototypeProperties on a transparent Proxy of
+                // %Error.prototype% re-enters the same accessor through [[Set]], so it
+                // must exhaust the stack into a RangeError like any recursive callable.
+                "var set=Object.getOwnPropertyDescriptor(Error.prototype,'stack').set;try{set.call(new Proxy(Error.prototype,{}),'x');false}catch(e){e instanceof RangeError}",
                 "function f(){try{return f()}finally{var marker=1}}try{f();false}catch(e){e instanceof RangeError}",
             ];
             for ast in [true, false] {

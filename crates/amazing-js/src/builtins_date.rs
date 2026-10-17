@@ -71,19 +71,19 @@ fn date_time_within_day(t: f64) -> f64 {
 }
 
 fn date_hour(t: f64) -> f64 {
-    ((t / DATE_MS_PER_HOUR).floor()).rem_euclid(24.0)
+    ((t / DATE_MS_PER_HOUR).floor()).rem_euclid(24.0) + 0.0
 }
 
 fn date_minutes(t: f64) -> f64 {
-    ((t / DATE_MS_PER_MINUTE).floor()).rem_euclid(60.0)
+    ((t / DATE_MS_PER_MINUTE).floor()).rem_euclid(60.0) + 0.0
 }
 
 fn date_seconds(t: f64) -> f64 {
-    ((t / DATE_MS_PER_SECOND).floor()).rem_euclid(60.0)
+    ((t / DATE_MS_PER_SECOND).floor()).rem_euclid(60.0) + 0.0
 }
 
 fn date_ms_from_time(t: f64) -> f64 {
-    t.rem_euclid(DATE_MS_PER_SECOND)
+    t.rem_euclid(DATE_MS_PER_SECOND) + 0.0
 }
 
 fn date_week_day(t: f64) -> f64 {

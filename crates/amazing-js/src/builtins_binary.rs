@@ -644,7 +644,7 @@ fn binary_buffer_operation(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     let name = binary_current_name(i);
     let buffer = binary_buffer(&this)?;
     if buffer.borrow().shared != expect_shared { return Err(Throw::type_error("wrong buffer brand")); }
-    if name != "resize" && buffer.borrow().detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    if !matches!(name.as_str(), "resize" | "transfer" | "transferToFixedLength" | "transferToImmutable") && buffer.borrow().detached { return Err(Throw::type_error("detached ArrayBuffer")); }
     match name.as_str() {
         "resize" | "grow" => binary_resize_buffer(i, &buffer, args.first().unwrap_or(&JsValue::Undefined)),
         "slice" | "sliceToImmutable" => {
@@ -841,7 +841,7 @@ fn binary_typed_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             _ => {}
         }
     }
-    if matches!(first, JsValue::Undefined | JsValue::Num(_) | JsValue::BigInt(_) | JsValue::Symbol(_) | JsValue::Bool(_) | JsValue::Null) {
+    if !matches!(first, JsValue::Object(_)) {
         let length = binary_index(i, &first)?;
         let byte_length = length.checked_mul(kind.size()).ok_or_else(|| Throw::range_error("TypedArray too large"))?;
         if byte_length > 256 * 1024 * 1024 { return Err(Throw::range_error("TypedArray too large")); }
@@ -950,7 +950,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     }
     let (view, kind) = binary_typed(&this)?;
     let out_of_bounds = binary_view_out_of_bounds(&view);
-    if out_of_bounds && name != "subarray" {
+    if out_of_bounds && name != "subarray" && name != "set" {
         return Err(Throw::type_error("out-of-bounds TypedArray"));
     }
     let length = binary_length(&view);

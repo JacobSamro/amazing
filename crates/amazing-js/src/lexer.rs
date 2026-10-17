@@ -585,9 +585,9 @@ impl Lexer {
             self.advance();
             v = v.saturating_mul(16).saturating_add(d);
             count += 1;
-            if count > 6 {
+            if v > 0x10FFFF {
                 return Err(syntax_error(
-                    "too many digits in \\u{...} escape",
+                    "\\u{...} escape is not a Unicode code point",
                     self.loc(),
                 ));
             }

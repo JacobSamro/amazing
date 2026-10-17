@@ -61,8 +61,10 @@ fn intl_locale_maximized_base(tag: &str) -> String {
     keys.push(language.into());
     if let Some(script) = script { keys.push(format!("und-{script}")); }
     if let Some(region) = region.as_ref() { keys.push(format!("und-{region}")); }
-    keys.push("und".into());
-    let likely = keys.iter().find_map(|key| intl_likely_tag(key)).unwrap_or("en-Latn-US");
+    // The bare "und" entry only applies to an "und" input: a language without likely
+    // subtags data (e.g. "xtg", "posix") maximizes to itself.
+    if language == "und" { keys.push("und".into()); }
+    let Some(likely) = keys.iter().find_map(|key| intl_likely_tag(key)) else { return base.to_string(); };
     let likely_parts: Vec<&str> = likely.split('-').collect();
     let out_language = if language == "und" { likely_parts[0] } else { language };
     let out_script = script.unwrap_or_else(|| likely_parts.get(1).copied().unwrap_or("Latn"));

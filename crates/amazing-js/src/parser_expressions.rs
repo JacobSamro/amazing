@@ -434,6 +434,10 @@ impl Parser {
 
     pub(super) fn parse_member_chain(&mut self, allow_calls: bool) -> Result<Expr, SyntaxError> {
         let prim = self.parse_primary()?;
+        // An ArrowFunction is an AssignmentExpression, never a LeftHandSideExpression:
+        // no member, call or template suffix may continue it (`() => {}\n[x]` ends the
+        // arrow and relies on ASI).
+        if matches!(prim.kind, ExprKind::Arrow(_)) { return Ok(prim); }
         self.parse_member_suffix(prim, allow_calls)
     }
 

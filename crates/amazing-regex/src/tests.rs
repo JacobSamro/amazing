@@ -312,10 +312,9 @@ fn syntax_errors_and_bounds() {
     ] {
         assert!(Regex::new(p, f).is_err(), "{p}/{f}");
     }
-    assert!(matches!(
-        Regex::new("a{999999999}", ""),
-        Err(Error::Limit(_))
-    ));
+    // Oversized counts on a single deterministic atom run as a counted loop, not an
+    // expansion, so they compile and simply never match (built-ins/RegExp/quantifier-integer-limit.js).
+    assert!(Regex::new("a{999999999}", "").unwrap().exec("a", 0).unwrap().is_none());
     assert!(matches!(
         Regex::new("(a+)+$", "")
             .unwrap()

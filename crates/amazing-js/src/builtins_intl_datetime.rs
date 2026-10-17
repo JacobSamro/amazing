@@ -726,7 +726,12 @@ fn intl_date_range_parts_from(
     let textual_month = ["long", "short", "narrow"].contains(&state.month.as_deref().unwrap_or(""));
     let mut prefix = 0;
     let mut suffix = 0;
-    if textual_month {
+    // CLDR interval formats key on the greatest differing calendar field: when the year
+    // differs every field is repeated ("Mar 4, 2019 – Mar 4, 2020").
+    let year_value = |parts: &Vec<(&'static str, String)>| parts.iter()
+        .find(|(kind, _)| matches!(*kind, "year" | "relatedYear" | "yearName")).map(|(_, value)| value.clone());
+    let year_differs = year_value(&left) != year_value(&right);
+    if textual_month && !year_differs {
         while prefix < left.len().min(right.len()) && left[prefix] == right[prefix] { prefix += 1; }
         while suffix < left.len().min(right.len()) - prefix
             && left[left.len() - suffix - 1] == right[right.len() - suffix - 1] { suffix += 1; }

@@ -63,7 +63,7 @@ impl Interpreter {
         self.define_global("Infinity", JsValue::Num(f64::INFINITY));
         self.define_global(
             "eval",
-            Self::native("eval", native_eval, &self.function_proto),
+            Self::native_arity("eval", native_eval, &self.function_proto, 1),
         );
         self.define_global(
             "fetch",

@@ -1277,6 +1277,9 @@ impl JsObject {
         if matches!(self.exotic, Exotic::ModuleNamespace(_) | Exotic::DeferredModuleNamespace(_)) {
             return Err(Throw::type_error("cannot add private members to a module namespace"));
         }
+        if !self.extensible {
+            return Err(Throw::type_error("cannot add private members to a non-extensible object"));
+        }
         if self.private_has(&name) {
             return Err(Throw::type_error(format!(
                 "cannot add private member {} twice on the same object",

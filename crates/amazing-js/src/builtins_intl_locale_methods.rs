@@ -64,19 +64,52 @@ fn intl_date_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsVa
     let name = binary_current_name(i);
     let locales = args.first().cloned().unwrap_or(JsValue::Undefined);
     let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    // ToDateTimeOptions(options, required, defaults): the options object is read for the
+    // required fields; when none is present the numeric defaults are layered on a child object.
+    let (required, defaults) = match name.as_str() {
+        "toLocaleDateString" => ("date", "date"),
+        "toLocaleTimeString" => ("time", "time"),
+        _ => ("any", "all"),
+    };
     let options = if options.is_undefined() {
         // ECMA-402 builds default options with a null prototype, so inherited
         // Object.prototype properties must not leak into the formatter.
-        let options = JsValue::object(JsObject::ordinary());
-        match name.as_str() {
-            "toLocaleDateString" => i.set_prop(&options, "dateStyle", JsValue::str("short"))?,
-            "toLocaleTimeString" => i.set_prop(&options, "timeStyle", JsValue::str("medium"))?,
-            _ => {
-                i.set_prop(&options, "dateStyle", JsValue::str("short"))?;
-                i.set_prop(&options, "timeStyle", JsValue::str("medium"))?;
-            }
+        JsValue::object(JsObject::ordinary())
+    } else if options.is_null() {
+        return Err(Throw::type_error("options must not be null"));
+    } else { array_receiver(i, options)? };
+    let mut need_defaults = true;
+    let date_fields: &[&str] = &["weekday", "year", "month", "day"];
+    let time_fields: &[&str] = &["dayPeriod", "hour", "minute", "second", "fractionalSecondDigits"];
+    for (group, fields) in [("date", date_fields), ("time", time_fields)] {
+        if required != "any" && required != group { continue; }
+        for field in fields {
+            if !i.get_prop(&options, *field)?.is_undefined() { need_defaults = false; }
         }
-        options
+    }
+    let date_style = i.get_prop(&options, "dateStyle")?;
+    let time_style = i.get_prop(&options, "timeStyle")?;
+    if !date_style.is_undefined() || !time_style.is_undefined() {
+        need_defaults = false;
+        if required == "date" && !time_style.is_undefined() {
+            return Err(Throw::type_error("timeStyle is not allowed in toLocaleDateString"));
+        }
+        if required == "time" && !date_style.is_undefined() {
+            return Err(Throw::type_error("dateStyle is not allowed in toLocaleTimeString"));
+        }
+    }
+    let options = if need_defaults {
+        let JsValue::Object(parent) = &options else { unreachable!() };
+        let mut child = JsObject::ordinary();
+        child.proto = Some(parent.clone());
+        let child = JsValue::object(child);
+        if matches!(defaults, "date" | "all") {
+            for field in ["year", "month", "day"] { i.set_prop(&child, field, JsValue::str("numeric"))?; }
+        }
+        if matches!(defaults, "time" | "all") {
+            for field in ["hour", "minute", "second"] { i.set_prop(&child, field, JsValue::str("numeric"))?; }
+        }
+        child
     } else { options };
     let formatter = intl_construct_service(i, "DateTimeFormat", locales, options)?;
     let format = i.get_prop(&formatter, "format")?;
@@ -98,7 +131,9 @@ fn intl_array_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsV
         if callable_function(&method).is_none() {
             return Err(Throw::type_error("element toLocaleString is not callable"));
         }
-        let text = i.call_value(&method, value, args.clone())?;
+        // ECMA-402 Array.prototype.toLocaleString passes exactly (locales, options).
+        let forwarded = vec![args.first().cloned().unwrap_or(JsValue::Undefined), args.get(1).cloned().unwrap_or(JsValue::Undefined)];
+        let text = i.call_value(&method, value, forwarded)?;
         strings.push(i.to_string(&text)?);
     }
     Ok(JsValue::str(strings.join(",")))
@@ -112,6 +147,6 @@ mod intl_locale_method_tests {
     fn language_builtins_use_intl_formatters() {
         let mut i = Interpreter::new();
         let value = i.run_script("[12345.5.toLocaleString('de'), new Date(0).toLocaleDateString('en'), 'ä'.localeCompare('a','de',{sensitivity:'base'})].join('|')").unwrap();
-        assert_eq!(i.to_string(&value).unwrap(), "12.345,5|1/1/70|0");
+        assert_eq!(i.to_string(&value).unwrap(), "12.345,5|1/1/1970|0");
     }
 }

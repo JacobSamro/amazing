@@ -16,7 +16,7 @@ mod vm;
 use std::fmt;
 use std::ops::Range;
 
-const MAX_PATTERN: usize = 16_384;
+const MAX_PATTERN: usize = 33_554_432;
 // A complete Unicode code-point corpus is 2,162,688 UTF-16 units. Keep
 // enough bounded input space for it, including property complements.
 const MAX_INPUT: usize = 4_194_304;
@@ -32,7 +32,7 @@ const MAX_INPUT: usize = 4_194_304;
 // headroom while staying a small, bounded number of recursive call frames
 // (a few hundred bytes each) well inside a normal thread's stack.
 const MAX_DEPTH: usize = 512;
-const MAX_CAPTURES: usize = 128;
+const MAX_CAPTURES: usize = 4096;
 const MAX_CODE: usize = 32_768;
 const MAX_STEPS: usize = 8_388_608;
 // Ambiguous repetitions still share bounded frame and slot storage.

@@ -439,38 +439,40 @@ fn std_uri_encode(i: &mut Interpreter, args: Vec<JsValue>, component: bool) -> R
     Ok(JsValue::str(out))
 }
 fn std_uri_decode(i: &mut Interpreter, args: Vec<JsValue>, component: bool) -> Result<JsValue, Throw> {
-    let source = i.to_string(&std_reflect_arg(&args, 0))?;
-    let bytes = source.as_bytes();
-    let mut out = String::new();
+    // Decode (string, preserveEscapeSet) over UTF-16 code units (ES2025 19.2.6.6).
+    let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
+    let units = source.units();
+    let reserved = |unit: u16| !component && unit < 0x80 && ";/?:@&=+$,#".contains(unit as u8 as char);
+    let hex_byte = |index: usize| -> Option<u8> {
+        if units.get(index) != Some(&(b'%' as u16)) { return None; }
+        let hi = char::from_u32(*units.get(index + 1)? as u32)?.to_digit(16)?;
+        let lo = char::from_u32(*units.get(index + 2)? as u32)?.to_digit(16)?;
+        Some(((hi << 4) | lo) as u8)
+    };
+    let mut out: Vec<u16> = Vec::with_capacity(units.len());
     let mut at = 0;
-    while at < bytes.len() {
-        if bytes[at] != b'%' {
-            let ch = source[at..].chars().next().unwrap(); out.push(ch); at += ch.len_utf8(); continue;
-        }
+    while at < units.len() {
+        if units[at] != b'%' as u16 { out.push(units[at]); at += 1; continue; }
         let start = at;
-        let decode = |index: usize| -> Option<u8> {
-            if bytes.get(index) != Some(&b'%') { return None; }
-            let hi = (*bytes.get(index + 1)? as char).to_digit(16)?;
-            let lo = (*bytes.get(index + 2)? as char).to_digit(16)?;
-            Some(((hi << 4) | lo) as u8)
-        };
-        let first = decode(at).ok_or_else(|| std_uri_error(i, "invalid percent escape"))?;
-        let width = if first < 0x80 { 1 } else if (0xc2..=0xdf).contains(&first) { 2 }
-            else if (0xe0..=0xef).contains(&first) { 3 }
-            else if (0xf0..=0xf4).contains(&first) { 4 }
-            else { return Err(std_uri_error(i, "invalid UTF-8 escape")); };
-        let mut decoded = vec![first];
+        let first = hex_byte(at).ok_or_else(|| std_uri_error(i, "invalid percent escape"))?;
         at += 3;
+        if first < 0x80 {
+            if reserved(first as u16) { out.extend_from_slice(&units[start..at]); } else { out.push(first as u16); }
+            continue;
+        }
+        let width = if (0xc0..=0xdf).contains(&first) { 2 } else if (0xe0..=0xef).contains(&first) { 3 }
+            else if (0xf0..=0xf7).contains(&first) { 4 } else { return Err(std_uri_error(i, "invalid UTF-8 escape")); };
+        let mut decoded = vec![first];
         for _ in 1..width {
-            let next = decode(at).ok_or_else(|| std_uri_error(i, "invalid UTF-8 escape"))?;
+            let next = hex_byte(at).ok_or_else(|| std_uri_error(i, "invalid UTF-8 escape"))?;
+            if next & 0xc0 != 0x80 { return Err(std_uri_error(i, "invalid UTF-8 escape")); }
             decoded.push(next); at += 3;
         }
-        let text = String::from_utf8(decoded).map_err(|_| std_uri_error(i, "invalid UTF-8 escape"))?;
-        if !component && width == 1 && ";/?:@&=+$,#".contains(text.chars().next().unwrap()) {
-            out.push_str(&source[start..at]);
-        } else { out.push_str(&text); }
+        let text = std::str::from_utf8(&decoded).map_err(|_| std_uri_error(i, "invalid UTF-8 escape"))?;
+        let mut buffer = [0u16; 2];
+        for ch in text.chars() { out.extend_from_slice(ch.encode_utf16(&mut buffer)); }
     }
-    Ok(JsValue::str(out))
+    Ok(JsValue::str_units(out))
 }
 fn std_global_encode_uri(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> { std_uri_encode(i, args, false) }
 fn std_global_encode_component(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> { std_uri_encode(i, args, true) }

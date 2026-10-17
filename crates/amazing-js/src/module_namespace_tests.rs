@@ -93,8 +93,8 @@ fn deferred_receiver_operations_evaluate_once_while_direct_set_and_private_do_no
                 var ns=saved;
                 class Marker extends function(value){return value}{#mark=1;static has(value){return #mark in value}}
                 var failed=false;try{new Marker(ns)}catch(e){failed=e instanceof TypeError}
-                var plain=Object.preventExtensions({});new Marker(plain);
-                failed&&!Marker.has(ns)&&Marker.has(plain)&&!Reflect.set(ns,'value',8)&&count===0;
+                var plain=Object.preventExtensions({}),plainFailed=false;try{new Marker(plain)}catch(e){plainFailed=e instanceof TypeError}
+                failed&&plainFailed&&!Marker.has(ns)&&!Marker.has(plain)&&!Reflect.set(ns,'value',8)&&count===0;
             "#,
             );
             i.run_script_with_backend(operation, backend).unwrap();

@@ -36,14 +36,30 @@ fn regexp_source(pattern: &[u16]) -> crate::value::JsString {
     }
     let mut out = Vec::new();
     let mut escaped = false;
+    let mut in_class = false;
     for &c in pattern {
-        match c {
-            0x2f if !escaped => out.extend("\\/".encode_utf16()),
-            0x0a => out.extend("\\n".encode_utf16()),
-            0x0d => out.extend("\\r".encode_utf16()),
-            0x2028 => out.extend("\\u2028".encode_utf16()),
-            0x2029 => out.extend("\\u2029".encode_utf16()),
-            _ => out.push(c),
+        // A line terminator already preceded by an escaping backslash completes that
+        // escape (`\` + LF -> `\n`); otherwise it is written as its own escape.
+        let line = match c {
+            0x0a => Some("n"),
+            0x0d => Some("r"),
+            0x2028 => Some("u2028"),
+            0x2029 => Some("u2029"),
+            _ => None,
+        };
+        if let Some(letters) = line {
+            if !escaped { out.push(0x5c); }
+            out.extend(letters.encode_utf16());
+            escaped = false;
+            continue;
+        }
+        if c == 0x2f && !escaped && !in_class {
+            out.extend("\\/".encode_utf16());
+        } else {
+            out.push(c);
+        }
+        if !escaped {
+            if c == 0x5b { in_class = true; } else if c == 0x5d { in_class = false; }
         }
         escaped = c == 0x5c && !escaped;
     }

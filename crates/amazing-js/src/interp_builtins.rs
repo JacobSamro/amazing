@@ -1274,29 +1274,34 @@ fn native_error_stack_setter(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
     if Rc::ptr_eq(&object.0, &i.error_proto.0) {
         return Err(Throw::type_error("cannot set \"stack\" on Error.prototype"));
     }
-    let existing = object.borrow().own_prop("stack").cloned();
+    let key = PropertyKey::from("stack");
+    let existing = i.default_get_own_property(object, &key)?;
     match existing {
         None => {
-            if !object.borrow().extensible {
-                return Err(Throw::type_error("cannot create property \"stack\" on a non-extensible object"));
+            let mut descriptor = JsObject::ordinary();
+            descriptor.proto = Some(i.object_proto.clone());
+            descriptor.set_own("value", value);
+            descriptor.set_own("writable", JsValue::Bool(true));
+            descriptor.set_own("enumerable", JsValue::Bool(true));
+            descriptor.set_own("configurable", JsValue::Bool(true));
+            if !i.define_own_property(object, &key, &JsValue::object(descriptor))? {
+                return Err(Throw::type_error("cannot create property \"stack\""));
             }
-            object.borrow_mut().define("stack", Property {
-                accessor: false,
-                value, writable: true, enumerable: true, configurable: true,
-                getter: None, setter: None,
-            }).unwrap();
         }
         Some(descriptor) => {
-            if let Some(setter) = descriptor.setter.clone() {
-                i.call_value(&setter, this.clone(), vec![value])?;
-            } else if descriptor.is_accessor() {
-                return Err(Throw::type_error("\"stack\" has no setter"));
-            } else if !descriptor.writable {
-                return Err(Throw::type_error("cannot assign to read only property \"stack\""));
-            } else {
-                let mut updated = descriptor;
-                updated.value = value;
-                object.borrow_mut().define("stack", updated).unwrap();
+            // An own accessor installed by another realm's %Error.prototype% setter
+            // must run in that realm so its home-object check and TypeError apply.
+            let foreign = match (&descriptor.setter, &object.borrow().exotic) {
+                (Some(JsValue::Object(setter)), exotic) if !matches!(exotic, Exotic::Proxy(_)) => {
+                    setter.borrow().realm.filter(|realm| *realm != i.host_realm)
+                }
+                _ => None,
+            };
+            if let (Some(realm), Some(setter)) = (foreign, descriptor.setter.clone()) {
+                let handle = RealmHandle { agent: i.agent_id, realm };
+                i.binding_with_realm(handle, |i| i.call_value(&setter, this.clone(), vec![value]).map(|_| ()))?;
+            } else if !i.set_with_receiver(object, &key, value, this.clone())? {
+                return Err(Throw::type_error("cannot assign to \"stack\""));
             }
         }
     }
@@ -1770,8 +1775,6 @@ fn native_object_get_own_property_descriptor(
 fn object_descriptor_value(i: &Interpreter, property: Property) -> JsValue {
     let mut descriptor = JsObject::ordinary();
     descriptor.proto = Some(i.object_proto.clone());
-    descriptor.set_own("enumerable", JsValue::Bool(property.enumerable));
-    descriptor.set_own("configurable", JsValue::Bool(property.configurable));
     if property.is_accessor() {
         descriptor.set_own("get", property.getter.unwrap_or(JsValue::Undefined));
         descriptor.set_own("set", property.setter.unwrap_or(JsValue::Undefined));
@@ -1779,6 +1782,8 @@ fn object_descriptor_value(i: &Interpreter, property: Property) -> JsValue {
         descriptor.set_own("value", property.value);
         descriptor.set_own("writable", JsValue::Bool(property.writable));
     }
+    descriptor.set_own("enumerable", JsValue::Bool(property.enumerable));
+    descriptor.set_own("configurable", JsValue::Bool(property.configurable));
     JsValue::object(descriptor)
 }
 

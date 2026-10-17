@@ -520,15 +520,16 @@ impl Compiler {
                 }
             }
             Node::Repeat(n, min, max, greedy) => {
-                if *min > MAX_CODE || max.is_some_and(|n| n > MAX_CODE) {
-                    return Err(Error::Limit("quantifier expansion"));
-                }
                 let deterministic = match n.as_ref() {
                     Node::Char(_) | Node::Any | Node::Class(_) => true,
                     Node::Set(expression) => !expression.has_strings(),
                     _ => false,
                 };
-                if *greedy && deterministic {
+                let oversize = *min > MAX_CODE || max.is_some_and(|n| n > MAX_CODE);
+                if oversize && !deterministic {
+                    return Err(Error::Limit("quantifier expansion"));
+                }
+                if deterministic && (*greedy || oversize) {
                     self.node(n)?;
                     let atom = self.code.pop().expect("atom instruction");
                     self.emit(Op::RepeatAtom(Box::new(atom), *min, *max, *greedy))?;
