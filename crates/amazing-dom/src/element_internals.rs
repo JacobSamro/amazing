@@ -213,6 +213,20 @@ impl Dom {
             }
         }
     }
+    /// The `nonce` IDL value: the internal slot set by the IDL setter, unless the content
+    /// attribute changed afterwards (attribute change steps copy it into the slot).
+    pub fn nonce_get(&self, element: NodeIdx) -> Vec<u16> {
+        let attribute = self.attribute_utf16(element, "nonce");
+        match self.nonce_slots.iter().find(|(node, _, _)| *node == element) {
+            Some((_, slot, snapshot)) if *snapshot == attribute => slot.clone(),
+            _ => attribute.unwrap_or_default(),
+        }
+    }
+    pub fn nonce_set(&mut self, element: NodeIdx, value: Vec<u16>) {
+        let snapshot = self.attribute_utf16(element, "nonce");
+        self.nonce_slots.retain(|(node, _, _)| *node != element);
+        self.nonce_slots.push((element, value, snapshot));
+    }
     /// Whether `:state(name)` matches the element.
     pub fn custom_state_matches(&self, element: NodeIdx, name: &[u16]) -> bool {
         self.internals_state(element).is_some_and(|state| state.states.iter().any(|s| s.as_slice() == name))

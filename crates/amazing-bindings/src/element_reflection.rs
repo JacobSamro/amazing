@@ -3,7 +3,7 @@ use crate::{host::{EnumSpec, Interface, InterfaceBrand, LegacyReflectionKind as 
 use amazing_dom::{DomError, Namespace, NodeKind};
 
 #[derive(Clone, Copy)]
-enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, ReflectedUnsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList, LimitedKnownValues(&'static [&'static str]), Enum(&'static EnumSpec), UnsignedDefault(u32) }
+enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, ReflectedUnsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, SpanCol, Nonce, RowSpan, TokenList, LimitedKnownValues(&'static [&'static str]), Enum(&'static EnumSpec), UnsignedDefault(u32) }
 #[derive(Clone, Copy)]
 struct Spec { interface: Option<Interface>, attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
 const HYPERLINK: &[&str] = &["a", "area"];
@@ -16,7 +16,7 @@ fn spec(op: O) -> Option<Spec> {
             L::Unsigned => K::ReflectedUnsigned, L::Signed => K::Signed(0),
             L::LimitedKnownValues(keywords) => K::LimitedKnownValues(keywords),
             L::Enum(spec) => K::Enum(spec), L::UnsignedDefault(default) => K::UnsignedDefault(default),
-            L::Span => K::ColSpan };
+            L::Span => K::SpanCol, L::Nonce => K::Nonce };
         return Some(Spec { interface: Some(interface), attribute, tags: &[], kind,
             setter: matches!(op, O::LegacyReflectSet(..)) });
     }
@@ -31,8 +31,8 @@ fn spec(op: O) -> Option<Spec> {
         O::ElementDownload | O::ElementSetDownload => ("download", HYPERLINK, K::String),
         O::ElementSrc | O::ElementSetSrc => ("src", &["img", "script"], K::Url),
         O::ImageAlt | O::ImageSetAlt => ("alt", &["img"], K::String),
-        O::ImageWidth | O::ImageSetWidth => ("width", &["img"], K::Unsigned),
-        O::ImageHeight | O::ImageSetHeight => ("height", &["img"], K::Unsigned),
+        O::ImageWidth | O::ImageSetWidth => ("width", &["img"], K::ReflectedUnsigned),
+        O::ImageHeight | O::ImageSetHeight => ("height", &["img"], K::ReflectedUnsigned),
         O::ImageLoading | O::ImageSetLoading => ("loading", &["img"], K::Loading),
         O::ImageSrcset | O::ImageSetSrcset => ("srcset", &["img"], K::String),
         O::ImageSizes | O::ImageSetSizes => ("sizes", &["img"], K::String),
@@ -138,6 +138,11 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
                 return Ok(host.undefined());
             }
         }
+        if matches!(spec.kind, Kind::Nonce) {
+            let units = host.to_dom_string(value)?;
+            html_reflection::with_element(host, &capture, |dom| { dom.nonce_set(node, units); Ok(()) })?;
+            return Ok(host.undefined());
+        }
         if matches!(spec.kind, Kind::Boolean) {
             let enabled = host.to_boolean(value);
             // HTML-35: HTMLScriptElement.async's setter must clear the
@@ -151,13 +156,14 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
             } else { dom.remove_attribute(node, spec.attribute) })?;
         } else {
             let units = match spec.kind {
-                Kind::Unsigned | Kind::ReflectedUnsigned | Kind::UnsignedDefault(_) | Kind::ColSpan | Kind::RowSpan | Kind::Signed(_) => {
+                Kind::Unsigned | Kind::ReflectedUnsigned | Kind::UnsignedDefault(_) | Kind::ColSpan | Kind::SpanCol | Kind::RowSpan | Kind::Signed(_) => {
                     let number = host.to_number(value)?;
                     let unsigned = unsigned(number);
                     let value = match spec.kind {
                         Kind::ReflectedUnsigned => (if unsigned <= i32::MAX as u32 { unsigned } else { 0 }).to_string(),
                         Kind::UnsignedDefault(default) => (if unsigned <= i32::MAX as u32 { unsigned } else { default }).to_string(),
                         Kind::ColSpan => unsigned.clamp(1, 1000).to_string(),
+                        Kind::SpanCol => (if unsigned <= i32::MAX as u32 { unsigned } else { 1 }).to_string(),
                         Kind::RowSpan => unsigned.min(65534).to_string(),
                         Kind::Signed(_) => (unsigned as i32).to_string(),
                         _ => unsigned.to_string(),
@@ -173,6 +179,10 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         return Ok(host.undefined());
     }
     let value = html_reflection::with_element(host, &capture, |dom| Ok(dom.attribute_utf16(node, spec.attribute)))?;
+    if matches!(spec.kind, Kind::Nonce) {
+        let units = html_reflection::with_element(host, &capture, |dom| Ok(dom.nonce_get(node)))?;
+        return host.string(&units);
+    }
     match spec.kind {
         // HTML-35: HTMLScriptElement.async reflects the "force async" flag,
         // not a plain boolean content attribute -- true if the flag is set
@@ -195,6 +205,8 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         Kind::Unsigned => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long).unwrap_or(0) as f64)),
         Kind::ColSpan => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
             .unwrap_or(1).clamp(1, 1000) as f64)),
+        Kind::SpanCol => Ok(host.number(value.as_deref().and_then(html_reflection::parsed_integer)
+            .filter(|number| *number >= 0).unwrap_or(1).clamp(1, 1000) as f64)),
         Kind::RowSpan => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
             .unwrap_or(1).min(65534) as f64)),
         Kind::Signed(default) => Ok(host.number(value.as_deref().and_then(html_reflection::signed_long)
@@ -221,6 +233,6 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         // setting falls through to the plain-string `_` arm above.
         Kind::LimitedKnownValues(keywords) => host.string(&html_reflection::keyword(
             value.as_deref().unwrap_or_default(), keywords).unwrap_or_default()),
-        Kind::TokenList => unreachable!(),
+        Kind::TokenList | Kind::Nonce => unreachable!(),
     }
 }

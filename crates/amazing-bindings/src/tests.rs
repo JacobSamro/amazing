@@ -2207,7 +2207,8 @@ fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     assert_eq!(call(&mut h, O::ElementRel, V::Node(anchor), &[]), str_value("noopener"));
     let image = h.dom.create_element(root, "img");
     call(&mut h, O::ImageSetWidth, V::Node(image), &[V::Number(-1.)]);
-    assert_eq!(call(&mut h, O::ImageWidth, V::Node(image), &[]), V::Number(u32::MAX as f64));
+    // HTML reflect: unsigned long values above 2147483647 are stored as 0.
+    assert_eq!(call(&mut h, O::ImageWidth, V::Node(image), &[]), V::Number(0.));
     h.dom.set_attribute(image, "loading", "unknown").unwrap();
     assert_eq!(call(&mut h, O::ImageLoading, V::Node(image), &[]), str_value("eager"));
     let input = h.dom.create_element(root, "input");

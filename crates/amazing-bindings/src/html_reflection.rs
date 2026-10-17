@@ -39,7 +39,7 @@ pub(crate) fn keyword(value: &[u16], candidates: &[&str]) -> Option<Vec<u16>> {
 }
 /// HTML integer parsing consumes a leading digit run and ignores trailing
 /// characters; the reflected long getter then rejects out-of-range results.
-fn parsed_integer(value: &[u16]) -> Option<i64> {
+pub(crate) fn parsed_integer(value: &[u16]) -> Option<i64> {
     let mut input = value.iter().copied().skip_while(|c| matches!(*c, 9 | 10 | 12 | 13 | 32)).peekable();
     let negative = match input.peek() { Some(45) => { input.next(); true }, Some(43) => { input.next(); false }, _ => false };
     let mut number = 0i64;

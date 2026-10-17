@@ -278,6 +278,8 @@ pub enum LegacyReflectionKind {
     UnsignedDefault(u32),
     /// `unsigned long` clamped to [1, 1000], default 1 (`span`).
     Span,
+    /// `nonce`: IDL setter writes the internal slot only.
+    Nonce,
     String, LegacyString, Url, UsvUrl, Boolean, Unsigned, Signed,
     /// A `DOMString` attribute "limited to only known values" whose missing
     /// value default is the empty string (unlike `Loading`/`Decoding` in

@@ -182,6 +182,8 @@ pub struct Dom {
     shadow_roots: Vec<shadow::ShadowRootData>,
     slot_states: Vec<shadow::SlotState>,
     custom_elements: custom_elements::CustomElements,
+    /// HTMLOrSVGElement nonce internal slots: (element, slot, content attribute when the slot was set).
+    nonce_slots: Vec<(NodeIdx, Vec<u16>, Option<Vec<u16>>)>,
     form_states: Vec<Option<forms::ControlState>>,
     radio_lists: Vec<(NodeIdx, Vec<u16>)>,
     template_contents: Vec<(NodeIdx, u64, NodeIdx, u64)>,
@@ -268,6 +270,7 @@ impl Dom {
             shadow_roots: Vec::new(),
             slot_states: Vec::new(),
             custom_elements: custom_elements::CustomElements::default(),
+            nonce_slots: Vec::new(),
             form_states: Vec::new(),
             radio_lists: Vec::new(),
             template_contents: Vec::new(),

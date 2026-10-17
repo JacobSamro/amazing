@@ -32,6 +32,7 @@ macro_rules! reflected {
 
 pub(crate) const HTML_ELEMENT_NEW: &[Member] = reflected!(I::HTMLElement;
     ("autofocus", "autofocus", LR::Boolean),
+    ("nonce", "nonce", LR::Nonce),
     ("inputMode", "inputmode", LR::Enum(&INPUT_MODE)),
     ("enterKeyHint", "enterkeyhint", LR::Enum(&ENTER_KEY_HINT)));
 
