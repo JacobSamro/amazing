@@ -935,7 +935,7 @@ fn std_epoch_value_of(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
 // spellings, equal numeric offsets) are equal.
 fn std_epoch_zone_equal(a: &str, b: &str) -> bool {
     if a == b || a.eq_ignore_ascii_case(b) { return true; }
-    let utc = |id: &str| ["UTC", "Etc/UTC", "Etc/GMT"].iter().any(|name| name.eq_ignore_ascii_case(id));
+    let utc = |id: &str| ["UTC", "Etc/UTC", "Etc/GMT", "GMT"].iter().any(|name| name.eq_ignore_ascii_case(id));
     if utc(a) || utc(b) { return utc(a) && utc(b); }
     match (tz_fixed_offset_seconds(a), tz_fixed_offset_seconds(b)) {
         (Some(x), Some(y)) => return x == y,

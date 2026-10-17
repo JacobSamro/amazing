@@ -981,6 +981,25 @@ fn std_temporal_merge_calendar_fields(i: &mut Interpreter, data: StdTemporalData
     let read = std_temporal_read_calendar_fields(i, data.kind, &data.calendar, &bag)?;
     if !read.any_present { return Err(Throw::type_error("no Temporal fields provided")); }
     let reject = std_temporal_overflow(i, options)?;
+    if data.kind == StdTemporalKind::PlainMonthDay {
+        // Month-day: the base is the reference date's calendar view; an
+        // explicit year only constrains, it never becomes the reference.
+        let reference = (data.fields[9], data.fields[1], data.fields[2]);
+        let (_, _, base_day, ..) = std_calendar_fields(&data.calendar, reference.0, reference.1, reference.2);
+        let year = if read.era_text.is_some() || read.era_year.is_some() {
+            std_temporal_resolve_era_year_checked(&data.calendar, &read.era_text, read.era_year, read.year)?
+        } else { read.year };
+        let code = if read.month.is_none() && read.month_code_text.is_none() {
+            Some(std_calendar_month_code(&data.calendar, reference.0, reference.1, reference.2))
+        } else { read.month_code_text.clone() };
+        let mut fields = [0i64; 10];
+        fields[0] = year.unwrap_or(0);
+        fields[3] = year.is_some() as i64;
+        fields[2] = read.day.unwrap_or(base_day);
+        std_temporal_bag_resolve_calendar(StdTemporalKind::PlainMonthDay, &data.calendar, &mut fields,
+            read.month, code, reject)?;
+        return std_temporal_make_cal(i, data.kind, fields, data.calendar);
+    }
     let (base_year, base_month, base_day, ..) = std_calendar_fields(&data.calendar,
         data.fields[0], data.fields[1], data.fields[2]);
     let year = if read.era_text.is_some() || read.era_year.is_some() {
@@ -1181,6 +1200,14 @@ fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind,
 // cross-check against an explicit `year` if one was also given. Returns the
 // resolved native year (from era/eraYear, or the passed-through explicit
 // `year` if era/eraYear were absent), or `None` if neither was given at all.
+fn std_temporal_resolve_era_year_checked(calendar: &str, era_text: &Option<String>, era_year: Option<i64>,
+    explicit_year: Option<i64>) -> Result<Option<i64>, Throw> {
+    if std_calendar_uses_era(calendar) && era_text.is_some() != era_year.is_some() {
+        return Err(Throw::type_error("era and eraYear must be given together"));
+    }
+    std_temporal_resolve_era_year(calendar, era_text, era_year, explicit_year)
+}
+
 fn std_temporal_resolve_era_year(calendar: &str, era_text: &Option<String>, era_year: Option<i64>,
     explicit_year: Option<i64>) -> Result<Option<i64>, Throw> {
     match (era_text, era_year) {
@@ -1238,8 +1265,8 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             return Err(Throw::type_error("with() argument must not have a timeZone property"));
         }
     }
-    if matches!(data.kind, StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime)
-        && data.calendar != "iso8601" {
+    if matches!(data.kind, StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime
+        | StdTemporalKind::PlainMonthDay) && data.calendar != "iso8601" {
         return std_temporal_merge_calendar_fields(i, data, bag, std_reflect_arg(&args, 1));
     }
     if data.kind == StdTemporalKind::Duration { return std_temporal_duration_with(i, &data, &bag); }
