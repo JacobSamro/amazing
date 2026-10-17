@@ -93,6 +93,8 @@ pub enum Simple {
     Has(Vec<(Combinator, Compound)>),
     Lang(Vec<String>),
     Dir(bool),
+    /// `:state(ident)`: membership in the element's ElementInternals CustomStateSet.
+    State(String),
     NthChildOf {
         a: i32,
         b: i32,
@@ -180,6 +182,7 @@ pub enum Pseudo {
     /// only -- see `is_invalid`/`is_validity_candidate`.
     Invalid,
     Valid,
+    Defined,
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +313,7 @@ fn simple_specificity(s: &Simple) -> Specificity {
                     .max()
                     .unwrap_or_default();
         }
-        Simple::Lang(_) | Simple::Dir(_) => spec.b += 1,
+        Simple::Lang(_) | Simple::Dir(_) | Simple::State(_) => spec.b += 1,
         Simple::Universal | Simple::Where(_) | Simple::ComplexWhere(_) => {}
     }
     spec
@@ -520,11 +523,18 @@ impl<'t> SelParser<'t> {
         self.skip_ws();
         // `[|name]` explicitly selects a no-namespace attribute. Whitespace
         // between the namespace separator and name is invalid grammar.
+        let mut any_namespace = false;
         if matches!(self.peek(), Some(Token::Delim('|'))) {
             self.pos += 1;
             if !matches!(self.peek(), Some(Token::Ident(_))) { return None; }
+        } else if matches!(self.peek(), Some(Token::Delim('*')))
+            && matches!(self.toks.get(self.pos + 1), Some(Token::Delim('|')))
+            && matches!(self.toks.get(self.pos + 2), Some(Token::Ident(_))) {
+            self.pos += 2;
+            any_namespace = true;
         }
         let name = match self.bump()? {
+            Token::Ident(n) if any_namespace => format!("*|{}", n.to_ascii_lowercase()),
             Token::Ident(n) => n.to_ascii_lowercase(),
             _ => return None,
         };
@@ -581,8 +591,11 @@ impl<'t> SelParser<'t> {
             self.pos += 1;
             self.skip_ws();
         }
-        if self.bump()? != Token::CloseSquare {
-            return None;
+        // An unclosed attribute selector is closed by end of input (selectors-4 / css-syntax).
+        match self.peek() {
+            None => {}
+            Some(Token::CloseSquare) => self.pos += 1,
+            Some(_) => return None,
         }
         Some(Simple::Attr {
             name,
@@ -666,6 +679,7 @@ impl<'t> SelParser<'t> {
             "open" => Pseudo::Open,
             "invalid" => Pseudo::Invalid,
             "valid" => Pseudo::Valid,
+            "defined" => Pseudo::Defined,
             _ => return None, // unknown pseudo-class invalidates the selector
         };
         Some(Simple::Pseudo(pseudo))
@@ -701,6 +715,15 @@ impl<'t> SelParser<'t> {
                     }
                 }
                 Some(Simple::Lang(ranges))
+            }
+            "state" => {
+                self.skip_ws();
+                let ident = match self.bump()? {
+                    Token::Ident(value) => value,
+                    _ => return None,
+                };
+                self.skip_ws();
+                (self.bump()? == Token::CloseParen).then_some(Simple::State(ident))
             }
             "dir" => {
                 self.skip_ws();
@@ -1145,6 +1168,10 @@ fn simple_in_scope(dom: &Dom, el: NodeIdx, s: &Simple, scope: Option<NodeIdx>) -
             language.is_some_and(|lang| extended_language_match(range, lang))
         }),
         Simple::Dir(rtl) => element_direction(dom, el) == *rtl,
+        Simple::State(name) => {
+            let want: Vec<u16> = name.encode_utf16().collect();
+            dom.custom_state_matches(el, &want)
+        }
         Simple::NthChildOf {
             a,
             b,
@@ -1312,6 +1339,7 @@ fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
         // Pattern/type-format/min-max mismatches are out of scope here.
         Pseudo::Invalid => is_invalid(dom, el),
         Pseudo::Valid => is_validity_candidate(dom, el) && !is_invalid(dom, el),
+        Pseudo::Defined => dom.is_defined_element(el),
     }
 }
 
@@ -1534,7 +1562,17 @@ fn class_list_contains(dom: &Dom, el: NodeIdx, class: &str) -> bool {
         actual.split(selector_space).any(|word|word==want.as_slice()))
 }
 fn match_attr(dom: &Dom, el: NodeIdx, name: &str, op: AttrOp, value: &str, ci: bool) -> bool {
-    let Some(mut actual)=dom.attribute_ns_utf16(el,None,name) else {return false;};
+    if let Some(local) = name.strip_prefix("*|") {
+        let html = dom.namespace(el) == Some(Namespace::Html);
+        return dom.attributes_expanded(el).is_some_and(|attrs| attrs.iter().any(|attr| {
+            let same = if html { attr.local_name.eq_ignore_ascii_case(local) } else { attr.local_name == local };
+            same && attr_value_matches(attr.value.encode_utf16().collect(), op, value, ci)
+        }));
+    }
+    let Some(actual)=dom.attribute_ns_utf16(el,None,name) else {return false;};
+    attr_value_matches(actual, op, value, ci)
+}
+fn attr_value_matches(mut actual: Vec<u16>, op: AttrOp, value: &str, ci: bool) -> bool {
     let mut want:Vec<_>=value.encode_utf16().collect();
     if ci {
         for unit in actual.iter_mut().chain(want.iter_mut()) {

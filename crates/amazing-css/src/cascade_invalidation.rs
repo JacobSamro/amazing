@@ -762,7 +762,7 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
             Simple::Class(value) => insert_feature(index, Feature::Class(value.clone()), effect),
             Simple::Id(value) => insert_feature(index, Feature::Id(value.clone()), effect),
             Simple::Attr { name, .. } => {
-                insert_feature(index, Feature::Attribute(name.clone()), effect)
+                insert_feature(index, Feature::Attribute(name.trim_start_matches("*|").to_owned()), effect)
             }
             Simple::Pseudo(Pseudo::Link) | Simple::Pseudo(Pseudo::Visited) => {
                 insert_feature(index, Feature::Attribute("href".into()), effect);
@@ -819,6 +819,7 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
                     },
                 );
             }
+            Simple::State(_) => index.has_relational = true,
             Simple::Dir(_) => insert_feature(
                 index,
                 Feature::Attribute("dir".into()),

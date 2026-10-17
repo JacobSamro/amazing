@@ -1,0 +1,19 @@
+{
+ "schema": 1,
+ "ticket": "html-state-pseudo",
+ "base": "65d26cc94 (origin/dev); before measured at 3b2019bfb (ancestor, drift is amazing-js temporal only)",
+ "host": "Boat 4 vCPU sandbox, lane r4-html, release amazing wpt-harness 800x600, 4 jobs, 20000 ms",
+ "corpus": "dom/ + html/dom/ + custom-elements/ (1001 files), pinned c2a2fce, scripts/html-constructor-wpt-corpus.py + -pair.py",
+ "workspace": {"nextest": "5768 passed (5 slow), 17 skipped, 0 failed", "doctests": "pass"},
+ "wpt": {
+  "before": {"pass_files": 506, "pass_subtests": 114523, "file_status": {"pass": 506, "fail": 329, "timeout": 107, "error": 57, "unsupported": 2}},
+  "after": {"pass_files": 510, "pass_subtests": 113627},
+  "gained_files": ["custom-elements/pseudo-class-defined-customized-builtins.html", "custom-elements/pseudo-class-defined.html", "custom-elements/state/state-css-selector-nth-of.html", "custom-elements/state/state-css-selector.html", "dom/nodes/ParentNode-querySelectors-namespaces.html"],
+  "lost_files": ["dom/ranges/Range-set.html (20 s deadline flake, see control)"],
+  "subtests": {"gained": 1196, "lost": 2092, "lost_by_file": {"dom/ranges/Range-set.html": 1603, "dom/ranges/Range-mutations-dataChange.html": 489}},
+  "gained_by_file": {"html/dom/aria-attribute-reflection-enumerated.tentative.html": 1130, "custom-elements/pseudo-class-defined.html": 24, "custom-elements/pseudo-class-defined-customized-builtins.html": 16, "dom/nodes/ParentNode-querySelector-All.html": 8, "custom-elements/state/state-css-selector.html": 5, "custom-elements/state/state-pseudo-class.html": 3, "dom/nodes/Element-matches.html": 3, "dom/nodes/Element-webkitMatchesSelector.html": 3, "custom-elements/state/state-css-selector-nth-of.html": 2, "custom-elements/Document-createElement-customized-builtins.html": 1, "dom/nodes/ParentNode-querySelectors-namespaces.html": 1},
+  "range_120s_control_after_binary": {"Range-set": "10920/10920 pass, 20 s", "Range-mutations-dataChange": "2808/2808 pass, 50 s", "Range-compareBoundaryPoints": "9313/9313 pass, 14 s", "before_totals_from_r2-html_report": [10920, 2808, 9313]},
+  "no_other_losses": "an earlier intermediate run (same code, aria getter returning defaults for missing attributes) lost aria-attribute-reflection.html 13 subtests; fixed (missing attribute -> null) before the final run"
+ },
+ "raw": {"host_path": "/home/user/amazing/out/r4-html/{before,after2,pair2}", "before_manifest_sha256": "a48d6f2464f3b7abc61967ad3ca1d78d95ef8c913add23a5fe06c2561272c7fb", "after_manifest_sha256": "46a076ad1de88a582167659e8ae28023e77d00de59e20750e5fa8058fd7cf973", "delta_sha256": "194cac55e058c1b06d00ed37ab41671683f7f58707ab714243f032ab35332c22"}
+}

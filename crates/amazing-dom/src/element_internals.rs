@@ -198,6 +198,21 @@ impl Dom {
         if changed { self.record_render_full(element, "custom state set"); }
         Ok(())
     }
+    /// Whether `:defined` matches: custom element state is "uncustomized" or "custom".
+    pub fn is_defined_element(&self, element: NodeIdx) -> bool {
+        use crate::custom_elements::CustomElementState as State;
+        let Some(name) = self.name(element) else { return false };
+        match self.custom_element_state(element) {
+            State::Custom => true,
+            State::Failed | State::Precustomized => false,
+            State::Undefined => {
+                if self.namespace(element) != Some(crate::Namespace::Html) { return true; }
+                let is_candidate = Self::valid_custom_element_name(name)
+                    || self.custom_element_is_value(element).ok().flatten().is_some();
+                !is_candidate
+            }
+        }
+    }
     /// Whether `:state(name)` matches the element.
     pub fn custom_state_matches(&self, element: NodeIdx, name: &[u16]) -> bool {
         self.internals_state(element).is_some_and(|state| state.states.iter().any(|s| s.as_slice() == name))
