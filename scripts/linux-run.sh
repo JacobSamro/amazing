@@ -322,6 +322,16 @@ if [ "$HOST" = boat ]; then
       echo "linux-run[$LANE]: native mission transport failed; no controller started" >&2
       break
     fi
+    # Boxes fill up (8 GB per built commit plus render/profile scratch) and then refuse the
+    # source upload. Below 20 GB free, prune scratch that is over an hour old and that no
+    # running process references (command line, cwd or environment such as CARGO_TARGET_DIR).
+    $BSSH "$BOAT_HOST" 'free=$(df -Pk / | awk "NR==2{print \$4}"); [ "$free" -ge 20971520 ] && exit 0
+      busy=$(cat /proc/[0-9]*/cmdline /proc/[0-9]*/environ 2>/dev/null | tr "\0" "\n"; ls -l /proc/[0-9]*/cwd 2>/dev/null)
+      for d in $(find /tmp -maxdepth 1 \( -name "amazing-native-target-*" -o -name "amazing-render-gate-*" -o -name "amazing-bootstrap.*" -o -name "amazing-gate-command-*" -o -name "amazing-source-transport-*" -o -name "amazing-render-tools.*" \) -mmin +60 2>/dev/null); do
+        printf "%s" "$busy" | grep -qF "$d" || rm -rf "$d"
+      done
+      find ~ /tmp -xdev -name "perf.data*" -size +10M -mmin +60 -delete 2>/dev/null
+      echo "linux-run: pruned box scratch; free $(df -h / | awk "NR==2{print \$4}")" >&2' || true
     NATIVE_SOURCE_DIR="/tmp/amazing-source-transport-$LANE.$$"
     setup_phase=native-source-directory
     $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'mkdir -p amazing/out/$LANE .amazing-busy && mkdir -m 700 $NATIVE_SOURCE_DIR && touch $LEASE'"
