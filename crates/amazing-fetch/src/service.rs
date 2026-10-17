@@ -787,7 +787,7 @@ impl NetworkService {
         }
         let id = ServiceId(self.next_id);
         self.next_id = self.next_id.wrapping_add(1).max(1);
-        if request.url().as_parsed().scheme() == "data" {
+        if matches!(request.url().as_parsed().scheme(), "data" | "blob") {
             let mut policy = request.policy_request()?;
             policy.security = context.security;
             policy.csp = context.csp;
@@ -795,6 +795,10 @@ impl NetworkService {
             let prepared=policy.prepare();
             *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
             let result = prepared.and_then(|_| {
+                    if policy.url().as_parsed().scheme() == "blob" {
+                        return crate::blob_url::blob_response(
+                            policy.url().as_parsed(), policy.method(), &policy.headers);
+                    }
                     crate::data_url::data_response_limited(
                         policy.url().as_parsed(),
                         request

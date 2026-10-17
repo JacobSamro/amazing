@@ -2478,3 +2478,6 @@ impl NetRuntime {
 #[cfg(test)]
 #[path="runtime_host_net/xhr_streaming_tests.rs"]
 mod xhr_streaming_tests;
+#[cfg(test)]
+#[path="runtime_host_net/blob_url_tests.rs"]
+mod blob_url_tests;

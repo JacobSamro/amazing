@@ -1,7 +1,7 @@
 //! WebIDL bindings for URL and body models. Coercion happens before native mutation.
 use crate::host::{BindingHost, InterfaceBrand as B, Operation as O};
 use amazing_dom::{DomError, NodeIdx};
-use amazing_fetch::api::{Blob, File, FormData, FormValue};
+use amazing_fetch::api::{Blob, BlobPart, File, FormData, FormValue};
 use amazing_net::{url::{UrlSearchParams, UrlWithSearchParams}, ParsedUrl};
 
 pub fn handles(op: O) -> bool {
@@ -11,7 +11,7 @@ pub fn handles(op: O) -> bool {
         O::URLPassword | O::URLSetPassword | O::URLHost | O::URLSetHost | O::URLHostname |
         O::URLSetHostname | O::URLPort | O::URLSetPort | O::URLPathname | O::URLSetPathname |
         O::URLSearch | O::URLSetSearch | O::URLSearchParams | O::URLHash | O::URLSetHash |
-        O::URLToString | O::URLToJSON | O::URLSearchParamsConstructor |
+        O::URLToString | O::URLToJSON | O::URLCreateObjectURL | O::URLRevokeObjectURL | O::URLSearchParamsConstructor |
         O::URLSearchParamsAppend | O::URLSearchParamsDelete | O::URLSearchParamsGet |
         O::URLSearchParamsGetAll | O::URLSearchParamsHas | O::URLSearchParamsSet |
         O::URLSearchParamsSort | O::URLSearchParamsSize | O::URLSearchParamsToString |
@@ -64,6 +64,20 @@ fn url<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H::Value
                 host.url_new(model)
             }, Err(()) => Err(host.type_error("Invalid URL")) },
         };
+    }
+    if op == O::URLCreateObjectURL {
+        let value = required(host, args, 0)?.clone();
+        let blob = if host.platform_object(&value, B::FILE).is_some() || host.platform_object(&value, B::BLOB).is_some() {
+            blob_value(host, &value)?
+        } else { return Err(host.type_error("URL.createObjectURL requires a Blob")); };
+        let origin = host.blob_url_origin()?;
+        let created = amazing_fetch::blob_url::create_object_url(&origin, blob);
+        return string(host, &created);
+    }
+    if op == O::URLRevokeObjectURL {
+        let input = required_usv(host, args, 0)?;
+        amazing_fetch::blob_url::revoke_object_url(&input);
+        return Ok(host.undefined());
     }
     check(host, &receiver, B::URL)?;
     if op == O::URLSearchParams { return host.url_search_params(&receiver); }
@@ -188,31 +202,62 @@ fn blob_value<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<Blob,
         host.blob_record(receiver)
     }
 }
-fn blob_options<H: BindingHost>(host: &mut H, value: Option<&H::Value>) -> Result<String, H::Error> {
-    let Some(value) = value else { return Ok(String::new()) };
-    if host.is_nullish(value) { return Ok(String::new()) }
+/// WebIDL BlobPropertyBag / FilePropertyBag. Members convert in lexicographic
+/// order: `endings`, `lastModified` (File only), `type`.
+struct BlobBag { kind: String, native_endings: bool, last_modified: Option<i64> }
+fn blob_bag<H: BindingHost>(host: &mut H, value: Option<&H::Value>, file: bool) -> Result<BlobBag, H::Error> {
+    let mut bag = BlobBag { kind: String::new(), native_endings: false, last_modified: None };
+    let Some(value) = value else { return Ok(bag) };
+    if host.is_nullish(value) { return Ok(bag) }
+    host.require_object(value)?;
+    let endings = host.get_property(value, "endings")?;
+    if !host.is_undefined(&endings) {
+        match usv(host, &endings)?.as_str() {
+            "transparent" => {}
+            "native" => bag.native_endings = true,
+            _ => return Err(host.type_error("Invalid endings value")),
+        }
+    }
+    if file {
+        let modified = host.get_property(value, "lastModified")?;
+        if !host.is_undefined(&modified) {
+            let n = host.to_number(&modified)?;
+            bag.last_modified = Some(if n.is_finite() { n.trunc() as i64 } else { 0 });
+        }
+    }
     let kind = host.get_property(value, "type")?;
-    if host.is_undefined(&kind) { Ok(String::new()) } else { usv(host, &kind) }
+    if !host.is_undefined(&kind) { bag.kind = usv(host, &kind)?; }
+    Ok(bag)
 }
-fn integer<H: BindingHost>(host: &mut H, value: Option<&H::Value>) -> Result<Option<i64>, H::Error> {
-    value.map(|v| host.to_number(v).map(|n| if n.is_nan() { 0 } else { n as i64 })).transpose()
+/// File API "convert line endings to native": the native newline is LF.
+fn native_endings(parts: Vec<BlobPart>) -> Vec<BlobPart> {
+    parts.into_iter().map(|part| match part {
+        BlobPart::Text(text) => BlobPart::Text(text.replace("\r\n", "\n").replace('\r', "\n")),
+        other => other,
+    }).collect()
+}
+/// WebIDL `[Clamp] long long`: ToNumber, clamp, round half to even.
+fn clamped<H: BindingHost>(host: &mut H, value: Option<&H::Value>) -> Result<Option<i64>, H::Error> {
+    let Some(value) = value else { return Ok(None) };
+    if host.is_undefined(value) { return Ok(None) }
+    let n = host.to_number(value)?;
+    Ok(Some(if n.is_nan() { 0 } else { n.round_ties_even() as i64 }))
 }
 fn blob<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H::Value]) -> Result<H::Value, H::Error> {
     if op == O::BlobConstructor {
         let parts = match args.first() { Some(v) if !host.is_undefined(v) => host.blob_parts(v)?, _ => Vec::new() };
-        let kind = blob_options(host, args.get(1))?;
-        return host.blob_new(Blob::new(parts, &kind));
+        let bag = blob_bag(host, args.get(1), false)?;
+        let parts = if bag.native_endings { native_endings(parts) } else { parts };
+        return host.blob_new(Blob::new(parts, &bag.kind));
     }
     if op == O::FileConstructor {
         let input = required(host, args, 0)?;
         let parts = host.blob_parts(input)?;
         let name = required_usv(host, args, 1)?.replace('/', ":");
-        let kind = blob_options(host, args.get(2))?;
-        let last_modified = if let Some(options) = args.get(2).filter(|v| !host.is_nullish(v)) {
-            let v = host.get_property(options, "lastModified")?;
-            if host.is_undefined(&v) { now_ms() } else { host.to_number(&v)? as i64 }
-        } else { now_ms() };
-        return host.file_new(File::new(parts, &name, &kind, last_modified));
+        let bag = blob_bag(host, args.get(2), true)?;
+        let parts = if bag.native_endings { native_endings(parts) } else { parts };
+        let last_modified = bag.last_modified.unwrap_or_else(now_ms);
+        return host.file_new(File::new(parts, &name, &bag.kind, last_modified));
     }
     if op == O::FileName || op == O::FileLastModified {
         check(host, &receiver, B::FILE)?;
@@ -225,9 +270,9 @@ fn blob<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H::Valu
         O::BlobSize => Ok(host.number(model.size() as f64)),
         O::BlobType => string(host, &model.content_type),
         O::BlobSlice => {
-            let start = integer(host, args.first())?;
-            let end = integer(host, args.get(1))?;
-            let kind = if let Some(v) = args.get(2) { usv(host, v)? } else { String::new() };
+            let start = clamped(host, args.first())?;
+            let end = clamped(host, args.get(1))?;
+            let kind = match args.get(2) { Some(v) if !host.is_undefined(v) => usv(host, v)?, _ => String::new() };
             host.blob_new(model.slice(start, end, &kind))
         }
         O::BlobText => host.blob_promise_bytes(model.bytes, true, false),
@@ -341,7 +386,7 @@ pub fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H
         O::URLPassword | O::URLSetPassword | O::URLHost | O::URLSetHost | O::URLHostname |
         O::URLSetHostname | O::URLPort | O::URLSetPort | O::URLPathname | O::URLSetPathname |
         O::URLSearch | O::URLSetSearch | O::URLSearchParams | O::URLHash | O::URLSetHash |
-        O::URLToString | O::URLToJSON) { return url(host, op, receiver, args); }
+        O::URLToString | O::URLToJSON | O::URLCreateObjectURL | O::URLRevokeObjectURL) { return url(host, op, receiver, args); }
     if matches!(op, O::URLSearchParamsConstructor | O::URLSearchParamsAppend |
         O::URLSearchParamsDelete | O::URLSearchParamsGet | O::URLSearchParamsGetAll |
         O::URLSearchParamsHas | O::URLSearchParamsSet | O::URLSearchParamsSort |

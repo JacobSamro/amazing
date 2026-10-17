@@ -317,7 +317,7 @@ pub enum Operation {
     URLPassword, URLSetPassword, URLHost, URLSetHost, URLHostname,
     URLSetHostname, URLPort, URLSetPort, URLPathname, URLSetPathname,
     URLSearch, URLSetSearch, URLSearchParams, URLHash, URLSetHash,
-    URLToString, URLToJSON,
+    URLToString, URLToJSON, URLCreateObjectURL, URLRevokeObjectURL,
     URLSearchParamsConstructor, URLSearchParamsAppend, URLSearchParamsDelete,
     URLSearchParamsGet, URLSearchParamsGetAll, URLSearchParamsHas,
     URLSearchParamsSet, URLSearchParamsSort, URLSearchParamsSize,
@@ -1479,6 +1479,8 @@ pub trait BindingHost: Sized {
     fn blob_parts(&mut self, _value: &Self::Value) -> Result<Vec<amazing_fetch::api::BlobPart>, Self::Error> {
         self.with_dom::<Vec<amazing_fetch::api::BlobPart>>(|_| Err(DomError::NotSupportedError))
     }
+    /// Serialized origin of the current settings object for `blob:` URLs.
+    fn blob_url_origin(&mut self) -> Result<String, Self::Error> { Ok("null".into()) }
     fn blob_new(&mut self, _blob: amazing_fetch::api::Blob) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
     }

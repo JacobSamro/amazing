@@ -1824,6 +1824,8 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
     host.install_static_method(I::Document, "parseHTMLUnsafe", O::DocumentParseHTMLUnsafe, 1)?;
     host.install_static_method(I::URL, "canParse", O::URLCanParse, 1)?;
     host.install_static_method(I::URL, "parse", O::URLParse, 1)?;
+    host.install_static_method(I::URL, "createObjectURL", O::URLCreateObjectURL, 1)?;
+    host.install_static_method(I::URL, "revokeObjectURL", O::URLRevokeObjectURL, 1)?;
     host.define_legacy_platform_object(InterfaceBrand::COLLECTION, LegacyPlatformHooks {
         supported_index_count: O::HTMLCollectionSupportedIndexCount,
         supported_names: Some(O::HTMLCollectionSupportedNames),

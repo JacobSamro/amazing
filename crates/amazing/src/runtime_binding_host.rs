@@ -1924,25 +1924,50 @@ impl BindingHost for RuntimeBindingHost<'_> {
         Ok(Some(pairs))
     }
     fn blob_parts(&mut self, value: &JsValue) -> Result<Vec<BlobPart>, Throw> {
-        let JsValue::Object(object) = value else { return Err(Throw::type_error("Blob parts must be a sequence")); };
-        if !matches!(object.borrow().exotic, Exotic::Array) {
+        // WebIDL sequence<BlobPart>: any iterable object, read through @@iterator.
+        if !matches!(value, JsValue::Object(_)) { return Err(Throw::type_error("Blob parts must be a sequence")); }
+        let symbol = amazing_js::value::WellKnownSymbol::Iterator.symbol();
+        let method = self.js.binding_get_property_key(value, symbol.into())?;
+        if !self.js.binding_is_callable(&method) {
             return Err(Throw::type_error("Blob parts must be a sequence"));
         }
-        let JsValue::Num(length) = self.js.binding_get_property(value, "length")? else {
-            return Err(Throw::type_error("Invalid Blob parts length"));
-        };
+        let iterator = self.js.binding_call(&method, value.clone(), Vec::new())?;
+        self.require_object(&iterator)?;
+        let next = self.js.binding_get_property(&iterator, "next")?;
         let mut parts = Vec::new();
-        for index in 0..length as usize {
-            let part = self.js.binding_get_property(value, &index.to_string())?;
-            if self.platform_object(&part, InterfaceBrand::FILE).is_some() {
-                parts.push(BlobPart::Blob(self.file_record(&part)?.blob));
-            } else if self.platform_object(&part, InterfaceBrand::BLOB).is_some() {
-                parts.push(BlobPart::Blob(self.blob_record(&part)?));
-            } else {
-                parts.push(BlobPart::Text(String::from_utf16_lossy(&self.to_dom_string(&part)?)));
+        loop {
+            let step = self.js.binding_call(&next, iterator.clone(), Vec::new())?;
+            self.require_object(&step)?;
+            let done = self.js.binding_get_property(&step, "done")?;
+            if self.js.binding_to_boolean(&done) { return Ok(parts); }
+            let part = self.js.binding_get_property(&step, "value")?;
+            let converted = (|| -> Result<BlobPart, Throw> {
+                if self.platform_object(&part, InterfaceBrand::FILE).is_some() {
+                    Ok(BlobPart::Blob(self.file_record(&part)?.blob))
+                } else if self.platform_object(&part, InterfaceBrand::BLOB).is_some() {
+                    Ok(BlobPart::Blob(self.blob_record(&part)?))
+                } else if let Some(bytes) = self.js.binding_buffer_source_bytes(&part)? {
+                    Ok(BlobPart::Bytes(bytes))
+                } else {
+                    Ok(BlobPart::Text(String::from_utf16_lossy(&self.to_dom_string(&part)?)))
+                }
+            })();
+            match converted {
+                Ok(part) => parts.push(part),
+                Err(original) => {
+                    if let Ok(close) = self.js.binding_get_property(&iterator, "return") {
+                        if self.js.binding_is_callable(&close) {
+                            let _ = self.js.binding_call(&close, iterator.clone(), Vec::new());
+                        }
+                    }
+                    return Err(original);
+                }
             }
         }
-        Ok(parts)
+    }
+    fn blob_url_origin(&mut self) -> Result<String, Throw> {
+        let base = amazing_bindings::fetch_interfaces::FetchHost::fetch_base(self)?;
+        Ok(base.as_parsed().origin().serialize())
     }
     fn blob_new(&mut self, blob: Blob) -> Result<JsValue, Throw> {
         self.web_allocate(WebObject::Blob(blob), InterfaceBrand::BLOB)
@@ -1979,10 +2004,15 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.state.borrow_mut().web_objects[slot] = WebObject::FormData(data);
         Ok(())
     }
-    fn blob_promise_bytes(&mut self, bytes: Vec<u8>, as_text: bool, _as_array_buffer: bool) -> Result<JsValue, Throw> {
-        if !as_text { return self.with_dom::<JsValue>(|_| Err(DomError::NotSupportedError)); }
-        let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes);
-        let value = JsValue::str(String::from_utf8_lossy(bytes).as_ref());
+    fn blob_promise_bytes(&mut self, bytes: Vec<u8>, as_text: bool, as_array_buffer: bool) -> Result<JsValue, Throw> {
+        let value = if as_text {
+            let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes);
+            JsValue::str(String::from_utf8_lossy(bytes).as_ref())
+        } else if as_array_buffer {
+            self.js.binding_create_array_buffer(bytes)?
+        } else {
+            self.js.binding_create_uint8_array(bytes)?
+        };
         let promise = self.js.binding_get_property(&self.js.binding_global_object(), "Promise")?;
         let resolve = self.js.binding_get_property(&promise, "resolve")?;
         binding_call(self.js, &resolve, &promise, &[value])

@@ -96,6 +96,15 @@ impl HttpUrl {
                 origin: Origin::opaque(),
             });
         }
+        if parsed.scheme() == "blob" {
+            // A blob URL's origin is its creator's (parsed from the embedded
+            // URL); anything else, including `blob:null/...`, is opaque.
+            let origin = match parsed.origin() {
+                UrlOrigin::Tuple(origin) => Origin(OriginKind::Tuple(origin)),
+                _ => Origin::opaque(),
+            };
+            return Ok(Self { parsed, origin });
+        }
         if !matches!(parsed.scheme(), "http" | "https") {
             return Err(FetchError::InvalidUrl);
         }

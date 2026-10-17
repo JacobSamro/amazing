@@ -86,7 +86,7 @@ pub fn bad_port(url: &HttpUrl) -> bool {
 /// Mixed Content Level 2 §2. Secure Contexts treats loopback and localhost
 /// HTTP URLs as potentially trustworthy. Only HTTP(S) is representable here.
 pub fn a_priori_authenticated(url: &HttpUrl) -> bool {
-    if url.as_parsed().scheme() == "data" {
+    if matches!(url.as_parsed().scheme(), "data" | "blob") {
         return true;
     }
     if url.is_secure() {

@@ -963,9 +963,13 @@ pub fn fetch_api(
                 .set_method_body(request.method(), Some(Body::Bytes(bytes)))
                 .map_err(ApiError::Network)?;
         }
-        if policy.url().as_parsed().scheme() == "data" {
-            let response = crate::data_url::data_response(policy.url().as_parsed())
-                .map_err(ApiError::Network)?;
+        if matches!(policy.url().as_parsed().scheme(), "data" | "blob") {
+            let response = if policy.url().as_parsed().scheme() == "blob" {
+                crate::blob_url::blob_response(policy.url().as_parsed(), policy.method(), &policy.headers)
+            } else {
+                crate::data_url::data_response(policy.url().as_parsed())
+            }
+            .map_err(ApiError::Network)?;
             return ApiResponse::from_policy(
                 filter_response(&policy, &response).map_err(ApiError::Network)?,
             );

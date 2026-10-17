@@ -193,6 +193,19 @@ impl Request {
                 referrer: None,
             });
         }
+        if self.url().as_parsed().scheme() == "blob" {
+            // Blob URLs are resolved from the in-process store, never CORS-checked.
+            if self.mode == RequestMode::SameOrigin && self.origin != *self.url().origin() {
+                return Err(FetchError::SameOrigin);
+            }
+            self.taint = ResponseType::Basic;
+            return Ok(FetchPlan {
+                taint: ResponseType::Basic,
+                credentials: false,
+                preflight: false,
+                referrer: None,
+            });
+        }
         let cross = self.origin != *self.url().origin();
         match self.mode {
             RequestMode::SameOrigin if cross => return Err(FetchError::SameOrigin),
