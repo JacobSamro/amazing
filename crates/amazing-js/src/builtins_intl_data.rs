@@ -22,6 +22,7 @@ const INTL_NUMBER_DATA: &[IntlNumberData] = &[
     IntlNumberData { locale: "ar", numbering_system: "latn", decimal: ".", group: ",", plus: "‎+", minus: "‎-", percent: "‎%‎", nan: "ليس رقمًا", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0%", currency_pattern: "‏#,##0.00 ¤;‏-#,##0.00 ¤", currency_accounting_pattern: "؜#,##0.00¤;(؜#,##0.00¤)", minimum_grouping: 1 },
     IntlNumberData { locale: "hi", numbering_system: "latn", decimal: ".", group: ",", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##,##0.###", percent_pattern: "#,##,##0%", currency_pattern: "¤#,##,##0.00", currency_accounting_pattern: "¤#,##,##0.00", minimum_grouping: 1 },
     IntlNumberData { locale: "ru", numbering_system: "latn", decimal: ",", group: " ", plus: "+", minus: "-", percent: "%", nan: "не число", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0 %", currency_pattern: "#,##0.00 ¤", currency_accounting_pattern: "#,##0.00 ¤", minimum_grouping: 1 },
+    IntlNumberData { locale: "pl", numbering_system: "latn", decimal: ",", group: "\u{a0}", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0%", currency_pattern: "#,##0.00 ¤", currency_accounting_pattern: "#,##0.00 ¤;(#,##0.00 ¤)", minimum_grouping: 2 },
     // New rows are appended here, never inserted mid-list: INTL_CURRENCY_DATA's
     // per-locale `symbols`/`narrow_symbols`/`names` arrays are aligned to this
     // array's *position*, not its `locale` field (see the `.position()` lookup
@@ -55,6 +56,30 @@ const INTL_ALL_CURRENCIES: &str = "ADP AED AFA AFN ALK ALL AMD ANG AOA AOK AON A
 struct IntlCompactData { locale: &'static str, style: &'static str,
     magnitude: u32, divisor: u32, suffix: &'static str }
 const INTL_COMPACT_DATA: &[IntlCompactData] = &[
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 3, divisor: 3, suffix: "K" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 4, divisor: 3, suffix: "K" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 5, divisor: 5, suffix: "L" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 6, divisor: 5, suffix: "L" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 7, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 8, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 9, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 10, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 11, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 12, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 13, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "short", magnitude: 14, divisor: 7, suffix: "Cr" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 3, divisor: 3, suffix: " thousand" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 4, divisor: 3, suffix: " thousand" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 5, divisor: 5, suffix: " lakh" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 6, divisor: 5, suffix: " lakh" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 7, divisor: 7, suffix: " crore" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 8, divisor: 7, suffix: " crore" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 9, divisor: 7, suffix: " crore" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 10, divisor: 7, suffix: " crore" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 11, divisor: 7, suffix: " crore" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 12, divisor: 7, suffix: " crore" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 13, divisor: 7, suffix: " crore" },
+    IntlCompactData { locale: "en-IN", style: "long", magnitude: 14, divisor: 7, suffix: " crore" },
     IntlCompactData { locale: "en", style: "short", magnitude: 3, divisor: 3, suffix: "K" },
     IntlCompactData { locale: "en", style: "short", magnitude: 4, divisor: 3, suffix: "K" },
     IntlCompactData { locale: "en", style: "short", magnitude: 5, divisor: 3, suffix: "K" },
@@ -1487,6 +1512,9 @@ const INTL_SUPPORTED_CURRENCIES: &[&str] = &[
 ];
 struct IntlPluralRule { locale: &'static str, kind: &'static str, category: &'static str, rule: &'static str }
 const INTL_PLURAL_RULES: &[IntlPluralRule] = &[
+    IntlPluralRule { locale: "pl", kind: "cardinal", category: "one", rule: "i = 1 and v = 0" },
+    IntlPluralRule { locale: "pl", kind: "cardinal", category: "few", rule: "v = 0 and i % 10 = 2..4 and i % 100 != 12..14" },
+    IntlPluralRule { locale: "pl", kind: "cardinal", category: "many", rule: "v = 0 and i != 1 and i % 10 = 0..1 or v = 0 and i % 10 = 5..9 or v = 0 and i % 100 = 12..14" },
     IntlPluralRule { locale: "en", kind: "cardinal", category: "one", rule: "i = 1 and v = 0" },
     IntlPluralRule { locale: "en-GB", kind: "cardinal", category: "one", rule: "i = 1 and v = 0" },
     IntlPluralRule { locale: "de", kind: "cardinal", category: "one", rule: "i = 1 and v = 0" },

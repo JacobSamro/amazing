@@ -1215,7 +1215,7 @@ fn date_value_to_number(i: &mut Interpreter, value: &JsValue) -> Result<f64, Thr
 }
 
 fn date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if !this.is_object() {
+    if i.current_new_target().is_none() {
         let now = date_local_time(date_now_ms());
         return Ok(JsValue::str(format!(
             "{} {} {}",
@@ -1224,20 +1224,7 @@ fn date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<J
             date_time_zone_string(now)
         )));
     }
-    let JsValue::Object(object) = &this else {
-        unreachable!("constructor receiver is an object");
-    };
-    // GetPrototypeFromConstructor falls back to %DatePrototype% when a subclass
-    // has no object `prototype`. The generic construction path can only fall
-    // back to %ObjectPrototype%, so restore the Date prototype here.
-    if object
-        .borrow()
-        .proto
-        .as_ref()
-        .is_some_and(|proto| Rc::ptr_eq(&proto.0, &i.object_proto.0))
-    {
-        object.borrow_mut().proto = Some(i.date_proto.clone());
-    }
+    let _ = &this;
     let value = if args.is_empty() {
         date_time_clip(date_now_ms())
     } else if args.len() == 1 {
@@ -1293,7 +1280,14 @@ fn date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<J
         );
         date_time_clip(date_utc_time(local))
     };
-    Ok(JsValue::num(date_store(object, value)))
+    // DateConstructor owns allocation: the time value is computed first, then NewTarget.prototype.
+    let prototype = std_collection_constructor_prototype(i)?;
+    let mut raw = JsObject::ordinary();
+    raw.proto = Some(prototype);
+    raw.constructed = true;
+    let object = Obj(Rc::new(RefCell::new(raw)));
+    date_store(&object, value);
+    Ok(JsValue::Object(object))
 }
 
 fn date_static_now(

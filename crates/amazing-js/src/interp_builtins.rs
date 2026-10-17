@@ -2302,9 +2302,15 @@ fn native_number(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
         else { i.to_number(&primitive)? }
     } else { 0.0 };
     let value = JsValue::num(number);
-    if let JsValue::Object(object) = &this {
-        object.borrow_mut().boxed_primitive = Some(value);
-        Ok(this)
+    if i.current_new_target().is_some() {
+        // NumberConstructor owns allocation: ToNumeric(value) precedes the NewTarget.prototype Get.
+        let prototype = std_collection_constructor_prototype(i)?;
+        let mut raw = JsObject::ordinary();
+        raw.proto = Some(prototype);
+        raw.constructed = true;
+        raw.boxed_primitive = Some(value);
+        let _ = &this;
+        Ok(JsValue::object(raw))
     } else {
         Ok(value)
     }
@@ -2335,10 +2341,16 @@ fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
         Some(value) => JsValue::str(i.to_js_string(value)?),
     };
     if constructing {
-        let JsValue::Object(object) = &this else { unreachable!() };
+        // StringConstructor owns allocation: ToString(value) precedes the NewTarget.prototype Get.
         let JsValue::Str(string) = value else { unreachable!() };
+        let prototype = std_collection_constructor_prototype(i)?;
+        let mut raw = JsObject::ordinary();
+        raw.proto = Some(prototype);
+        raw.constructed = true;
+        let object = Obj(Rc::new(RefCell::new(raw)));
         object.borrow_mut().initialize_string_data(string);
-        Ok(this)
+        let _ = &this;
+        Ok(JsValue::Object(object))
     } else {
         Ok(value)
     }

@@ -109,7 +109,8 @@ fn intl_collator_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     // CLDR's root collation defaults ignorePunctuation to true for a handful
     // of locales (Thai's is the one a pinned intl402 case exercises); every
     // other locale defaults to false.
-    let ignore_default = locale.split('-').next().unwrap_or(&locale) == "th";
+    let ignore_default = locale.split('-').next().unwrap_or(&locale) == "th"
+        || requested.first().is_some_and(|tag| tag.split('-').next() == Some("th"));
     let ignore_punctuation = if ignore_value.is_undefined() { ignore_default } else { ignore_value.to_boolean() };
     intl_register(&object, IntlState::Collator(IntlCollatorState {
         locale, usage, sensitivity, collation, numeric, case_first, ignore_punctuation,
@@ -234,7 +235,9 @@ fn intl_strip_punctuation(state: &IntlCollatorState, text: &str) -> String {
 // (DIN 5007-1) where they sort next to plain a/o/u -- Collator/prototype/
 // compare/non-normative-phonebook.js exercises exactly this expansion.
 fn intl_base_char_for(state: &IntlCollatorState, ch: char) -> &'static str {
-    if state.collation == "phonebk" {
+    // Portions ported from lucid-softworks/lumen (crates/lumen/src/intl/collator.rs) @ a0f0314de7835f76eaa913995489945aabebf345, MIT:
+    // German search usage expands umlauts like phonebook collation.
+    if state.collation == "phonebk" || (state.usage == "search" && state.locale.split('-').next() == Some("de")) {
         match ch {
             'ä' | 'Ä' => return "ae",
             'ö' | 'Ö' => return "oe",

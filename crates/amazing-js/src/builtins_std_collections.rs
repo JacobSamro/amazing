@@ -732,8 +732,17 @@ fn std_weak_set_delete(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
 }
 
 fn std_weak_ref_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(owner) = &this else { return Err(Throw::type_error("WeakRef requires new")); };
+    if i.current_new_target().is_none() { return Err(Throw::type_error("WeakRef requires new")); }
+    let _ = &this;
+    // CanBeHeldWeakly(target) is checked before OrdinaryCreateFromConstructor.
     let target = std_weak_key(i, &std_reflect_arg(&args, 0)).ok_or_else(|| Throw::type_error("WeakRef target cannot be held weakly"))?;
+    let prototype = std_collection_constructor_prototype(i)?;
+    let mut raw = JsObject::ordinary();
+    raw.proto = Some(prototype);
+    raw.constructed = true;
+    let owner_object = Obj(Rc::new(RefCell::new(raw)));
+    let this = JsValue::Object(owner_object);
+    let JsValue::Object(owner) = &this else { unreachable!() };
     STD_WEAK_REFS.with(|registry| registry.borrow_mut().insert(std_weak_id(owner),
         StdWeakRefData { owner: Rc::downgrade(&owner.0), target }));
     Ok(this)
@@ -746,10 +755,17 @@ fn std_weak_ref_deref(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
         .ok_or_else(|| Throw::type_error("incompatible WeakRef receiver")))
 }
 
-fn std_finalization_constructor(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(owner) = &this else { return Err(Throw::type_error("FinalizationRegistry requires new")); };
+fn std_finalization_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if i.current_new_target().is_none() { return Err(Throw::type_error("FinalizationRegistry requires new")); }
+    let _ = &this;
     let callback = std_reflect_arg(&args, 0);
     if !std_callable(&callback) { return Err(Throw::type_error("cleanup callback is not callable")); }
+    let prototype = std_collection_constructor_prototype(i)?;
+    let mut raw = JsObject::ordinary();
+    raw.proto = Some(prototype);
+    raw.constructed = true;
+    let this = JsValue::Object(Obj(Rc::new(RefCell::new(raw))));
+    let JsValue::Object(owner) = &this else { unreachable!() };
     STD_FINALIZATION.with(|registry| registry.borrow_mut().insert(std_weak_id(owner),
         StdFinalizationData { owner: Rc::downgrade(&owner.0), _callback: callback, registrations: Vec::new() }));
     Ok(this)

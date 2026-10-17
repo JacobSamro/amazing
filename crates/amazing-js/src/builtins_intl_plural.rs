@@ -92,10 +92,19 @@ fn intl_plural_state(this: &JsValue) -> Result<IntlPluralState, Throw> {
     }
 }
 
-fn intl_plural_operands(state: &IntlPluralState, value: f64) -> [f64; 7] {
-    if !value.is_finite() { return [f64::NAN; 7]; }
-    let absolute = value.abs();
-    let fraction = if let Some(max_sig) = state.max_significant {
+fn intl_plural_operands(state: &IntlPluralState, value: f64) -> [f64; 8] {
+    if !value.is_finite() { return [f64::NAN; 8]; }
+    let mut absolute = value.abs();
+    // Compact notation (CLDR plural operands e/c): the number is shown scaled by 10^e
+    // ("1.5M" is e = 6, i = 1, f = 5); one fraction digit survives only below 10.
+    let mut exponent = 0i32;
+    let mut compact_fraction = None;
+    if state.notation == "compact" && absolute >= 1000.0 {
+        exponent = ((absolute.log10().floor() as i32) / 3 * 3).min(15);
+        absolute /= 10f64.powi(exponent);
+        compact_fraction = Some(if absolute < 10.0 { 1 } else { 0 });
+    }
+    let fraction = if let Some(digits) = compact_fraction { digits } else if let Some(max_sig) = state.max_significant {
         let before = if absolute == 0.0 { 1 } else { absolute.log10().floor() as i32 + 1 };
         (max_sig as i32 - before).clamp(0, 100) as usize
     } else { state.max_fraction };
@@ -116,16 +125,17 @@ fn intl_plural_operands(state: &IntlPluralState, value: f64) -> [f64; 7] {
     [
         rounded, integer.parse::<f64>().unwrap_or(0.0), visible as f64,
         visible as f64, fraction_int as f64, trimmed.len() as f64, trimmed_int as f64,
+        exponent as f64,
     ]
 }
 
-fn intl_plural_atom(atom: &str, operands: &[f64; 7]) -> bool {
+fn intl_plural_atom(atom: &str, operands: &[f64; 8]) -> bool {
     let words: Vec<&str> = atom.split_whitespace().collect();
     if words.len() < 3 { return false; }
     let operand = match words[0] {
         "n" => operands[0], "i" => operands[1], "v" => operands[2],
         "w" => operands[5], "f" => operands[4], "t" => operands[6],
-        "e" | "c" => 0.0, _ => return false,
+        "e" | "c" => operands[7], _ => return false,
     };
     let (value, operator_index) = if words.get(1) == Some(&"%") {
         let divisor = words.get(2).and_then(|part| part.parse::<f64>().ok()).unwrap_or(1.0);
@@ -145,7 +155,7 @@ fn intl_plural_atom(atom: &str, operands: &[f64; 7]) -> bool {
     if op == "!=" { !matched } else { matched }
 }
 
-fn intl_plural_matches(rule: &str, operands: &[f64; 7]) -> bool {
+fn intl_plural_matches(rule: &str, operands: &[f64; 8]) -> bool {
     rule.split(" or ").any(|branch| branch.split(" and ").all(|atom| intl_plural_atom(atom, operands)))
 }
 

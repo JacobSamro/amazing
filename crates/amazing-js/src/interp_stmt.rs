@@ -2585,9 +2585,13 @@ impl Interpreter {
             return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
         }
         // RegExp reads P and F, then NewTarget.prototype, then coerces (RegExpAlloc precedes
-        // RegExpInitialize), so it owns allocation too.
+        // RegExpInitialize); Number, String, Date, WeakRef and FinalizationRegistry coerce/validate
+        // their arguments before OrdinaryCreateFromConstructor reads NewTarget.prototype. Each owns
+        // its allocation.
         if matches!(&fun.body, FunctionBody::Native(native)
-            if std::ptr::fn_addr_eq(*native, native_regexp as crate::value::NativeFn)) {
+            if [native_regexp as crate::value::NativeFn, native_number, native_string, native_date, date_ctor,
+                std_weak_ref_constructor, std_finalization_constructor]
+                .iter().any(|owner| std::ptr::fn_addr_eq(*native, *owner))) {
             return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
         }
         // %AbstractModuleSource% always rejects construction in its own realm;

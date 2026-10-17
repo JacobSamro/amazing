@@ -76,9 +76,25 @@ fn intl_relative_state(this: &JsValue) -> Result<IntlRelativeState, Throw> {
     }
 }
 
+fn intl_relative_number_state(state: &IntlRelativeState) -> IntlNumberState {
+    IntlNumberState {
+        locale: state.locale.clone(), resolved_locale: state.locale.clone(),
+        numbering_system: state.numbering_system.clone(),
+        style: "decimal".into(), currency: None, currency_display: "symbol".into(),
+        currency_sign: "standard".into(), unit: None, unit_display: "short".into(),
+        notation: "standard".into(), compact_display: "short".into(), sign_display: "auto".into(),
+        use_grouping: "auto".into(), min_integer: 1, min_fraction: 0, max_fraction: 3,
+        min_significant: None, max_significant: None, rounding_priority: "auto".into(),
+        rounding_mode: "halfExpand".into(), rounding_increment: 1, trailing_zero_display: "auto".into(),
+    }
+}
+
+include!("builtins_intl_relative_pl.rs");
+
 fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Result<Vec<(&'static str, String, bool)>, Throw> {
     if !value.is_finite() { return Err(Throw::range_error("non-finite relative time")); }
     let unit = unit.strip_suffix('s').unwrap_or(unit);
+    if state.locale == "pl" { return intl_relative_pl_parts(state, value, unit); }
     let data = INTL_RELATIVE_DATA.iter().find(|data| data.locale == state.locale && data.unit == unit && data.style == state.style)
         .ok_or_else(|| Throw::range_error("invalid relative time unit"))?;
     let negative = value < 0.0 || (value == 0.0 && value.is_sign_negative());
@@ -103,16 +119,7 @@ fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Res
         (true, true) => data.past_one, (true, false) => data.past_other,
         (false, true) => data.future_one, (false, false) => data.future_other,
     };
-    let number_state = IntlNumberState {
-        locale: state.locale.clone(), resolved_locale: state.locale.clone(),
-        numbering_system: state.numbering_system.clone(),
-        style: "decimal".into(), currency: None, currency_display: "symbol".into(),
-        currency_sign: "standard".into(), unit: None, unit_display: "short".into(),
-        notation: "standard".into(), compact_display: "short".into(), sign_display: "auto".into(),
-        use_grouping: "auto".into(), min_integer: 1, min_fraction: 0, max_fraction: 3,
-        min_significant: None, max_significant: None, rounding_priority: "auto".into(),
-        rounding_mode: "halfExpand".into(), rounding_increment: 1, trailing_zero_display: "auto".into(),
-    };
+    let number_state = intl_relative_number_state(state);
     let (_, number_parts) = intl_format_number(&number_state, value.abs());
     let Some((before, after)) = pattern.split_once("{0}") else {
         return Ok(vec![("literal", pattern.to_string(), false)]);

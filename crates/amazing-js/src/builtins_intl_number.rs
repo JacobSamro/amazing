@@ -388,6 +388,20 @@ fn intl_number_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     let (left, left_exact) = intl_number_range_endpoint(i, &state, &args[0])?;
     let (right, right_exact) = intl_number_range_endpoint(i, &state, &args[1])?;
     if left == right { return Ok(JsValue::str(format!("~{left}"))); }
+    if state.resolved_locale.starts_with("pt-PT") || state.locale == "pt-PT" {
+        // CLDR pt-PT: " - " between endpoints, with the shared currency suffix and a repeated
+        // sign written once ("3 - 5 €", "+2,90 - 3,10 €").
+        let suffix_start = |text: &str| text.rfind(|c: char| c.is_ascii_digit()).map_or(0, |at| at + 1);
+        let (left_end, right_end) = (suffix_start(&left), suffix_start(&right));
+        let (left_core, right_core) = if left[left_end..] == right[right_end..] && !left[left_end..].is_empty() {
+            (&left[..left_end], &right[..right_end])
+        } else { (left.as_str(), right.as_str()) };
+        let right_core = match (left_core.chars().next(), right_core.chars().next()) {
+            (Some(a), Some(b)) if a == b && (a == '+' || a == '-') => &right_core[1..],
+            _ => right_core,
+        };
+        return Ok(JsValue::str(format!("{left_core} - {right_core}")));
+    }
     if state.style == "currency" && state.sign_display == "always" {
         let shared = left.chars().zip(right.chars())
             .take_while(|(a, b)| a == b && !a.is_ascii_digit())
@@ -802,7 +816,16 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         match intl_unit_for(&state.locale, &unit_id, &state.unit_display, category) {
             Some(entry) => {
                 if !entry.prefix.is_empty() {
-                    let prefix_parts = intl_unit_pattern_parts(entry.prefix, entry.unit_name);
+                    // A prefix is its own unit word ("時速", "시속 "): the text is the unit part and
+                    // any trailing space is the separator literal.
+                    let prefix_parts = if entry.prefix.contains(entry.unit_name) {
+                        intl_unit_pattern_parts(entry.prefix, entry.unit_name)
+                    } else {
+                        let word = entry.prefix.trim_end();
+                        let mut parts = vec![("unit", word.to_string())];
+                        if word.len() < entry.prefix.len() { parts.push(("literal", entry.prefix[word.len()..].to_string())); }
+                        parts
+                    };
                     for (offset, part) in prefix_parts.into_iter().enumerate() {
                         parts.insert(offset, part);
                     }

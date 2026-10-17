@@ -103,14 +103,13 @@ fn intl_date_construct(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
         milliseconds = if day_value.is_nan() || time_value.is_nan() { f64::NAN } else { day_value + time_value };
     }
     milliseconds = intl_time_clip(milliseconds);
-    let object = match this {
-        JsValue::Object(object) if i.current_new_target().is_some() => object,
-        _ => {
-            let mut raw = JsObject::ordinary();
-            raw.proto = Some(i.date_proto.clone());
-            Obj(Rc::new(RefCell::new(raw)))
-        }
-    };
+    // DateConstructor owns allocation: the time value is computed (ToPrimitive / ToNumber) first.
+    let _ = &this;
+    let prototype = std_collection_constructor_prototype(i)?;
+    let mut raw = JsObject::ordinary();
+    raw.proto = Some(prototype);
+    raw.constructed = true;
+    let object = Obj(Rc::new(RefCell::new(raw)));
     object.borrow_mut().define("[[DateValue]]", symbol_data(JsValue::num(milliseconds), true, true)).unwrap();
     Ok(JsValue::Object(object))
 }
