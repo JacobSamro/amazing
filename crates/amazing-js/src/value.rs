@@ -975,6 +975,8 @@ pub struct DisposableStackState {
     pub is_async: bool,
     pub disposed: bool,
     pub resources: Vec<DisposableStackEntry>,
+    /// An async stack saw a null/undefined `use` value: disposal must still await once.
+    pub needs_await: bool,
 }
 
 /// One `use`/`adopt`/`defer` entry: `method` is called as `method.call(this_arg, ..arg)`.

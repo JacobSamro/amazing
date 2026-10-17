@@ -46,6 +46,9 @@ impl Interpreter {
     /// async-hint sentinel-await has no observable effect in this interpreter.
     fn disposable_stack_push_use(&mut self, object: &Obj, value: JsValue, is_async: bool) -> Result<(), Throw> {
         if matches!(value, JsValue::Null | JsValue::Undefined) {
+            if is_async {
+                if let Exotic::DisposableStack(state) = &mut object.borrow_mut().exotic { state.needs_await = true; }
+            }
             return Ok(());
         }
         let (method, _) = self.dispose_method(&value, is_async)?;
@@ -150,13 +153,13 @@ impl Interpreter {
 
 fn native_disposable_stack_constructor(_i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = &this else { return Err(Throw::type_error("Constructor DisposableStack requires 'new'")); };
-    object.borrow_mut().exotic = Exotic::DisposableStack(DisposableStackState { is_async: false, disposed: false, resources: Vec::new() });
+    object.borrow_mut().exotic = Exotic::DisposableStack(DisposableStackState { is_async: false, disposed: false, resources: Vec::new(), needs_await: false });
     Ok(this)
 }
 
 fn native_async_disposable_stack_constructor(_i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = &this else { return Err(Throw::type_error("Constructor AsyncDisposableStack requires 'new'")); };
-    object.borrow_mut().exotic = Exotic::DisposableStack(DisposableStackState { is_async: true, disposed: false, resources: Vec::new() });
+    object.borrow_mut().exotic = Exotic::DisposableStack(DisposableStackState { is_async: true, disposed: false, resources: Vec::new(), needs_await: false });
     Ok(this)
 }
 
@@ -245,10 +248,24 @@ fn native_async_disposable_stack_dispose(i: &mut Interpreter, this: JsValue, _ar
     if disposable_stack_disposed(&object) {
         return Ok(new_promise(i, PromiseFate::Fulfilled(JsValue::Undefined)));
     }
+    let mut needs_await = false;
     let entries = match &mut object.borrow_mut().exotic {
-        Exotic::DisposableStack(state) => { state.disposed = true; std::mem::take(&mut state.resources) }
+        Exotic::DisposableStack(state) => {
+            state.disposed = true;
+            needs_await = std::mem::take(&mut state.needs_await);
+            std::mem::take(&mut state.resources)
+        }
         _ => Vec::new(),
     };
+    if entries.is_empty() && needs_await {
+        // DisposeResources with only null/undefined async resources still performs
+        // Await(undefined) before the returned promise settles.
+        let intrinsic = i.intrinsic_promise_constructor.clone();
+        let capability = new_promise_capability(i, &intrinsic)?;
+        let ready = new_promise(i, PromiseFate::Fulfilled(JsValue::Undefined));
+        perform_promise_then(i, &promise_object(&ready)?, None, None, Some(capability.clone()))?;
+        return Ok(capability_promise(&capability));
+    }
     Ok(match i.dispose_stack_entries(entries, true) {
         Ok(()) => new_promise(i, PromiseFate::Fulfilled(JsValue::Undefined)),
         Err(error) => new_promise(i, PromiseFate::Rejected(i.normalize_throw(error).0)),
@@ -270,7 +287,7 @@ fn disposable_stack_move_impl(i: &mut Interpreter, this: JsValue, is_async: bool
     let proto = i.intrinsic_constructors.get(proto_name).map(|(_, proto)| proto.clone()).unwrap_or_else(|| i.object_proto.clone());
     let mut fresh = JsObject::ordinary();
     fresh.proto = Some(proto);
-    fresh.exotic = Exotic::DisposableStack(DisposableStackState { is_async, disposed: false, resources: entries });
+    fresh.exotic = Exotic::DisposableStack(DisposableStackState { is_async, disposed: false, resources: entries, needs_await: false });
     Ok(JsValue::Object(Obj(Rc::new(RefCell::new(fresh)))))
 }
 fn native_disposable_stack_move_sync(i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {

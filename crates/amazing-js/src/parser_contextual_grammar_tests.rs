@@ -20,8 +20,9 @@ fn fields_preserve_the_normative_await_yield_parameters() {
         for (outer, is_async, is_generator) in [("function outer()",false,false),
             ("async function outer()",true,false),("function* outer()",false,true),
             ("async function* outer()",true,true)] {
-            script(&format!("{outer}{{return class{{{field}=await;}};}}"),!is_async);
-            script(&format!("{outer}{{return class{{{field}=await 9;}};}}"),is_async);
+            // Initializer[+In, ~Yield, ~Await]: `await` is an identifier, never an operator.
+            script(&format!("{outer}{{return class{{{field}=await;}};}}"),true);
+            script(&format!("{outer}{{return class{{{field}=await 9;}};}}"),false);
             for value in ["yield 9", "yield"] {
                 script(&format!("{outer}{{return class{{{field}={value};}};}}"),is_generator);
             }
@@ -43,7 +44,7 @@ fn computed_keys_retain_the_enclosing_await_and_yield_context() {
     }
     script("async()=>class{[await]=1}",false);
     script("function* f(){return class{[yield 1]=2;after=yield 3;};}",true);
-    script("async function f(){class C{value=await 1;}await Promise.resolve();}",true);
+    script("async function f(){class C{value=await 1;}await Promise.resolve();}",false);
 }
 
 #[test]
@@ -54,10 +55,11 @@ fn module_and_static_block_identifier_reservations_survive_context_restoration()
     }
     for source in ["class C{value=async()=>await 8;}await Promise.resolve();",
         "class C{static{async function nested(){await 8;}}}",
-        "class C{value=1;}await Promise.resolve();", "async()=>class{value=await 8}"] {module(source,true);}
+        "class C{value=1;}await Promise.resolve();"] {module(source,true);}
+    module("async()=>class{value=await 8}",false);
     script("class C{static{class D{value=await;}await;}}",false);
     script("function* outer(){class C{value=1;}yield 3;}",true);
-    assert!(!crate::parse_module("class C{value=await 1;}").unwrap().has_top_level_await);
+    assert!(crate::parse_module("class C{value=await 1;}").is_err());
     assert!(crate::parse_module("class C{[await 1]=2;}").unwrap().has_top_level_await);
 }
 
@@ -185,7 +187,7 @@ fn public_function_eval_and_module_goals_share_authentic_early_errors() {
     for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
         let mut i=Interpreter::new();i.test_force_ast_callables(backend==ExecutionBackend::TreeWalk);
         for body in ["({async member:0})", "class C{#slot;method(){return !#slot;}}",
-            "function implements(){'use strict';}", "async()=>class{field=await}"] {
+            "function implements(){'use strict';}", "async()=>class{[await]=1}"] {
             let quoted=format!("{body:?}");
             let source=format!("var caught=0;try{{Function({quoted});}}catch(e){{if(e instanceof SyntaxError)caught++;}}try{{eval({quoted});}}catch(e){{if(e instanceof SyntaxError)caught++;}}caught===2");
             assert_eq!(i.run_script_with_backend(&source,backend).unwrap(),JsValue::Bool(true),"{body}");

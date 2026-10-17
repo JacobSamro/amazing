@@ -541,6 +541,8 @@ fn date_parse_legacy(text: &str) -> Option<f64> {
     let mut second = 0i64;
     let mut milli = 0i64;
     let mut offset = 0i64;
+    let mut numbers: Vec<(i64, usize)> = Vec::new();
+    let mut slashed = false;
 
     for token in cleaned.split_whitespace() {
         if token.eq_ignore_ascii_case("GMT") || token.eq_ignore_ascii_case("UTC") {
@@ -578,20 +580,48 @@ fn date_parse_legacy(text: &str) -> Option<f64> {
             }
             continue;
         }
-        if token.bytes().all(|b| b.is_ascii_digit()) {
-            let value: i64 = token.parse().ok()?;
-            if token.len() >= 3 {
-                if year.is_none() {
-                    year = Some(value);
-                }
-            } else if day.is_none() {
-                day = Some(value);
-            } else if year.is_none() {
-                year = Some(value);
+        if token.contains('/') {
+            // M/D/Y, or Y/M/D when the first field cannot be a month or day (> 31).
+            let fields: Vec<&str> = token.split('/').collect();
+            if fields.len() != 3 || !fields.iter().all(|f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit())) {
+                return None;
             }
+            let values: Vec<i64> = fields.iter().map(|f| f.parse().ok()).collect::<Option<_>>()?;
+            let (m, d, y) = if values[0] > 31 || fields[0].len() >= 3 {
+                (values[1], values[2], date_legacy_year(values[0], fields[0].len()))
+            } else {
+                (values[0], values[1], date_legacy_year(values[2], fields[2].len()))
+            };
+            if !(1..=12).contains(&m) || !(1..=31).contains(&d) { return None; }
+            month = Some(m - 1);
+            day = Some(d);
+            year = Some(y);
+            slashed = true;
+            continue;
+        }
+        if token.bytes().all(|b| b.is_ascii_digit()) {
+            numbers.push((token.parse().ok()?, token.len()));
             continue;
         }
         // Zone name words ("Coordinated", "Universal", "Time", ...) are ignored.
+    }
+    if !slashed {
+        // With a month name the remaining numbers are a day and a year in either order;
+        // a first number above 31 (or three digits long) can only be the year.
+        match (year, numbers.as_slice()) {
+            (Some(_), [(d, _)]) => day = Some(*d),
+            (None, [(a, alen), (b, blen)]) => {
+                if *a > 31 || *alen >= 3 {
+                    year = Some(date_legacy_year(*a, *alen));
+                    day = Some(*b);
+                } else {
+                    day = Some(*a);
+                    year = Some(date_legacy_year(*b, *blen));
+                }
+            }
+            _ => return None,
+        }
+        if !(1..=31).contains(&day?) { return None; }
     }
     let (month, day, year) = (month?, day?, year?);
     let t = date_make_date(
@@ -604,8 +634,87 @@ fn date_parse_legacy(text: &str) -> Option<f64> {
     Some(date_time_clip(t - offset as f64 * DATE_MS_PER_MINUTE))
 }
 
+/// Two-digit (or shorter) years follow the SpiderMonkey/V8 pivot: 0-49 are 20xx, 50-99 are 19xx.
+fn date_legacy_year(value: i64, digits: usize) -> i64 {
+    if digits >= 3 { value } else if value < 50 { 2000 + value } else { 1900 + value }
+}
+
+/// `YYYY-M-D[ H:M[:S[.f]]][Z|±HH[[:]MM]]` with one- or two-digit fields and a space (not `T`)
+/// before the time, interpreted as local time when no offset is given.
+fn date_parse_relaxed_iso(text: &str) -> Option<f64> {
+    let (date_text, time_text) = match text.split_once(' ') {
+        Some((date, time)) => (date, Some(time.trim())),
+        None => (text, None),
+    };
+    let (sign, body) = match date_text.as_bytes().first()? {
+        b'+' => (1i64, &date_text[1..]),
+        b'-' => (-1i64, &date_text[1..]),
+        _ => (1, date_text),
+    };
+    let fields: Vec<&str> = body.split('-').collect();
+    if fields.len() != 3 || fields.iter().any(|f| f.is_empty() || !f.bytes().all(|b| b.is_ascii_digit())) { return None; }
+    let year_digits = if date_text.starts_with(['+', '-']) { 6 } else { 4 };
+    if fields[0].len() != year_digits || fields[1].len() > 2 || fields[2].len() > 2 { return None; }
+    let year = sign * fields[0].parse::<i64>().ok()?;
+    let month: i64 = fields[1].parse().ok()?;
+    let day: i64 = fields[2].parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) { return None; }
+    let (mut hour, mut minute, mut second, mut milli) = (0i64, 0i64, 0i64, 0i64);
+    let mut offset: Option<i64> = None;
+    let has_time = time_text.is_some();
+    if let Some(time) = time_text {
+        let (clock, zone) = match time.find(['Z', '+', '-']) {
+            Some(at) => (&time[..at], Some(&time[at..])),
+            None => (time, None),
+        };
+        let parts: Vec<&str> = clock.split(':').collect();
+        if !(2..=3).contains(&parts.len()) { return None; }
+        let digits = |f: &str, max: usize| -> Option<i64> {
+            if f.is_empty() || f.len() > max || !f.bytes().all(|b| b.is_ascii_digit()) { None } else { f.parse().ok() }
+        };
+        hour = digits(parts[0], 2)?;
+        minute = digits(parts[1], 2)?;
+        if let Some(seconds) = parts.get(2) {
+            let (whole, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
+            second = digits(whole, 2)?;
+            if seconds.contains('.') {
+                if fraction.is_empty() || !fraction.bytes().all(|b| b.is_ascii_digit()) { return None; }
+                let mut padded = fraction.to_string();
+                padded.push_str("000");
+                milli = padded[..3].parse().ok()?;
+            }
+        }
+        if hour > 23 || minute > 59 || second > 59 { return None; }
+        if let Some(zone) = zone {
+            offset = Some(if zone == "Z" { 0 } else {
+                let zsign = if zone.starts_with('-') { -1 } else { 1 };
+                let digits: String = zone[1..].chars().filter(|c| *c != ':').collect();
+                if !zone[1..].bytes().all(|b| b.is_ascii_digit() || b == b':') { return None; }
+                let (zh, zm) = match digits.len() {
+                    2 => (digits.parse::<i64>().ok()?, 0),
+                    4 => (digits[..2].parse::<i64>().ok()?, digits[2..].parse::<i64>().ok()?),
+                    _ => return None,
+                };
+                if zh > 23 || zm > 59 { return None; }
+                zsign * (zh * 60 + zm)
+            });
+        }
+    }
+    let mut t = date_make_date(
+        date_make_day(year as f64, (month - 1) as f64, day as f64),
+        date_make_time(hour as f64, minute as f64, second as f64, milli as f64),
+    );
+    if !t.is_finite() { return None; }
+    if let Some(offset) = offset { t -= offset as f64 * DATE_MS_PER_MINUTE; }
+    else if has_time { t = date_utc_time(t); }
+    Some(date_time_clip(t))
+}
+
 fn date_parse_string(text: &str) -> f64 {
     if let Some(value) = date_parse_iso(text) {
+        return value;
+    }
+    if let Some(value) = date_parse_relaxed_iso(text) {
         return value;
     }
     date_parse_legacy(text).unwrap_or(f64::NAN)

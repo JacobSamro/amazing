@@ -176,7 +176,7 @@ fn run_static_elements(
             StaticElement::Block(block) => {
                 eval_class_element_scope(i, constructor.clone(), Some(home.clone()), class_env, |i, scope| {
                     i.hoist(&block.body, scope)?;
-                    i.exec_stmts(&block.body, scope).map(|_| ())
+                    i.exec_stmts_with_disposal(&block.body, scope).map(|_| ())
                 })?;
             }
         }

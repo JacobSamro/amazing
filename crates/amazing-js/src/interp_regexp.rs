@@ -1525,6 +1525,42 @@ struct RegexpReplaceMatch {
     captures: Vec<Option<crate::value::JsString>>,
     named: Option<JsValue>,
 }
+enum RegexpReplaceEntry {
+    Ready(RegexpReplaceMatch),
+    Raw(JsValue),
+}
+/// Step 14 of RegExp.prototype[@@replace]: read one collected result's length, matched
+/// text, index, captures and groups, in that observable order.
+fn regexp_replace_read_result(
+    i: &mut Interpreter, result: &JsValue, units: &[u16], callable: bool, slots: &mut usize,
+) -> Result<RegexpReplaceMatch, Throw> {
+    let length_value = i.get_prop(result, "length")?;
+    let length_number = i.to_number(&length_value)?;
+    let length = if length_number.is_nan() || length_number <= 0.0 { 0 }
+        else { length_number.min(9_007_199_254_740_991.0) as usize };
+    let n_captures = length.saturating_sub(1);
+    *slots += n_captures;
+    if *slots > 1_048_576 {
+        return Err(Throw::range_error("RegExp replacement collection limit"));
+    }
+    let matched_value = i.get_prop(result, "0")?;
+    let matched = i.to_js_string(&matched_value)?;
+    let position_value = i.get_prop(result, "index")?;
+    let position_number = i.to_number(&position_value)?;
+    let position = if position_number.is_nan() || position_number <= 0.0 { 0 }
+        else { (position_number as usize).min(units.len()) };
+    let mut captures = Vec::with_capacity(n_captures + 1);
+    captures.push(Some(matched.clone()));
+    for index in 1..=n_captures {
+        let capture = i.get_prop(result, &index.to_string())?;
+        captures.push(if capture.is_undefined() { None } else { Some(i.to_js_string(&capture)?) });
+    }
+    let named = i.get_prop(result, "groups")?;
+    let named = if named.is_undefined() { None } else if !callable {
+        Some(std_legacy_to_object(i, named)?)
+    } else { Some(named) };
+    Ok(RegexpReplaceMatch { matched, position, captures, named })
+}
 fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[JsValue]) -> Result<JsValue, Throw> {
     let regexp = &args[0];
     // `regex` is None for a generic RegExp-like receiver (custom `exec`, a
@@ -1558,7 +1594,7 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
         i.set_prop(regexp, "lastIndex", JsValue::num(0.0))?;
     }
     let units = regexp_units(source)?;
-    let mut matches = Vec::new();
+    let mut matches: Vec<RegexpReplaceEntry> = Vec::new();
     let mut slots = 0;
     loop {
         // RegExpExec, not the internal matcher directly: an overridden `exec`,
@@ -1590,44 +1626,30 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
         } else {
             let result = regexp_exec_call(i, regexp, source, &exec)?;
             if result.is_null() { break; }
-            let length_value = i.get_prop(&result, "length")?;
-            let length_number = i.to_number(&length_value)?;
-            let length = if length_number.is_nan() || length_number <= 0.0 { 0 }
-                else { length_number.min(9_007_199_254_740_991.0) as usize };
-            let n_captures = length.saturating_sub(1);
-            slots += n_captures;
-            if matches.len() >= 100_000 || slots > 1_048_576 {
+            if matches.len() >= 100_000 {
                 return Err(Throw::range_error("RegExp replacement collection limit"));
             }
-            let matched_value = i.get_prop(&result, "0")?;
-            let matched = i.to_js_string(&matched_value)?;
-            let position_value = i.get_prop(&result, "index")?;
-            let position_number = i.to_number(&position_value)?;
-            let position = if position_number.is_nan() || position_number <= 0.0 { 0 }
-                else { (position_number as usize).min(units.len()) };
-            // `regexp_substitution`'s $&/$N indexing treats slot 0 as the
-            // whole match and slot N (N >= 1) as capture group N, matching
-            // amazing_regex::Match.captures's own convention -- so slot 0 is
-            // seeded with `matched` up front rather than left for group 1.
-            let mut captures = Vec::with_capacity(n_captures + 1);
-            captures.push(Some(matched.clone()));
-            for index in 1..=n_captures {
-                let capture = i.get_prop(&result, &index.to_string())?;
-                captures.push(if capture.is_undefined() { None } else { Some(i.to_js_string(&capture)?) });
+            // RegExp.prototype[@@replace] step 11: collect results first; only
+            // ToString(Get(result, "0")) is read here (for the empty-match advance).
+            let mut empty = false;
+            if global {
+                let matched_value = i.get_prop(&result, "0")?;
+                empty = i.to_js_string(&matched_value)?.is_empty();
             }
-            // Get(result, "groups") happens unconditionally per match, before
-            // the functional/string-replacement branch decides what to do
-            // with it; the string branch's ToObject(namedCaptures) is where a
-            // null/primitive groups value throws (e.g. `groups: null` on a
-            // custom exec result).
-            let named = i.get_prop(&result, "groups")?;
-            (matched, position, captures, named)
+            matches.push(RegexpReplaceEntry::Raw(result));
+            if !global { break; }
+            if empty {
+                let last = regexp_last_index(i, regexp)?;
+                let next = amazing_regex::advance_index(&units, last, unicode);
+                i.set_prop(regexp, "lastIndex", JsValue::num(next as f64))?;
+            }
+            continue;
         };
         let named = if named.is_undefined() { None } else if !callable {
             Some(std_legacy_to_object(i, named)?)
         } else { Some(named) };
         let empty = matched.is_empty();
-        matches.push(RegexpReplaceMatch { matched, position, captures, named });
+        matches.push(RegexpReplaceEntry::Ready(RegexpReplaceMatch { matched, position, captures, named }));
         if !global { break; }
         if empty {
             // ToLength(? Get(rx, "lastIndex")): saturates at 2**53 - 1.
@@ -1638,7 +1660,11 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
     }
     let mut out = Vec::<u16>::new();
     let mut end = 0usize;
-    for m in matches {
+    for entry in matches {
+        let m = match entry {
+            RegexpReplaceEntry::Ready(m) => m,
+            RegexpReplaceEntry::Raw(result) => regexp_replace_read_result(i, &result, &units, callable, &mut slots)?,
+        };
         // A match whose reported position precedes the end of the previous
         // replacement (possible only with a custom `exec`) is skipped whole,
         // per spec step 14's "if position >= nextSourcePosition" guard.

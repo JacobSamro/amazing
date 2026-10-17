@@ -17,9 +17,11 @@ impl Parser {
         let saved = (self.in_async, self.in_generator, self.in_static_block,
             self.in_class_field_initializer, self.in_formal_params, self.in_new_target,
             self.super_call_allowed, self.super_property_allowed, self.no_in, self.in_function);
-        // ClassStaticBlock uses +Await, even though direct await is an early error.
-        // Its nested field initializer therefore inherits that grammar parameter.
-        self.in_async = saved.0.max(usize::from(saved.2 > 0));
+        // FieldDefinition: ClassElementName Initializer[+In, ~Yield, ~Await]: an enclosing
+        // async function does not make `await` an operator inside the initializer. A class
+        // static block is +Await (direct await is an early error), so a field nested
+        // directly in one still treats `await` as reserved.
+        self.in_async = usize::from(saved.2 > 0);
         self.in_static_block = 0;
         self.in_class_field_initializer += 1;
         self.in_formal_params = 0;
