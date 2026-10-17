@@ -1,0 +1,64 @@
+{
+ "ticket": "intl-datetime-range-tznames",
+ "source_commit": "797c6b3c8",
+ "base_commit": "634962b29",
+ "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+ "before": {
+  "files": {
+   "pass": 53511,
+   "fail": 54,
+   "timeout": 13,
+   "unsupported": 0,
+   "skipped": 294
+  },
+  "variants": {
+   "pass": 102794,
+   "fail": 99,
+   "timeout": 25,
+   "unsupported": 0,
+   "skipped": 0
+  },
+  "raw": "/home/user/amazing/out/r2-temporal/full-base19.json",
+  "raw_sha256": "14c04102f7b4cefd3fa83cd9996b8704326c6b86de25400aa761872e5681a8a4",
+  "classification_sha256": "59a01e7e67e09ce575525343930c699dbd434d74cb74bf61b41a7a6f12e7c49a"
+ },
+ "after": {
+  "files": {
+   "pass": 53521,
+   "fail": 44,
+   "timeout": 13,
+   "unsupported": 0,
+   "skipped": 294
+  },
+  "variants": {
+   "pass": 102813,
+   "fail": 79,
+   "timeout": 26,
+   "unsupported": 0,
+   "skipped": 0
+  },
+  "raw": "/home/user/amazing/out/r2-temporal/full-cand.json",
+  "raw_sha256": "99d509f7e1f1593326dc3a9436fec83d54dcf614e16fd9a662c82f29e4f193db",
+  "classification_sha256": "5638ad83898e6cb403ab01bd616b88089372c75a82da15527868fb413a53313c"
+ },
+ "gained_files": 10,
+ "gained_variants": 20,
+ "lost_files": [],
+ "lost_variants": [
+  "staging/sm/TypedArray/sort_large_countingsort.js#strict"
+ ],
+ "gained": [
+  "intl402/DateTimeFormat/constructor-options-order.js",
+  "intl402/DateTimeFormat/prototype/format/numbering-system.js",
+  "intl402/DateTimeFormat/prototype/format/temporal-objects-no-time-clip-non-latin-numerals.js",
+  "intl402/DateTimeFormat/prototype/formatRange/temporal-objects-resolved-time-zone.js",
+  "intl402/DateTimeFormat/prototype/formatRange/to-datetime-formattable-with-different-arg-kinds.js",
+  "intl402/DateTimeFormat/prototype/formatRangeToParts/temporal-objects-resolved-time-zone.js",
+  "intl402/DateTimeFormat/prototype/formatRangeToParts/to-datetime-formattable-with-different-arg-kinds.js",
+  "intl402/Temporal/ZonedDateTime/prototype/round/same-date-starts-twice.js",
+  "intl402/Temporal/ZonedDateTime/prototype/startOfDay/dst-basic.js",
+  "intl402/Temporal/ZonedDateTime/prototype/toLocaleString/options-timeZoneName-affects-instance-time-zone.js"
+ ],
+ "host": "boat bx_mre9uqbs r2-temporal",
+ "note": "lost entries listed here were load timeouts, re-run alone on the same binary and passing"
+}

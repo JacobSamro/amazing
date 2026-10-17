@@ -29,6 +29,8 @@ struct IntlDateState {
     // drops them either way, but only an *explicit* request with no
     // remaining overlap is a TypeError -- see intl_temporal_adapt_state.
     ymd_defaulted: bool,
+    // Plain Temporal values have no zone: a timeStyle's zone name is dropped from the pattern.
+    omit_time_zone: bool,
 }
 
 fn intl_optional_string(i: &mut Interpreter, options: &JsValue, key: &str, allowed: &[&str]) -> Result<Option<String>, Throw> {
@@ -112,8 +114,10 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
     let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let calendar_raw = i.get_prop(&options, "calendar")?;
     let calendar_present = !calendar_raw.is_undefined();
+    let mut calendar_text: Option<String> = None;
     if calendar_present {
         let value = i.to_string(&calendar_raw)?;
+        calendar_text = Some(value.clone());
         if value.split('-').any(|part| !(3..=8).contains(&part.len())
             || !part.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
             return Err(Throw::range_error("invalid calendar"));
@@ -122,7 +126,7 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
     // A well-formed but unavailable calendar is ignored; the requested -u-ca
     // extension or the locale default is used instead.
     let ca_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "ca"));
-    let ca_option = if calendar_present { Some(i.to_string(&calendar_raw)?) } else { None };
+    let ca_option = calendar_text;
     let (ca_retained, calendar_effective) = intl_resolve_keyword(
         ca_extension, ca_option, intl_calendar_supported, "gregory");
     let calendar = match calendar_effective.to_ascii_lowercase().as_str() {
@@ -133,7 +137,16 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
     // (after localeMatcher is read, once its bool is known) rather than at
     // the top does not change getter-call order for any other option.
     let locale = intl_lookup(&requested, matcher == "best fit");
-    let numbering_default = intl_data(&locale).numbering_system;
+    let mut numbering_default = intl_data(&locale).numbering_system;
+    if let Some(tag) = requested.first() {
+        // CLDR: Arabic regions other than the Maghreb/UAE default to Arabic-Indic digits.
+        let mut subtags = tag.split('-');
+        if subtags.next() == Some("ar") {
+            if let Some(region) = subtags.find(|part| part.len() == 2 && part.bytes().all(|b| b.is_ascii_uppercase())) {
+                if !["AE", "DZ", "EH", "LY", "MA", "TN"].contains(&region) { numbering_default = "arab"; }
+            }
+        }
+    }
     let numbering_raw = i.get_prop(&options, "numberingSystem")?;
     let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
     if let Some(value) = numbering_option.as_ref() {
@@ -144,10 +157,10 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
     let nu_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "nu"));
     let (nu_retained, numbering_system) =
         intl_resolve_keyword(nu_extension, numbering_option, intl_supported_numbering_system, numbering_default);
+    let hour12 = i.get_prop(&options, "hour12")?;
+    let hour_cycle_option = intl_optional_string(i, &options, "hourCycle", &["h11", "h12", "h23", "h24"])?;
     let time_zone_option = intl_string_option(i, &options, "timeZone", &[], "UTC")?;
     let time_zone = intl_timezone(&time_zone_option)?;
-    let date_style = intl_optional_string(i, &options, "dateStyle", &["full", "long", "medium", "short"])?;
-    let time_style = intl_optional_string(i, &options, "timeStyle", &["full", "long", "medium", "short"])?;
     let weekday = intl_optional_string(i, &options, "weekday", &["narrow", "short", "long"])?;
     let era = intl_optional_string(i, &options, "era", &["narrow", "short", "long"])?;
     let mut year = intl_optional_string(i, &options, "year", &["2-digit", "numeric"])?;
@@ -159,10 +172,12 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
     let second = intl_optional_string(i, &options, "second", &["2-digit", "numeric"])?;
     let fractional_second_value = i.get_prop(&options, "fractionalSecondDigits")?;
     let fractional_second_digits = if fractional_second_value.is_undefined() { None }
-        else { Some(intl_integer_option(i, &options, "fractionalSecondDigits", 1, 3, 1)?) };
+        else { Some(intl_integer_from_value(i, &fractional_second_value, "fractionalSecondDigits", 1, 3, 1)?) };
     let time_zone_name = intl_optional_string(i, &options, "timeZoneName",
         &["short", "long", "shortOffset", "longOffset", "shortGeneric", "longGeneric"])?;
     let _format_matcher = intl_string_option(i, &options, "formatMatcher", &["basic", "best fit"], "best fit")?;
+    let date_style = intl_optional_string(i, &options, "dateStyle", &["full", "long", "medium", "short"])?;
+    let time_style = intl_optional_string(i, &options, "timeStyle", &["full", "long", "medium", "short"])?;
     if (date_style.is_some() || time_style.is_some())
         && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
             hour.as_ref(), minute.as_ref(), second.as_ref(), time_zone_name.as_ref()].iter().any(|field| field.is_some())
@@ -213,8 +228,6 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
         month = Some("numeric".into());
         day = Some("numeric".into());
     }
-    let hour_cycle_option = intl_optional_string(i, &options, "hourCycle", &["h11", "h12", "h23", "h24"])?;
-    let hour12 = i.get_prop(&options, "hour12")?;
     let hc_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
         .filter(|value| ["h11", "h12", "h23", "h24"].contains(&value.as_str()));
     let default_cycle = if ["en", "ar", "ko", "zh-Hant"].contains(&locale.as_str()) { "h12" } else { "h23" };
@@ -233,7 +246,7 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
     Ok(IntlDateState {
         locale, resolved_locale, calendar, numbering_system, time_zone,
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
-        second, fractional_second_digits, time_zone_name, hour_cycle, ymd_defaulted,
+        second, fractional_second_digits, time_zone_name, hour_cycle, ymd_defaulted, omit_time_zone: false,
     })
 }
 
@@ -271,6 +284,14 @@ fn intl_civil_date(milliseconds: f64, offset_seconds: i64) -> Option<IntlCivilDa
 
 fn intl_date_data(locale: &str) -> &'static IntlDateData {
     INTL_DATE_DATA.iter().find(|data| data.locale == locale).unwrap_or(&INTL_DATE_DATA[0])
+}
+
+// Removes the zone field (and the brackets/parentheses/spaces around it) from a CLDR time pattern.
+fn intl_strip_zone(pattern: &str) -> String {
+    let mut out = String::new();
+    for c in pattern.chars() { if c != 'z' { out.push(c); } }
+    let out = out.replace("()", "").replace("[]", "");
+    out.trim_matches(|c: char| c == ' ' || c == '\u{202f}').to_string()
 }
 
 // Rewrites a CLDR time pattern written for the locale's default hour cycle into the requested one.
@@ -324,8 +345,10 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     let data = intl_date_data(&state.locale);
     let style_index = |style: &str| match style { "full" => 0, "long" => 1, "medium" => 2, _ => 3 };
     let date = state.date_style.as_ref().map(|style| data.date[style_index(style)].to_string());
-    let time = state.time_style.as_ref()
-        .map(|style| intl_adapt_hour_cycle(data.time[style_index(style)], &state.hour_cycle));
+    let time = state.time_style.as_ref().map(|style| {
+        let pattern = intl_adapt_hour_cycle(data.time[style_index(style)], &state.hour_cycle);
+        if state.omit_time_zone { intl_strip_zone(&pattern) } else { pattern }
+    });
     if let (Some(date), Some(time)) = (&date, &time) {
         return data.date_time[style_index(state.date_style.as_deref().unwrap())]
             .replace("{1}", date).replace("{0}", time);
@@ -404,10 +427,11 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
         let _ = second;
     }
     if let Some(digits) = state.fractional_second_digits {
-        time.push('.');
+        time.push(if matches!(state.numbering_system.as_str(), "arab" | "arabext") { '\u{66b}' } else { '.' });
         time.push_str(&"S".repeat(digits));
     }
-    let period_space = if ["en", "en-GB", "hi"].contains(&state.locale.as_str()) { '\u{202f}' } else { ' ' };
+    // CLDR's "hh" skeleton keeps an ordinary space before the day period; the others use U+202F.
+    let period_space = if ["en", "en-GB", "hi"].contains(&state.locale.as_str()) && state.hour.as_deref() != Some("2-digit") { '\u{202f}' } else { ' ' };
     if state.day_period.is_some() {
         if !time.is_empty() { time.push(' '); }
         time.push('B');
@@ -535,6 +559,7 @@ fn intl_temporal_adapt_state(state: &IntlDateState, kind: IntlTemporalKind) -> R
         }
     }
     adapted.time_zone_name = None;
+    adapted.omit_time_zone = true;
     if matches!(kind, IntlTemporalKind::YearMonth | IntlTemporalKind::MonthDay) {
         // A dateStyle on a partial date expands to the matching year-month / month-day skeleton.
         if let Some(style) = adapted.date_style.take() {
@@ -582,7 +607,7 @@ fn intl_temporal_adapt_state(state: &IntlDateState, kind: IntlTemporalKind) -> R
 // of the five implemented Temporal Plain* kinds, carrying its own
 // already-computed civil date (never routed through millisecond TimeClip,
 // so it works past the legacy Date range -- see days_from_civil above).
-enum IntlDateInput { Legacy(f64), Instant(f64), Temporal(IntlTemporalKind, IntlCivilDate, String) }
+enum IntlDateInput { Legacy(f64), Instant(f64), Temporal(IntlTemporalKind, IntlCivilDate, String), Zoned }
 
 fn intl_date_input(i: &mut Interpreter, value: Option<&JsValue>) -> Result<IntlDateInput, Throw> {
     if let Some(value @ JsValue::Object(_)) = value {
@@ -596,6 +621,21 @@ fn intl_date_input(i: &mut Interpreter, value: Option<&JsValue>) -> Result<IntlD
         }
     }
     intl_date_value(i, value).map(IntlDateInput::Legacy)
+}
+
+// formatRange's endpoints: HandleDateTimeValue defers TimeClip until both argument kinds are known to match.
+fn intl_date_input_range(i: &mut Interpreter, value: Option<&JsValue>) -> Result<IntlDateInput, Throw> {
+    if let Some(value @ JsValue::Object(_)) = value {
+        // A ZonedDateTime is only rejected once both endpoints have been converted.
+        if std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)).is_ok() { return Ok(IntlDateInput::Zoned); }
+        if let Ok(record) = std_epoch_record(value, Some(StdEpochKind::Instant)) {
+            return Ok(IntlDateInput::Instant(record.epoch_ns.div_euclid(1_000_000) as f64));
+        }
+        if let Some((kind, date, calendar)) = intl_temporal_lookup(value) {
+            return Ok(IntlDateInput::Temporal(kind, date, calendar));
+        }
+    }
+    intl_date_value_raw(i, value).map(IntlDateInput::Legacy)
 }
 
 fn intl_render_civil(state: &IntlDateState, date: IntlCivilDate, offset_seconds: i64) -> Vec<(&'static str, String)> {
@@ -699,6 +739,17 @@ fn intl_render_civil(state: &IntlDateState, date: IntlCivilDate, offset_seconds:
                 } else if name == Some("longOffset") {
                     if offset_seconds == 0 { "GMT".to_string() }
                     else { format!("GMT{sign}{:02}:{:02}", minutes / 60, minutes % 60) }
+                } else if let Some(named) = (!utc_zone && tz_fixed_offset_seconds(&state.time_zone).is_none()).then(|| {
+                    let style = match name {
+                        Some(style @ ("short" | "long" | "shortGeneric" | "longGeneric")) => style,
+                        _ => if count >= 4 { "long" } else { "short" },
+                    };
+                    let january = tz_offset_ns(&state.time_zone, days_from_civil(date.year as i64, 1, 1) as i128 * 86_400_000_000_000);
+                    let july = tz_offset_ns(&state.time_zone, days_from_civil(date.year as i64, 7, 1) as i128 * 86_400_000_000_000);
+                    let daylight = january != july && offset_seconds as i128 * 1_000_000_000 > january.min(july);
+                    intl_tz_display_name(&state.time_zone, style, daylight)
+                }).flatten() {
+                    named
                 } else if offset_seconds == 0 && utc_zone {
                     if count >= 4 || name == Some("long") { "Coordinated Universal Time".to_string() } else { "UTC".to_string() }
                 } else if offset_seconds == 0 {
@@ -718,15 +769,19 @@ fn intl_render_civil(state: &IntlDateState, date: IntlCivilDate, offset_seconds:
     parts
 }
 
-fn intl_date_value(i: &mut Interpreter, value: Option<&JsValue>) -> Result<f64, Throw> {
-    let milliseconds = match value {
+fn intl_date_value_raw(i: &mut Interpreter, value: Option<&JsValue>) -> Result<f64, Throw> {
+    Ok(match value {
         Some(JsValue::Object(object)) if object.borrow().get_own("[[DateValue]]").is_some() => {
             let stored = object.borrow().get_own("[[DateValue]]").unwrap();
             i.to_number(&stored)?
         }
         Some(JsValue::Undefined) | None => intl_now_milliseconds(),
         Some(value) => i.to_number(value)?,
-    };
+    })
+}
+
+fn intl_date_value(i: &mut Interpreter, value: Option<&JsValue>) -> Result<f64, Throw> {
+    let milliseconds = intl_date_value_raw(i, value)?;
     // PartitionDateTimePattern applies TimeClip: non-finite values and values
     // outside the ECMAScript time range are a RangeError; in-range finite
     // values are truncated toward zero.
@@ -762,6 +817,7 @@ fn intl_render_input(state: &IntlDateState, input: IntlDateInput) -> Result<Vec<
         IntlDateInput::Legacy(milliseconds) => Ok(intl_render_date(state, milliseconds)),
         IntlDateInput::Instant(milliseconds) => Ok(intl_render_date(&intl_instant_state(state), milliseconds)),
         IntlDateInput::Temporal(kind, date, _calendar) => Ok(intl_render_civil(&intl_temporal_adapt_state(state, kind)?, date, 0)),
+        IntlDateInput::Zoned => Err(Throw::type_error("ZonedDateTime cannot be formatted")),
     }
 }
 
@@ -777,8 +833,10 @@ fn intl_date_range_input(
             Ok(intl_date_range_parts(&intl_instant_state(state), start, end))
         }
         (IntlDateInput::Legacy(start), IntlDateInput::Legacy(end)) => {
-            if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
-            Ok(intl_date_range_parts(state, start, end))
+            if [start, end].iter().any(|value| !value.is_finite() || value.abs() > 8.64e15) {
+                return Err(Throw::range_error("invalid date range"));
+            }
+            Ok(intl_date_range_parts(state, start.trunc(), end.trunc()))
         }
         (IntlDateInput::Temporal(left_kind, start, left_calendar), IntlDateInput::Temporal(right_kind, end, right_calendar))
             if left_kind == right_kind => {
@@ -817,8 +875,8 @@ fn intl_date_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRange requires two dates"));
     }
-    let start = intl_date_input(i, args.first())?;
-    let end = intl_date_input(i, args.get(1))?;
+    let start = intl_date_input_range(i, args.first())?;
+    let end = intl_date_input_range(i, args.get(1))?;
     let parts = intl_date_range_input(&state, start, end)?;
     Ok(JsValue::str(parts.iter().map(|(_, value, _)| value.as_str()).collect::<String>()))
 }
@@ -828,8 +886,8 @@ fn intl_date_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRangeToParts requires two dates"));
     }
-    let start = intl_date_input(i, args.first())?;
-    let end = intl_date_input(i, args.get(1))?;
+    let start = intl_date_input_range(i, args.first())?;
+    let end = intl_date_input_range(i, args.get(1))?;
     let mut values = Vec::new();
     for (kind, value, source) in intl_date_range_input(&state, start, end)? {
         let part = i.object_value();
@@ -864,17 +922,24 @@ fn intl_date_range_parts_from(
         return left.into_iter().map(|(kind, value)| (kind, value, "shared")).collect();
     }
     let textual_month = ["long", "short", "narrow"].contains(&state.month.as_deref().unwrap_or(""));
+    let is_date = |kind: &str| matches!(kind, "year" | "month" | "day" | "weekday" | "era" | "relatedYear" | "yearName");
+    let value_of = |parts: &[(&'static str, String)], kind: &str| {
+        parts.iter().find(|(part, _)| *part == kind).map(|(_, text)| text.clone())
+    };
+    let date_equal = ["year", "month", "day", "weekday", "era", "relatedYear"]
+        .iter().all(|kind| value_of(&left, kind) == value_of(&right, kind));
+    let has_time = left.iter().any(|(kind, _)| *kind != "literal" && !is_date(kind));
     let mut prefix = 0;
     let mut suffix = 0;
-    // CLDR interval formats key on the greatest differing calendar field: when the year
-    // differs every field is repeated ("Mar 4, 2019 – Mar 4, 2020").
-    let year_value = |parts: &Vec<(&'static str, String)>| parts.iter()
-        .find(|(kind, _)| matches!(*kind, "year" | "relatedYear" | "yearName")).map(|(_, value)| value.clone());
-    let year_differs = year_value(&left) != year_value(&right);
-    if textual_month && !year_differs {
+    if date_equal && has_time {
+        // Same day, different times: the date is shared, only the time part is a range.
+        prefix = left.iter().position(|(kind, _)| *kind != "literal" && !is_date(kind)).unwrap_or(0);
+    } else if !has_time && textual_month && value_of(&left, "year") == value_of(&right, "year") {
         while prefix < left.len().min(right.len()) && left[prefix] == right[prefix] { prefix += 1; }
         while suffix < left.len().min(right.len()) - prefix
             && left[left.len() - suffix - 1] == right[right.len() - suffix - 1] { suffix += 1; }
+        // A month that differs leaves nothing shared in front of it.
+        if value_of(&left, "month") != value_of(&right, "month") { prefix = 0; }
     }
     let mut parts = Vec::new();
     parts.extend(left[..prefix].iter().cloned().map(|(kind, value)| (kind, value, "shared")));

@@ -991,7 +991,9 @@ fn std_epoch_to_plain(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
     // The receiver's own calendar carries forward into the Plain* result
     // (JSS-calendars item 2); PlainTime has no calendar concept, so its
     // conversion path is unaffected either way.
-    std_temporal_make_cal(i, kind, std_epoch_local_fields(&data)?, data.calendar)
+    let mut fields = std_epoch_local_fields(&data)?;
+    if kind == StdTemporalKind::PlainDate { fields[3..9].fill(0); }
+    std_temporal_make_cal(i, kind, fields, data.calendar)
 }
 fn std_epoch_to_instant(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
@@ -1576,8 +1578,15 @@ fn std_epoch_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
         let day_length_ns = end_ns - start_ns;
         if day_length_ns <= 0 { return Err(Throw::range_error("invalid Temporal day length")); }
         let offset_in_day = data.epoch_ns - start_ns;
-        let rounded = std_temporal_round_integer(offset_in_day, day_length_ns, &mode)?;
-        start_ns + rounded
+        if offset_in_day >= 0 && offset_in_day < day_length_ns {
+            let rounded = std_temporal_round_integer(offset_in_day, day_length_ns, &mode)?;
+            start_ns + rounded
+        } else {
+            // The wall-clock time repeats (an offset change put this instant past its own local
+            // day's bracket): round the local time of day and pick the start or the end.
+            let rounded = std_temporal_round_integer(std_temporal_time_ns(&local), STD_TEMPORAL_NS_DAY, &mode)?;
+            if rounded >= STD_TEMPORAL_NS_DAY { end_ns } else { start_ns }
+        }
     } else {
         let step = std_temporal_unit_ns(&unit).unwrap() * increment as i128;
         let time_ns = std_temporal_time_ns(&local);
