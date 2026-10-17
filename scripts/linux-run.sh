@@ -236,9 +236,24 @@ SOURCE_ARCHIVE_SHA=""
 SOURCE_TRANSFER_RECEIPT=""
 if [ "$HOST" = boat ] && [ -z "$MISSION_PACKAGE" ]; then
   SOURCE_ARCHIVE=$(mktemp /tmp/amazing-source-transport.XXXXXX) || exit 3
-  trap 'rm -f "${SOURCE_ARCHIVE:-}"; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
-  tar -czf "$SOURCE_ARCHIVE" --exclude=./.git --exclude=./target --exclude='./target-*' \
-    --exclude=./.agents --exclude=./out --exclude=./corpora -C "$SRC" . || exit 3
+  trap 'rm -f "${SOURCE_ARCHIVE:-}"; rm -rf "${SRC_TMP:-}" "${DELTA_WORK:-}" "$LANE_LOCK"' EXIT
+  # The manifest (scripts/src-delta.py) lists exactly the files that belong in the archive; when
+  # it is available the archive is cut from that list (COPYFILE_DISABLE keeps macOS ._ files out),
+  # so the delta path and the full upload describe the same tree. AMAZING_FULL_UPLOAD=1 or a
+  # manifest failure falls back to the historical directory tar.
+  SRC_DELTA=0
+  if [ "${AMAZING_FULL_UPLOAD:-0}" != 1 ]; then
+    DELTA_WORK=$(mktemp -d /tmp/amazing-source-delta.XXXXXX) &&
+    python3 "$REPO/scripts/src-delta.py" manifest --root "$SRC" --out "$DELTA_WORK/manifest.json" \
+      --list "$DELTA_WORK/files.list" > "$DELTA_WORK/manifest.id" &&
+    SRC_DELTA=1 || { echo "linux-run[$LANE]: delta manifest unavailable; full upload" >&2; SRC_DELTA=0; }
+  fi
+  if [ "$SRC_DELTA" = 1 ]; then
+    COPYFILE_DISABLE=1 tar -czf "$SOURCE_ARCHIVE" --null -T "$DELTA_WORK/files.list" -C "$SRC" || exit 3
+  else
+    tar -czf "$SOURCE_ARCHIVE" --exclude=./.git --exclude=./target --exclude='./target-*' \
+      --exclude=./.agents --exclude=./out --exclude=./corpora -C "$SRC" . || exit 3
+  fi
   # Packet provenance is recorded before any allocation and remains available
   # even when no native job starts. The setup summary embeds this same receipt.
   SOURCE_TRANSFER_RECEIPT="$SRC/source-transfer.manifest.json"
@@ -250,6 +265,8 @@ import json,sys
 print(json.load(open(sys.argv[1]))['archive_sha256'])
 PYHASH
   ) || exit 3
+  SRC_HEAD="${COMMIT:-$(git -C "$SRC" rev-parse HEAD 2>/dev/null)}"
+  SRC_LABEL="${COMMIT:-${SRC_HEAD}+wt}"
 fi
 
 if [ "$HOST" = boat ]; then
@@ -274,7 +291,7 @@ if [ "$HOST" = boat ]; then
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=2 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
     # Drop the lease if we exit before the remote command's own trap takes
     # over (failed or interrupted sync); a stale lease keeps the sandbox billed.
-    trap 'if [ "${JOB_CAPTURED:-0}" = 0 ] || [ "${JOB_TERMINAL:-0}" = 1 ]; then $BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; fi; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"; rm -f "${SOURCE_ARCHIVE:-}"' EXIT
+    trap 'if [ "${JOB_CAPTURED:-0}" = 0 ] || [ "${JOB_TERMINAL:-0}" = 1 ]; then $BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; fi; rm -rf "${SRC_TMP:-}" "${DELTA_WORK:-}" "$LANE_LOCK"; rm -f "${SOURCE_ARCHIVE:-}"' EXIT
     if [ -n "$CAPTURED_PROOF_ROOT" ]; then
       setup_phase=captured-native-root
       ROOT_PREFLIGHT_RECEIPT="$ENDPOINT_RECEIPT.proof-root.summary.json"
@@ -309,17 +326,45 @@ if [ "$HOST" = boat ]; then
     setup_phase=native-source-directory
     $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'mkdir -p amazing/out/$LANE .amazing-busy && mkdir -m 700 $NATIVE_SOURCE_DIR && touch $LEASE'"
     setup_rc=$?
-    if [ "$setup_rc" = 0 ]; then
+    # Delta first: rebuild the tree on the box from its verified source cache plus the changed
+    # files, checked against the Mac's manifest. Exit 10 = no usable base; anything else is a
+    # failure. Both fall back to the full upload below.
+    DELTA_MODE=0
+    if [ "$setup_rc" = 0 ] && [ "${SRC_DELTA:-0}" = 1 ]; then
+      setup_phase=native-source-delta
+      python3 "$REPO/scripts/src-delta.py" upload --manifest "$DELTA_WORK/manifest.json" --root "$SRC" \
+        --ssh "$BSSH $BOAT_HOST" --host "$BOAT_HOST" --port "$BOAT_PORT" --key "$HOME/.ssh/ascii_box_ed25519" \
+        --native-dir "$NATIVE_SOURCE_DIR" --label "$SRC_LABEL" --commit "$SRC_HEAD" \
+        --store "$MAIN/.agents/.src-manifests" --work "$DELTA_WORK" --repo "$MAIN" \
+        --source-upload "$REPO/scripts/source-upload.py" \
+        --delta-receipt "$SOURCE_TRANSFER_RECEIPT.delta-send.json" --summary "$SOURCE_TRANSFER_RECEIPT.delta.json" \
+        > "$DELTA_WORK/upload.out"
+      delta_rc=$?
+      if [ "$delta_rc" = 0 ]; then
+        DELTA_MODE=1
+        NATIVE_SOURCE_SHA_EFFECTIVE=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["box_archive_sha256"])' "$SOURCE_TRANSFER_RECEIPT.delta.json")
+        echo "linux-run[$LANE]: delta source upload: $(tail -1 "$DELTA_WORK/upload.out")" >&2
+      else
+        echo "linux-run[$LANE]: delta source upload unavailable (exit $delta_rc); full upload" >&2
+      fi
+    fi
+    if [ "$setup_rc" = 0 ] && [ "$DELTA_MODE" = 0 ]; then
       setup_phase=native-source-upload
       python3 "$REPO/scripts/source-upload.py" --receipt "$SOURCE_TRANSFER_RECEIPT" send \
         "$SOURCE_ARCHIVE" "${COMMIT:-working-tree}" "$BOAT_HOST" "$BOAT_PORT" \
         "$HOME/.ssh/ascii_box_ed25519" "$NATIVE_SOURCE_DIR/source.tar.gz" --seconds 900
       setup_rc=$?
     fi
-    if [ "$setup_rc" = 0 ]; then
+    if [ "$setup_rc" = 0 ] && [ "$DELTA_MODE" = 0 ]; then
       setup_phase=native-source-sha256
       $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'printf \"%s  %s\\n\" $SOURCE_ARCHIVE_SHA $NATIVE_SOURCE_DIR/source.tar.gz | sha256sum -c -'"
       setup_rc=$?
+      # Seed the box's source cache so the next run can upload a delta (best effort).
+      if [ "$setup_rc" = 0 ] && [ "${SRC_DELTA:-0}" = 1 ]; then
+        python3 "$REPO/scripts/src-delta.py" register --manifest "$DELTA_WORK/manifest.json" \
+          --ssh "$BSSH $BOAT_HOST" --archive "$NATIVE_SOURCE_DIR/source.tar.gz" --label "$SRC_LABEL" \
+          --store "$MAIN/.agents/.src-manifests" >&2 || true
+      fi
     fi
     if [ "$setup_rc" = 0 ]; then ok=1; break; fi
     echo "linux-run[$LANE]: setup $setup_phase exited $setup_rc on $BOAT_ID; no job started" >&2
@@ -359,7 +404,7 @@ printf '%s' '$BOOTSTRAP_B64' | base64 -d > \"\$bootstrap\" || exit 3
 rm -f \"\$bootstrap\"
 bootstrap_clean_python_environment
 printf '%s' '$NATIVE_INPUTS_B64' | base64 -d > \"\$BOOTSTRAP_NATIVE/native-inputs.py\" || exit 3
-export NATIVE_SOURCE_ARCHIVE='${NATIVE_SOURCE_DIR:-}/source.tar.gz' NATIVE_SOURCE_SHA='$SOURCE_ARCHIVE_SHA'
+export NATIVE_SOURCE_ARCHIVE='${NATIVE_SOURCE_DIR:-}/source.tar.gz' NATIVE_SOURCE_SHA='${NATIVE_SOURCE_SHA_EFFECTIVE:-$SOURCE_ARCHIVE_SHA}'
 env_native=\$BOOTSTRAP_NATIVE/environment
 bootstrap_stage environment-copy 30 cp ~/.amazing-env \"\$env_native\"
 bootstrap_stage environment-load 30 bash -c '. \"\$1\" && export -p > \"\$2\"' bash \"\$env_native\" \"\$env_native.exports\"
