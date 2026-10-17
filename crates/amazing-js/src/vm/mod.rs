@@ -804,7 +804,8 @@ impl Program {
             // Preserve statement breakpoints and depth stepping even when
             // a debugger attaches after this function was compiled. The
             // side table adds no opcodes or fuel cost to ordinary execution.
-            if let Some(hook) = i.debug_hook.clone() {
+            if i.debug_hook.is_some() {
+                let hook = i.debug_hook.clone().expect("checked");
                 let start = self.statement_spans.partition_point(|(index, _)| *index < *pc);
                 for (_, span) in self.statement_spans[start..].iter().take_while(|(index, _)| *index == *pc) {
                     hook.borrow_mut().on_statement(&i.current_script_id, &i.current_script_url, span.start.line, i.depth);
@@ -2161,7 +2162,9 @@ impl FunctionCode {
         // whose body already owns an arguments declaration.
         let env = i.prepare_function_parameter_environment(&env, &self.0.params, self.0.strict);
         i.bind_params(&env, &self.0.params, args, is_arrow || self.0.skip_implicit_arguments, self.0.strict)?;
-        let function_names = self.0.program.functions.iter().map(|function| function.name.clone()).collect::<Vec<_>>();
+        let function_names = if super::parameters_have_expressions(&self.0.params) {
+            self.0.program.functions.iter().map(|function| function.name.clone()).collect::<Vec<_>>()
+        } else { Vec::new() };
         let env = i.prepare_function_body_environment(&env, &self.0.params, &self.0.program.hoisted, &function_names)?;
         if self.0.is_generator {
             // Parameters and body lexical instantiation are eager; only

@@ -107,14 +107,16 @@ pub struct ImportAttribute {
 pub struct Ident {
     pub name: String,
     pub span: Span,
+    /// The name as an interned UTF-16 string, built once when the node is
+    /// created so named property accesses never encode or allocate.
+    pub key: crate::value::JsString,
 }
 
 impl Ident {
     pub fn new(name: impl Into<String>, span: Span) -> Self {
-        Ident {
-            name: name.into(),
-            span,
-        }
+        let name = name.into();
+        let key = crate::value::JsString::interned(&name);
+        Ident { name, span, key }
     }
 }
 

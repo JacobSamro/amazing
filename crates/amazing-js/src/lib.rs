@@ -39,6 +39,7 @@ mod call_stack;
 pub mod ast;
 pub mod debug_hook;
 pub mod env;
+mod env_vars;
 mod fast_hash;
 pub mod errors;
 pub mod interp;

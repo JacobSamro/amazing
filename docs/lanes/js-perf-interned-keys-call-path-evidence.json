@@ -1,0 +1,138 @@
+{
+ "base": "65d26cc94104cb2a54490af87f9a8ff1e553caa5",
+ "bench_before_binary": "d813a2177 (hashing ticket)",
+ "runs": 7,
+ "programs": {
+  "array_loop": {
+   "default_before": 256.47,
+   "default_after": 140.57,
+   "default_speedup": 1.825,
+   "wrapped_before": 135.97,
+   "wrapped_after": 49.47,
+   "wrapped_speedup": 2.749
+  },
+  "class_inherit": {
+   "default_before": 232.06,
+   "default_after": 103.56,
+   "default_speedup": 2.241,
+   "wrapped_before": 189.88,
+   "wrapped_after": 58.99,
+   "wrapped_speedup": 3.219
+  },
+  "closures": {
+   "default_before": 293.48,
+   "default_after": 153.9,
+   "default_speedup": 1.907,
+   "wrapped_before": 149.6,
+   "wrapped_after": 73.29,
+   "wrapped_speedup": 2.041
+  },
+  "fib": {
+   "default_before": 286.14,
+   "default_after": 171.02,
+   "default_speedup": 1.673,
+   "wrapped_before": 244.61,
+   "wrapped_after": 111.34,
+   "wrapped_speedup": 2.197
+  },
+  "json_roundtrip": {
+   "default_before": 77.62,
+   "default_after": 53.28,
+   "default_speedup": 1.457,
+   "wrapped_before": 74.79,
+   "wrapped_after": 51.65,
+   "wrapped_speedup": 1.448
+  },
+  "map_set": {
+   "default_before": 91.03,
+   "default_after": 83.92,
+   "default_speedup": 1.085,
+   "wrapped_before": 66.97,
+   "wrapped_after": 52.87,
+   "wrapped_speedup": 1.267
+  },
+  "method_calls": {
+   "default_before": 298.47,
+   "default_after": 207.33,
+   "default_speedup": 1.44,
+   "wrapped_before": 207.52,
+   "wrapped_after": 95.11,
+   "wrapped_speedup": 2.182
+  },
+  "prop_access": {
+   "default_before": 193.77,
+   "default_after": 151.83,
+   "default_speedup": 1.276,
+   "wrapped_before": 113.8,
+   "wrapped_after": 49.69,
+   "wrapped_speedup": 2.29
+  },
+  "regexp": {
+   "default_before": 152.57,
+   "default_after": 138.22,
+   "default_speedup": 1.104,
+   "wrapped_before": 120.84,
+   "wrapped_after": 99.64,
+   "wrapped_speedup": 1.213
+  },
+  "scheduler": {
+   "default_before": 212.0,
+   "default_after": 87.49,
+   "default_speedup": 2.423,
+   "wrapped_before": 212.91,
+   "wrapped_after": 83.53,
+   "wrapped_speedup": 2.549
+  },
+  "string_ops": {
+   "default_before": 160.93,
+   "default_after": 147.34,
+   "default_speedup": 1.092,
+   "wrapped_before": 79.39,
+   "wrapped_after": 43.45,
+   "wrapped_speedup": 1.827
+  },
+  "typed_array": {
+   "default_before": 350.43,
+   "default_after": 333.9,
+   "default_speedup": 1.05,
+   "wrapped_before": 146.11,
+   "wrapped_after": 86.65,
+   "wrapped_speedup": 1.686
+  }
+ },
+ "geomean_default": 1.486,
+ "geomean_wrapped": 1.972,
+ "workspace_nextest": "see report",
+ "test262": {
+  "default": {
+   "before_pass_files": 53266,
+   "before_pass_variants": 102307,
+   "after_pass_files": 53366,
+   "after_pass_variants": 102507,
+   "lost_files": 0,
+   "lost_variants": 0,
+   "gained_files": 100,
+   "gained_variants": 200
+  },
+  "vm": {
+   "before_pass_files": 53260,
+   "before_pass_variants": 102295,
+   "after_pass_files": 53360,
+   "after_pass_variants": 102495,
+   "lost_files": 0,
+   "lost_variants": 0,
+   "gained_files": 100,
+   "gained_variants": 200
+  }
+ },
+ "note": "earlier run on d813a2177 base: default lost staging/sm/regress/regress-1507322-deep-weakmap.js (timeout); standalone it takes 70-80 s before and after (60 s deadline), so it is load-dependent, not a regression; it passed in the final run",
+ "raw_host_path": "~/amazing/out/r2-jsperf/perf1",
+ "sha256": {
+  "t262-g2-default.json": "2acc5a381036e726494f8e1a792229886bc34c5d539945e59f0cd33912791f49",
+  "t262-g2-vm.json": "48216b75b205a5d04d4241c5fc53e9db1633dab40aa73279bcf728471b906cb8",
+  "t262-before-default.json": "ac683973b4ae91b6c536c87b0bf72289c853ab63f99d2bda185002a185a619c1",
+  "t262-before-vm.json": "a273dafc511c12030fd325463d7676188e5255e8133a9e3d029eed9f1cbf0934",
+  "bench-b3.json": "956341dfffef60a73e2e99614fa65291893f635e44c9fa0817f39248d3839325",
+  "bench-a3.json": "e828931b0e97428b13a369cc927262785997843bd5e0080fda87fe8a4f18a2f7"
+ }
+}

@@ -27,7 +27,7 @@ impl Compiler {
         let slot = self.program.references;
         self.program.references += 1;
         self.emit(Instruction::ResolveWriteName(slot, name.name.clone()));
-        let value = self.named_class_expression(initializer, KeyOperand::Static(name.name.as_str().into()))?;
+        let value = self.named_class_expression(initializer, KeyOperand::Static(name.key.clone()))?;
         self.emit(Instruction::NamedEvaluation(value, Rc::new(initializer.clone()), name.name.clone()));
         self.emit(Instruction::StoreReference(slot, value));
         Ok(())
@@ -219,7 +219,7 @@ impl Compiler {
                         self.emit(Instruction::LoadSuperBaseNullable(base));
                         match (prop, raw) {
                             (ast::MemberProp::Computed(_), Some(key)) => self.emit(Instruction::ResolveRawSuperMemberWrite(slot, base, key, receiver)),
-                            (ast::MemberProp::Ident(name), _) => self.emit(Instruction::ResolveSuperMemberWrite(slot, base, KeyOperand::Static(name.name.as_str().into()), receiver)),
+                            (ast::MemberProp::Ident(name), _) => self.emit(Instruction::ResolveSuperMemberWrite(slot, base, KeyOperand::Static(name.key.clone()), receiver)),
                             _ => return Err(self.error(target.span, "invalid super property")),
                         };
                     } else {

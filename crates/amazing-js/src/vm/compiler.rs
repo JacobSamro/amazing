@@ -414,9 +414,10 @@ impl Compiler {
         child.reserve_body_lexicals(&function.body.body);
         child.statements(&function.body.body, function.body.span)?;
         let body_lexical_names = super::super::block_lexical_names(&function.body.body);
-        let skip_implicit_arguments = !params.iter().any(|p| p.default.is_some() || Self::binding_has_parameter_expression(&p.binding))
+        let skip_implicit_arguments = (!params.iter().any(|p| p.default.is_some() || Self::binding_has_parameter_expression(&p.binding))
             && (body_lexical_names.iter().any(|name| name == "arguments")
-                || child.program.functions.iter().any(|function| function.name == "arguments"));
+                || child.program.functions.iter().any(|function| function.name == "arguments")))
+            || !source_may_use_arguments(&function.source);
         if child.program.code.len() > MAX_INSTRUCTIONS {
             return Err(self.error(span, "instruction limit"));
         }
@@ -1749,7 +1750,7 @@ impl Compiler {
                 self.emit(Instruction::ResolveRawMemberWrite(slot, object, key));
             }
             ast::MemberProp::Ident(name) => {
-                self.emit(Instruction::ResolveMemberWrite(slot, object, KeyOperand::Static(name.name.as_str().into())));
+                self.emit(Instruction::ResolveMemberWrite(slot, object, KeyOperand::Static(name.key.clone())));
             }
             ast::MemberProp::Private(name) => return Err(self.error(name.span, "private member")),
         }
@@ -1769,7 +1770,7 @@ impl Compiler {
                 if require_coercible {
                     self.emit(Instruction::RequireObjectCoercible(object));
                 }
-                Ok(KeyOperand::Static(name.name.as_str().into()))
+                Ok(KeyOperand::Static(name.key.clone()))
             }
             ast::MemberProp::Computed(expression) => {
                 let register = self.expression(expression)?;
@@ -1793,7 +1794,7 @@ impl Compiler {
             return Ok(KeyOperand::Static(JsString::from_units(units.to_vec())));
         }
         match key {
-            ast::PropKey::Ident(name) => Ok(KeyOperand::Static(name.name.as_str().into())),
+            ast::PropKey::Ident(name) => Ok(KeyOperand::Static(name.key.clone())),
             ast::PropKey::Str(value) => Ok(KeyOperand::Static(value.as_str().into())),
             ast::PropKey::Num(number) => {
                 let register = self.register(span)?;
@@ -1983,3 +1984,16 @@ fn unsupported_expression(kind: &ExprKind) -> &'static str {
 #[cfg(test)]
 #[path = "tests_reference_reads.rs"]
 mod tests_reference_reads;
+
+/// Conservative text check: `false` only when the function's own source (which
+/// includes nested arrows and parameter expressions) never spells `arguments`
+/// or `eval` and holds no `\u` identifier escape, so nothing can observe the
+/// implicit arguments object. Missing source text counts as "may use".
+fn source_may_use_arguments(source: &crate::source_text::SourceMetadata) -> bool {
+    let Some(units) = source.units() else { return true };
+    fn contains(units: &[u16], word: &str) -> bool {
+        let word: Vec<u16> = word.encode_utf16().collect();
+        units.windows(word.len()).any(|window| window == word.as_slice())
+    }
+    units.windows(2).any(|pair| pair == [0x5c, 0x75]) || contains(units, "arguments") || contains(units, "eval")
+}

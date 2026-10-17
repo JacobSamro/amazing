@@ -73,6 +73,7 @@ impl Interpreter {
     }
 
     pub(super) fn name_reference(&mut self, env: &EnvHandle, name: &str) -> Result<Reference, Throw> {
+        if let Some((cell, script)) = env.fast_cell(name) { return Ok(Reference::Cell(name.to_owned(), cell, script)); }
         Ok(self.scoped_reference(env, name)?.unwrap_or_else(||
             Reference::Unresolvable(name.to_owned(), env.realm_global_object().unwrap_or_else(|| self.global_obj.clone()))))
     }
@@ -84,6 +85,7 @@ impl Interpreter {
     }
 
     pub(super) fn scoped_call(&mut self, env: &EnvHandle, name: &str) -> Result<(JsValue, JsValue), Throw> {
+        if let Some(value) = env.fast_read(name) { return Ok((value, JsValue::Undefined)); }
         let mut reference = self.name_reference(env, name)?;
         let receiver = match &reference {
             Reference::ObjectBinding(object, _, true) => JsValue::Object(object.clone()),

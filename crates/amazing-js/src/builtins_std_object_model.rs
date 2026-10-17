@@ -180,6 +180,11 @@ impl Interpreter {
     }
 
     fn set_with_receiver(&mut self, target: &Obj, key: &PropertyKey, value: JsValue, receiver: JsValue) -> Result<bool, Throw> {
+        if self.put_forwards.is_empty()
+            && matches!(&receiver, JsValue::Object(object) if Rc::ptr_eq(&object.0, &target.0))
+            && target.borrow_mut().plain_set(key, &value) {
+            return Ok(true);
+        }
         if let Some(result) = self.window_proxy_set(target, key, value.clone(), receiver.clone()) { return result; }
         if let Some(result) = self.proxy_set(target, key, value.clone(), receiver.clone()) { return result; }
         if matches!(&receiver, JsValue::Object(object) if Rc::ptr_eq(&object.0, &target.0)) {

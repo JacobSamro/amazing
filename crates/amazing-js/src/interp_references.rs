@@ -38,7 +38,7 @@ impl Interpreter {
                         .ok_or_else(|| Throw::syntax_error("super used outside a method"))?;
                     let base = home.borrow().proto.clone().map(JsValue::Object).unwrap_or(JsValue::Null);
                     return match (prop, raw) {
-                        (MemberProp::Ident(identifier), _) => Ok(Reference::SuperProperty(base, identifier.name.clone().into(), receiver)),
+                        (MemberProp::Ident(identifier), _) => Ok(Reference::SuperProperty(base, PropertyKey::String(identifier.key.clone()), receiver)),
                         (MemberProp::Computed(_), Some(raw)) => Ok(Reference::RawSuperProperty(base, raw, receiver)),
                         _ => Err(Throw::syntax_error("invalid super property")),
                     };
@@ -51,7 +51,7 @@ impl Interpreter {
                             Throw::syntax_error(format!("private name {} is not defined", identifier.name)))?;
                         Ok(Reference::Private(receiver, name))
                     }
-                    MemberProp::Ident(identifier) => Ok(Reference::Property(base, identifier.name.clone().into())),
+                    MemberProp::Ident(identifier) => Ok(Reference::Property(base, PropertyKey::String(identifier.key.clone()))),
                     MemberProp::Computed(expression) => {
                         let raw = self.eval_expr(expression, env)?;
                         Ok(Reference::RawProperty(base, raw))
@@ -84,6 +84,7 @@ impl Interpreter {
     fn reference_value(&mut self, reference: &mut Reference) -> Result<JsValue, Throw> {
         self.coerce_reference_key(reference)?;
         match reference {
+            Reference::Cell(_, cell, _) => cell.read(),
             Reference::Binding(name, env) => {
                 if let Some(global) = env.global_binding_object(name) {
                     return self.get_prop(&JsValue::Object(global), name.as_str());

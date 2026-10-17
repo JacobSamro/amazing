@@ -76,6 +76,61 @@ thread_local! {
         const { std::mem::ManuallyDrop::new(RefCell::new(Vec::new())) };
 }
 
+thread_local! {
+    static INTERNER: std::mem::ManuallyDrop<RefCell<Option<FastMap<Box<str>, JsString>>>> =
+        const { std::mem::ManuallyDrop::new(RefCell::new(None)) };
+}
+const INTERNER_LIMIT: usize = 200_000;
+
+impl JsString {
+    /// Shared handle for a source identifier or engine-literal name. Equal
+    /// names intern to one allocation, so comparing two interned strings is a
+    /// pointer check and cloning is a reference-count bump. The table is
+    /// per-thread and bounded; past the bound it hands out fresh strings.
+    pub fn interned(value: &str) -> JsString {
+        INTERNER.with(|table| {
+            let mut table = table.borrow_mut();
+            let map = table.get_or_insert_with(FastMap::default);
+            if let Some(hit) = map.get(value) { return hit.clone(); }
+            let fresh = units_from_str(value);
+            if map.len() < INTERNER_LIMIT { map.insert(value.into(), fresh.clone()); }
+            fresh
+        })
+    }
+}
+
+const INDEX_CACHE_SLOTS: usize = 4096;
+
+thread_local! {
+    static INDEX_CACHE: std::mem::ManuallyDrop<RefCell<Vec<Option<JsString>>>> =
+        const { std::mem::ManuallyDrop::new(RefCell::new(Vec::new())) };
+}
+
+impl JsString {
+    /// Canonical decimal text of an array index. Small indices share cached
+    /// strings; larger ones are built directly in UTF-16 with one allocation.
+    pub fn from_index(index: u32) -> JsString {
+        let build = || {
+            let mut digits = [0u16; 10];
+            let mut at = digits.len();
+            let mut rest = index;
+            loop {
+                at -= 1;
+                digits[at] = 0x30 + (rest % 10) as u16;
+                rest /= 10;
+                if rest == 0 { break; }
+            }
+            JsString::from_units(&digits[at..])
+        };
+        if (index as usize) >= INDEX_CACHE_SLOTS { return build(); }
+        INDEX_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.is_empty() { cache.resize(INDEX_CACHE_SLOTS, None); }
+            cache[index as usize].get_or_insert_with(build).clone()
+        })
+    }
+}
+
 fn units_from_str(value: &str) -> JsString {
     if value.is_ascii() {
         // Exact-size iterator: one allocation, no intermediate Vec.
@@ -693,6 +748,28 @@ pub struct JsFunction {
     pub proto_for_new: Option<Obj>,
 }
 
+impl JsFunction {
+    /// Snapshot for a call or construct. Natives and bytecode carry their code
+    /// by cheap handle and never read the name, source text or parameter list
+    /// at call time, so those (a `String` and a deep `Vec<Param>` clone) are
+    /// left empty. AST-bodied functions keep the full clone.
+    pub(crate) fn clone_for_call(&self) -> JsFunction {
+        if matches!(&self.body, FunctionBody::Block(_) | FunctionBody::Expr(_)) { return self.clone(); }
+        JsFunction {
+            source: Default::default(),
+            name: String::new(),
+            params: Vec::new(),
+            body: self.body.clone(),
+            is_arrow: self.is_arrow,
+            is_async: self.is_async,
+            is_generator: self.is_generator,
+            env: self.env.clone(),
+            home: self.home.clone(),
+            proto_for_new: self.proto_for_new.clone(),
+        }
+    }
+}
+
 /// Internal class-constructor metadata kept on the function object, so the
 /// embedding-facing `JsFunction` initializer remains independent of classes.
 #[derive(Debug, Clone)]
@@ -1067,6 +1144,10 @@ pub struct JsObject {
     pub(crate) shape_version: u64,
     /// Object literals constructed by the VM can use ordinary-own-property caches.
     pub(crate) vm_cacheable: bool,
+    /// Set once any engine-private `[[...]]` named property was stored here
+    /// (DOM wrappers keep their node ids that way). Such objects always take
+    /// the full property-access path.
+    internal_slots: bool,
     /// Creation realm for callable dispatch and intrinsic allocation.
     pub(crate) realm: Option<u64>,
     pub proto: Option<Obj>,
@@ -1133,6 +1214,7 @@ impl JsObject {
             prop_index: FastMap::default(),
             shape_version: 0,
             vm_cacheable: false,
+            internal_slots: false,
             realm: None,
             proto: None,
             exotic: Exotic::Ordinary,
@@ -1184,6 +1266,9 @@ impl JsObject {
     /// few constructors that build `props` directly rather than through
     /// `define` (which already does its own existing-key check).
     fn push_prop(&mut self, key: PropertyKey, prop: Property) {
+        if let PropertyKey::String(name) = &key {
+            if let [0x5b, 0x5b, ..] = name.units() { self.internal_slots = true; }
+        }
         let slot = self.props.len();
         if slot >= SMALL_OBJECT_PROPS {
             if self.prop_index.is_empty() {
@@ -1309,6 +1394,95 @@ impl JsObject {
             self.shape_version = self.shape_version.wrapping_add(1);
         }
         Ok(())
+    }
+
+    /// True when [[Get]] on this object is the plain own-then-prototype walk:
+    /// no proxy, namespace, window, arguments or typed-array behaviour, no host
+    /// identity and no DOM wrapper slots. `Map`/`Set` qualify except for the
+    /// engine's synthetic `size` accessor.
+    #[inline]
+    fn plain_for_get(&self, key: &PropertyKey) -> bool {
+        if self.host_identity.is_some() || self.internal_slots { return false; }
+        match &self.exotic {
+            Exotic::Ordinary | Exotic::Array | Exotic::Error | Exotic::Promise(_) | Exotic::RegExp(_)
+            | Exotic::Generator(_) | Exotic::ThreadGenerator(_) | Exotic::SymbolObject(_)
+            | Exotic::LegacyIterator(_) | Exotic::PairIterator(_) | Exotic::SequenceIterator(_)
+            | Exotic::CollectionIterator(_) | Exotic::DisposableStack(_) => true,
+            Exotic::Map(_) | Exotic::Set(_) => !matches!(key, PropertyKey::String(name) if name.units() == [0x73, 0x69, 0x7a, 0x65]),
+            _ => false,
+        }
+    }
+
+    /// Own data-property value of a plain object, for global-name reads.
+    pub(crate) fn plain_own_data(&self, key: &PropertyKey) -> Option<JsValue> {
+        if !self.plain_for_get(key) { return None; }
+        let property = &self.props[self.slot_of(key)?].1;
+        property.is_data().then(|| property.value.clone())
+    }
+
+    /// Ordinary [[Get]] for a data property found along an all-plain prototype
+    /// chain. `None` means "take the general path" (an accessor, or any object
+    /// that is not plain); `Some(Undefined)` is a plain miss.
+    pub(crate) fn plain_get(&self, key: &PropertyKey) -> Option<JsValue> {
+        if !self.plain_for_get(key) { return None; }
+        if let Some(slot) = self.slot_of(key) {
+            let property = &self.props[slot].1;
+            return if property.is_data() { Some(property.value.clone()) } else { None };
+        }
+        // Bounded walk: long chains take the general path, which admits each step.
+        let mut cursor = self.proto.clone();
+        let mut hops = 0;
+        while let Some(proto) = cursor {
+            hops += 1;
+            if hops > 32 { return None; }
+            let proto = proto.borrow();
+            if !proto.plain_for_get(key) { return None; }
+            if let Some(slot) = proto.slot_of(key) {
+                let property = &proto.props[slot].1;
+                return if property.is_data() { Some(property.value.clone()) } else { None };
+            }
+            cursor = proto.proto.clone();
+        }
+        Some(JsValue::Undefined)
+    }
+
+    /// Ordinary [[Set]] with the object itself as receiver, for the common
+    /// case: a plain object (arrays only for non-index, non-`length` names)
+    /// whose own or inherited property is a writable data property, or absent
+    /// from an all-plain chain on an extensible object. Returns `false`
+    /// without side effects when the general algorithm must run.
+    pub(crate) fn plain_set(&mut self, key: &PropertyKey, value: &JsValue) -> bool {
+        if !self.plain_for_get(key) { return false; }
+        if matches!(self.exotic, Exotic::Array) || matches!(self.exotic, Exotic::Map(_) | Exotic::Set(_)) {
+            let PropertyKey::String(name) = key else { return false };
+            let units = name.units();
+            if matches!(self.exotic, Exotic::Array)
+                && (units.first().is_none_or(|u| (0x30..=0x39).contains(u))
+                    || units == [0x6c, 0x65, 0x6e, 0x67, 0x74, 0x68]) { return false; }
+        }
+        if let Some(slot) = self.slot_of(key) {
+            let property = &mut self.props[slot].1;
+            if property.is_accessor() || !property.writable { return false; }
+            property.value = value.clone();
+            return true;
+        }
+        if !self.extensible { return false; }
+        let mut cursor = self.proto.clone();
+        let mut hops = 0;
+        while let Some(proto) = cursor {
+            hops += 1;
+            if hops > 32 { return false; }
+            let proto = proto.borrow();
+            if !proto.plain_for_get(key) { return false; }
+            if let Some(slot) = proto.slot_of(key) {
+                let property = &proto.props[slot].1;
+                if property.is_accessor() || !property.writable { return false; }
+                break;
+            }
+            cursor = proto.proto.clone();
+        }
+        self.set_own(key.clone(), value.clone());
+        true
     }
 
     /// Slot access for VM inline caches. The key check also protects against

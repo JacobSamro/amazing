@@ -71,6 +71,9 @@ pub struct Numeric {
     pub raw: String,
     pub radix: u8,
     pub bigint: bool,
+    /// Lazily parsed value (`f64::to_bits`), so evaluating a literal never
+    /// re-scans or allocates its text.
+    pub(crate) parsed: std::cell::Cell<Option<u64>>,
 }
 
 impl Numeric {
@@ -79,6 +82,7 @@ impl Numeric {
             raw: raw.into(),
             radix,
             bigint,
+            parsed: std::cell::Cell::new(None),
         }
     }
 }

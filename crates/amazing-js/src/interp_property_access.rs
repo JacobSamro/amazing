@@ -5,6 +5,35 @@ impl Interpreter {
         self.get_prop_receiver(v, &k.into(), v.clone())
     }
 
+    /// [[Get]] for plain objects and primitives whose prototype chain holds
+    /// only data properties: no Proxy, window, namespace, DOM or accessor
+    /// involvement, so no user code can run and no allocation is needed.
+    #[inline]
+    fn fast_get(&self, v: &JsValue, key: &PropertyKey) -> Option<JsValue> {
+        match v {
+            JsValue::Object(o) => o.borrow().plain_get(key),
+            JsValue::Str(s) => {
+                if let PropertyKey::String(name) = key {
+                    let units = name.units();
+                    if units == [0x6c, 0x65, 0x6e, 0x67, 0x74, 0x68] { return Some(JsValue::num(s.len() as f64)); }
+                    if let Some(&first) = units.first() {
+                        if (0x30..=0x39).contains(&first) {
+                            if units.len() > 1 && first == 0x30 { return None; }
+                            if units.len() > 9 || !units.iter().all(|u| (0x30..=0x39).contains(u)) { return None; }
+                            let index = units.iter().fold(0usize, |acc, u| acc * 10 + (*u - 0x30) as usize);
+                            return Some(s.units().get(index).map(|u| JsValue::str_units(vec![*u])).unwrap_or(JsValue::Undefined));
+                        }
+                        if first == 0x2b { return None; }
+                    }
+                }
+                self.string_proto.borrow().plain_get(key)
+            }
+            JsValue::Num(_) => self.number_proto.borrow().plain_get(key),
+            JsValue::Bool(_) => self.boolean_proto.borrow().plain_get(key),
+            _ => None,
+        }
+    }
+
     #[inline(never)]
     fn get_prop_receiver(
         &mut self,
@@ -12,6 +41,7 @@ impl Interpreter {
         key: &PropertyKey,
         receiver: JsValue,
     ) -> Result<JsValue, Throw> {
+        if let Some(value) = self.fast_get(v, key) { return Ok(value); }
         // Trap lookup and callable metadata lookup can traverse Proxy and
         // ordinary prototype chains without creating another JS call frame.
         self.admit_synchronous_call()?;

@@ -226,6 +226,8 @@ struct DomListener {
 
 enum Reference {
     Binding(String, EnvHandle),
+    /// A declarative binding resolved to its cell: `(name, cell, global script lexical)`.
+    Cell(String, crate::env::BindingCell, bool),
     ObjectBinding(Obj, String, bool),
     Unresolvable(String, Obj),
     RawProperty(JsValue, JsValue),
@@ -1777,6 +1779,14 @@ impl Interpreter {
         }
     }
     fn to_property_key(&mut self, v: &JsValue) -> Result<PropertyKey, Throw> {
+        match v {
+            JsValue::Str(name) => return Ok(PropertyKey::String(name.clone())),
+            JsValue::Symbol(symbol) => return Ok(PropertyKey::Symbol(symbol.clone())),
+            JsValue::Num(n) if *n >= 0.0 && *n < 4294967295.0 && n.fract() == 0.0 && !(*n == 0.0 && n.is_sign_negative()) => {
+                return Ok(PropertyKey::String(crate::value::JsString::from_index(*n as u32)));
+            }
+            _ => {}
+        }
         let primitive = self.primitive_with_hint(v.clone(), true)?;
         match primitive {
             JsValue::Symbol(symbol) => Ok(PropertyKey::Symbol(symbol)),

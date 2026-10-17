@@ -17,7 +17,7 @@ use crate::fast_hash::FastMap;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::value::{JsValue, Obj, PrivateName, Property, Throw};
+use crate::value::{JsValue, Obj, PrivateName, Property, PropertyKey, Throw};
 
 /// Shared handle to one environment frame. The only way code outside this
 /// module touches an environment.
@@ -107,6 +107,24 @@ impl BindingCell {
         !self.target().0.borrow().initialized
     }
 
+    /// SetMutableBinding on a resolved declarative cell (never an import alias).
+    pub(crate) fn assign_resolved(&self, name: &str, value: JsValue, strict: bool, script: bool) -> Result<(), Throw> {
+        let mut binding = self.0.borrow_mut();
+        if !binding.initialized {
+            return Err(Throw::reference_error(if script {
+                format!("Cannot access '{name}' before initialization")
+            } else { format!("{name} is uninitialized") }));
+        }
+        if !binding.mutable {
+            if strict || binding.immutable_strict {
+                return Err(Throw::type_error(format!("assignment to constant variable '{name}'")));
+            }
+            return Ok(());
+        }
+        binding.value = value;
+        Ok(())
+    }
+
     pub fn same_target(&self, other: &BindingCell) -> bool {
         Rc::ptr_eq(&self.target().0, &other.target().0)
     }
@@ -158,7 +176,7 @@ pub struct Env {
     /// Per-binding cells: assignment mutates through `&self` without
     /// borrowing the whole frame, so a held `borrow()` on the frame never
     /// conflicts with an inner write.
-    vars: FastMap<String, BindingCell>,
+    vars: crate::env_vars::VarTable,
     /// Live binding object for an HTML handler (a with-environment record).
     pub(crate) binding_object: Option<Obj>,
     /// Receiver recorded by a call (`None` = transparent frame).
@@ -269,6 +287,56 @@ impl Env {
         p.0.borrow().resolve_raw(name)
     }
 
+    /// Declarative cell for `name` reached through plain declarative frames,
+    /// plus whether it is a global script lexical. `None` sends the caller to
+    /// the general lookup: an object/with frame, a global var or global-object
+    /// property, an import alias or a deletable eval binding sits in the way,
+    /// or the name is simply not found here.
+    fn fast_cell(&self, name: &str) -> Option<(BindingCell, bool)> {
+        if self.binding_object.is_some() { return None; }
+        if self.kind == EnvKind::Global {
+            return self.script_cell(name).map(|cell| (cell, true));
+        }
+        if let Some(cell) = self.vars.get(name) {
+            let binding = cell.0.borrow();
+            if binding.import_target.is_some() || binding.deletable { return None; }
+            drop(binding);
+            return Some((cell.clone(), false));
+        }
+        self.parent.as_ref()?.0.borrow().fast_cell(name)
+    }
+
+    /// Value of `name` when it resolves, through plain frames, to an
+    /// initialized declarative binding or to an own data property of a plain
+    /// global object. `None` means "use the general path" (including every
+    /// error case: TDZ, missing names, accessors).
+    fn fast_read(&self, name: &str) -> Option<JsValue> {
+        if self.binding_object.is_some() { return None; }
+        if self.kind == EnvKind::Global {
+            if let Some(cell) = self.script_cell(name) {
+                let binding = cell.0.borrow();
+                return (binding.initialized && binding.import_target.is_none()).then(|| binding.value.clone());
+            }
+            let cell = self.vars.get(name)?;
+            let binding = cell.0.borrow();
+            if binding.import_target.is_some() { return None; }
+            if !binding.lexical {
+                if let Some(object) = &self.global_object {
+                    let object = object.borrow();
+                    let key = PropertyKey::String(crate::value::JsString::from(name));
+                    return object.plain_own_data(&key);
+                }
+            }
+            return binding.initialized.then(|| binding.value.clone());
+        }
+        if let Some(cell) = self.vars.get(name) {
+            let binding = cell.0.borrow();
+            if binding.import_target.is_some() || !binding.initialized { return None; }
+            return Some(binding.value.clone());
+        }
+        self.parent.as_ref()?.0.borrow().fast_read(name)
+    }
+
     /// §9.1.5 SetMutableBinding: mutates the nearest declaring frame.
     /// `Ok(false)` when unresolved (caller decides global creation);
     /// `Err` for assignment to `const`.
@@ -347,6 +415,14 @@ impl Env {
 }
 
 impl EnvHandle {
+    pub(crate) fn fast_cell(&self, name: &str) -> Option<(BindingCell, bool)> {
+        self.0.borrow().fast_cell(name)
+    }
+
+    pub(crate) fn fast_read(&self, name: &str) -> Option<JsValue> {
+        self.0.borrow().fast_read(name)
+    }
+
     pub fn new(kind: EnvKind, parent: Option<EnvHandle>) -> EnvHandle {
         let realm = parent.as_ref().and_then(EnvHandle::realm);
         let source_context = parent.as_ref().and_then(|parent| parent.1.clone());
@@ -356,7 +432,7 @@ impl EnvHandle {
             global_declarations: (kind == EnvKind::Global).then(|| Rc::new(RefCell::new(GlobalDeclarationRecord::default()))),
             kind,
             parent,
-            vars: FastMap::default(),
+            vars: Default::default(),
             binding_object: None,
             this_binding: None,
             this_uninitialized: false,
@@ -455,8 +531,8 @@ impl EnvHandle {
             cell
         };
         let mut frame = self.0.borrow_mut();
-        if let Some(cell) = existing { frame.vars.entry(name.to_owned()).or_insert(cell); return; }
-        frame.vars.entry(name.to_owned()).or_insert_with(|| BindingCell(Rc::new(RefCell::new(Binding {
+        if let Some(cell) = existing { frame.vars.or_insert(name.to_owned(), cell); return; }
+        frame.vars.or_insert_with(name.to_owned(), || BindingCell(Rc::new(RefCell::new(Binding {
             value, mutable: true, immutable_strict: true, lexical: false, initialized: true, import_target: None, deletable: false,
         }))));
     }

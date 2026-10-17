@@ -94,7 +94,7 @@ impl Interpreter {
                     return Err(Throw::type_error("cannot access a property on nullish value"));
                 }
                 let key = match (prop, key_value) {
-                    (MemberProp::Ident(name), _) => name.name.clone().into(),
+                    (MemberProp::Ident(name), _) => PropertyKey::String(name.key.clone()),
                     (MemberProp::Computed(_), Some(value)) => self.to_property_key(&value)?,
                     _ => unreachable!(),
                 };

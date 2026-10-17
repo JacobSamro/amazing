@@ -1383,6 +1383,7 @@ impl Interpreter {
                 .ok_or_else(|| Throw::syntax_error("invalid BigInt literal"))?;
             return Ok(Self::bigint_value(value));
         }
+        if let Some(bits) = n.parsed.get() { return Ok(JsValue::num(f64::from_bits(bits))); }
         let raw: String = n.raw.chars().filter(|c| *c != '_').collect();
         let v = if n.radix == 10 {
             raw.parse().unwrap_or(f64::NAN)
@@ -1391,6 +1392,7 @@ impl Interpreter {
                 .map(|integer| integer.to_f64())
                 .ok_or_else(|| Throw::syntax_error("invalid numeric literal"))?
         };
+        n.parsed.set(Some(v.to_bits()));
         Ok(JsValue::num(v))
     }
     fn unary(&mut self, op: ast::UnOp, x: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
@@ -1755,6 +1757,7 @@ impl Interpreter {
     // testharness.js exports its API by assigning properties of global_scope.
     // Unresolved lexical names must therefore consult the global object record.
     fn identifier_value(&mut self, env: &EnvHandle, name: &str) -> Result<Option<JsValue>, Throw> {
+        if let Some(value) = env.fast_read(name) { return Ok(Some(value)); }
         let Some(mut reference) = self.scoped_reference(env, name)? else { return Ok(None); };
         self.reference_value(&mut reference).map(Some)
     }
@@ -1772,6 +1775,7 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<(), Throw> {
         match reference {
+            Reference::Cell(name, cell, script) => cell.assign_resolved(&name, value, self.strict_eval_context, script),
             Reference::Binding(name, binding_env) => {
                 let env = &binding_env;
                 if env.kind() != EnvKind::Global {
@@ -2083,7 +2087,7 @@ impl Interpreter {
     }
     fn member_key(&mut self, p: &MemberProp, e: &EnvHandle) -> Result<PropertyKey, Throw> {
         match p {
-            MemberProp::Ident(i) => Ok(i.name.clone().into()),
+            MemberProp::Ident(i) => Ok(PropertyKey::String(i.key.clone())),
             MemberProp::Private(_) => Err(Throw::type_error(
                 "private names are not yet supported by the runtime",
             )),
@@ -2189,7 +2193,8 @@ impl Interpreter {
         let fun = o
             .borrow()
             .func
-            .clone()
+            .as_ref()
+            .map(JsFunction::clone_for_call)
             .ok_or_else(|| Throw::type_error("value is not callable"))?;
         let strict_function = o.borrow().strict_function;
         let interpreted = matches!(&fun.body, FunctionBody::Block(_) | FunctionBody::Expr(_) | FunctionBody::Bytecode(_));
@@ -2425,6 +2430,25 @@ impl Interpreter {
         is_arrow: bool,
         strict: bool,
     ) -> Result<(), Throw> {
+        // Common shape: plain distinct identifiers, no defaults/rest/patterns.
+        // Same steps as the general path below without its name sets.
+        if let Some(simple) = simple_parameter_names(ps) {
+            for name in &simple { e.declare_uninitialized(name, true)?; }
+            if !is_arrow && !simple.iter().any(|name| *name == "arguments") {
+                let a = self.create_arguments_object(e, ps, &args, strict);
+                if strict {
+                    e.declare_lexical("arguments", a, false)?;
+                    e.finish_parameter_initialization("arguments");
+                } else if e.kind() == EnvKind::Parameter { e.declare_lexical("arguments", a, true)?; }
+                else { e.declare_var("arguments", a)?; }
+            }
+            let mut supplied = args.into_iter();
+            for name in &simple {
+                e.initialize_parameter(name, supplied.next().unwrap_or(JsValue::Undefined))?;
+            }
+            for name in &simple { e.finish_parameter_initialization(name); }
+            return Ok(());
+        }
         // Parameters are mutable function bindings, not lexical declarations:
         // body var declarations reuse them and sloppy duplicate names overwrite.
         // Allocate locally before binding patterns so assignment cannot escape
@@ -2498,7 +2522,8 @@ impl Interpreter {
         let fun = o
             .borrow()
             .func
-            .clone()
+            .as_ref()
+            .map(JsFunction::clone_for_call)
             .ok_or_else(|| Throw::type_error("not a constructor"))?;
         if matches!(&fun.body, FunctionBody::Native(native)
             if std::ptr::fn_addr_eq(*native, bigint_constructor as crate::value::NativeFn)
@@ -3377,3 +3402,15 @@ impl Interpreter {
 #[cfg(test)]
 #[path = "interp_reference_read_tests.rs"]
 mod reference_read_tests;
+
+/// Names of a parameter list made only of distinct plain identifiers.
+fn simple_parameter_names(params: &[ast::Param]) -> Option<Vec<&str>> {
+    let mut names: Vec<&str> = Vec::with_capacity(params.len());
+    for param in params {
+        if param.rest || param.default.is_some() { return None; }
+        let Binding::Ident(identifier) = &param.binding else { return None };
+        if names.contains(&identifier.name.as_str()) { return None; }
+        names.push(&identifier.name);
+    }
+    Some(names)
+}
