@@ -82,7 +82,7 @@ mod tests {
     fn every_event_constructor_keeps_foreign_identity_class_and_payload_on_redispatch() {
         let (mut scheduler, child) = fixture();
         for constructor in ["Event", "CustomEvent", "UIEvent", "FocusEvent", "MouseEvent",
-            "WheelEvent", "KeyboardEvent", "CompositionEvent", "ErrorEvent",
+            "WheelEvent", "KeyboardEvent", "CompositionEvent", "ProgressEvent", "ErrorEvent",
             "HashChangeEvent", "PopStateEvent", "PageTransitionEvent", "MessageEvent", "PromiseRejectionEvent"] {
             expose(&mut scheduler, child, "foreignEvent", &format!(
                 "new {constructor}('foreign',{{cancelable:true,detail:42,data:'payload',key:'K',deltaY:3,state:17,persisted:true,message:'error',promise:Promise.resolve(1),reason:'reason'}})"));

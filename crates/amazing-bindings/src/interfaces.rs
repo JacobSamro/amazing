@@ -194,6 +194,11 @@ const MESSAGE_EVENT: &[Member] = &[
     getter("ports", O::MessageEventGet("ports")),
     method("initMessageEvent", O::MessageEventInit, 1),
 ];
+const PROGRESS_EVENT: &[Member] = &[
+    getter("lengthComputable", O::EventExtra("lengthComputable")),
+    getter("loaded", O::EventExtra("loaded")),
+    getter("total", O::EventExtra("total")),
+];
 const COMPOSITION_EVENT: &[Member] = &[getter("data", O::EventExtra("data"))];
 const MUTATION_OBSERVER: &[Member] = &[
     method("observe", O::MutationObserve, 2),
@@ -1666,6 +1671,8 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::BeforeUnloadEvent, name: "BeforeUnloadEvent", parent: Some(I::Event),
         constructor: None, members: &[getter("returnValue", O::BeforeUnloadReturnValue),
             setter("returnValue", O::BeforeUnloadSetReturnValue)] },
+    D { interface: I::ProgressEvent, name: "ProgressEvent", parent: Some(I::Event),
+        constructor: Some(O::ProgressEventConstructor), members: PROGRESS_EVENT },
     D { interface: I::CompositionEvent, name: "CompositionEvent", parent: Some(I::UIEvent),
         constructor: Some(O::CompositionEventConstructor), members: COMPOSITION_EVENT },
     // Legacy `document.createEvent()`-only aliases: real DOM/HTML interfaces this engine does

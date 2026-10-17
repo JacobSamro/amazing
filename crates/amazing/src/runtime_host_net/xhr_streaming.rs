@@ -109,6 +109,7 @@ impl RuntimeBindingHost<'_> {
         self.js.binding_with_realm(realm,|js|RuntimeBindingHost{js,state}
             .xhr_dispatch_event_inner(&receiver,event,identity,&source_url))
     }
+    #[allow(dead_code)]
     fn xhr_report_listener_exception(&mut self,identity:ReceivingDocumentIdentity,url:&str,error:&Throw)->Result<(),Throw> {
         // A callback may have retired its original Window. The original
         // exception is then an inactive-task disposition, never relabelled to
@@ -132,29 +133,12 @@ impl RuntimeBindingHost<'_> {
         let target = if event.target == XhrEventTarget::Upload {
             self.js.binding_get_property(receiver, "upload")?
         } else { receiver.clone() };
-        let value = self.fetch_allocate(FetchInterface::ProgressEvent,
-            FetchObject::ProgressEvent { kind: name.into(), loaded: event.loaded,
-                total: event.total, length_computable: event.length_computable })?;
-        self.js.binding_define_data_property(&value, "target", target.clone(), BindingPropertyFlags::METHOD)?;
-        self.js.binding_define_data_property(&value, "currentTarget", target.clone(), BindingPropertyFlags::METHOD)?;
-        let callback = self.js.binding_get_property(&target, &format!("on{name}"))?;
-        if self.js.binding_is_callable(&callback) {
-            if let Err(error)=binding_call(self.js,&callback,&target,&[value.clone()]) {
-                self.xhr_report_listener_exception(identity,source_url,&error)?;
-            }
-        }
-        let brand = if event.target == XhrEventTarget::Upload {
-            FetchInterface::XMLHttpRequestUpload.brand()
-        } else { FetchInterface::XMLHttpRequest.brand() };
-        let key = self.platform_object(&target, brand).ok_or_else(|| Throw::type_error("Stale XHR target"))?;
-        let listeners = self.state.borrow().net.fetch_listeners.iter()
-            .filter(|(slot, family, kind, _)| *slot == key.slot && *family == brand.0 && kind == name)
-            .map(|(_, _, _, callback)| callback.clone()).collect::<Vec<_>>();
-        for callback in listeners {
-            if let Err(error)=binding_call(self.js,&callback,&target,&[value.clone()]) {
-                self.xhr_report_listener_exception(identity,source_url,&error)?;
-            }
-        }
+        let slot = self.fetch_event_slot_of(&target)
+            .ok_or_else(|| Throw::type_error("Stale XHR target"))?;
+        let progress = (event.kind != XhrEventKind::ReadyStateChange)
+            .then_some((event.loaded, event.total, event.length_computable));
+        let _ = (&identity, source_url);
+        self.fetch_fire(slot, name, progress)?;
         Ok(())
     }
 }

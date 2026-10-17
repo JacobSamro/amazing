@@ -47,7 +47,7 @@ pub enum DispatchOrigin {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EventClass {
     Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition, Message, HashChange, PopState,
-    PageTransition, BeforeUnload, Error, PromiseRejection,
+    PageTransition, BeforeUnload, Error, PromiseRejection, Progress,
     // Legacy `document.createEvent()` aliases (dom.spec.whatwg.org's create() legacy factory
     // table) that are otherwise-unimplemented interfaces: distinct classes so the wrapped
     // object gets that interface's own prototype rather than falling back to plain Event's.

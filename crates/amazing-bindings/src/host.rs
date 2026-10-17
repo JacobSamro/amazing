@@ -206,6 +206,7 @@ pub enum Interface {
     WheelEvent,
     KeyboardEvent,
     CompositionEvent,
+    ProgressEvent,
     HashChangeEvent,
     PopStateEvent,
     PageTransitionEvent,
@@ -777,6 +778,7 @@ pub enum Operation {
     WheelEventConstructor,
     KeyboardEventConstructor,
     CompositionEventConstructor,
+    ProgressEventConstructor,
     HashChangeEventConstructor,
     PopStateEventConstructor,
     PageTransitionEventConstructor,
@@ -1349,6 +1351,9 @@ pub trait BindingHost: Sized {
         Ok(OptionalHookInstall::NotSupported)
     }
     /// Expose the current document's registry as `window.customElements`.
+    /// An exception thrown by a user-agent-dispatched listener. Hosts that opt in
+    /// report it to the Window error path; the default drops it.
+    fn report_listener_error(&mut self, _error: Self::Error) {}
     fn install_custom_elements_global(&mut self) -> Result<OptionalHookInstall, Self::Error> {
         Ok(OptionalHookInstall::NotSupported)
     }

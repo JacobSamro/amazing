@@ -1344,10 +1344,10 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.dom_window_event_target_value(slot)
     }
     fn external_event_target_slot(&self, value: &JsValue) -> Option<u64> {
-        self.messaging_event_target_slot(value)
+        self.messaging_event_target_slot(value).or_else(|| self.fetch_event_slot_of(value))
     }
     fn external_event_target_value(&self, slot: u64) -> Option<JsValue> {
-        self.messaging_event_target_value(slot)
+        self.messaging_event_target_value(slot).or_else(|| self.fetch_event_value_of(slot))
     }
     fn is_message_port(&self, value: &JsValue) -> bool { self.messaging_is_port(value) }
     fn event_target_created(&mut self, slot: u64) -> Result<(), Throw> {
@@ -1461,6 +1461,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                         | Operation::PageTransitionEventConstructor
                         | Operation::CustomEventConstructor
                         | Operation::MessageEventConstructor
+                        | Operation::ProgressEventConstructor
                         | Operation::MutationObserverConstructor
                         | Operation::StaticRangeConstructor
                 ) {
@@ -1964,6 +1965,12 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 }
             }
         }
+    }
+    fn report_listener_error(&mut self, error: Throw) {
+        if self.state.borrow().net.report_listener_errors == 0 { return; }
+        let url = self.state.borrow().document_url.clone().unwrap_or_default();
+        let bindings = RuntimeBindings { state: self.state.clone() };
+        let _ = bindings.report_module_exception(self.js, &error, &url);
     }
     fn blob_url_origin(&mut self) -> Result<String, Throw> {
         let base = amazing_bindings::fetch_interfaces::FetchHost::fetch_base(self)?;

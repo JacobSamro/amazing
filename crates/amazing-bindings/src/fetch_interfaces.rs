@@ -20,8 +20,9 @@ pub enum FetchInterface {
     Response,
     XMLHttpRequest,
     XMLHttpRequestUpload,
-    ProgressEvent,
+    XMLHttpRequestEventTarget,
     HeadersIterator,
+    FileReader,
 }
 impl FetchInterface {
     pub const fn name(self) -> &'static str {
@@ -31,7 +32,8 @@ impl FetchInterface {
             Self::Response => "Response",
             Self::XMLHttpRequest => "XMLHttpRequest",
             Self::XMLHttpRequestUpload => "XMLHttpRequestUpload",
-            Self::ProgressEvent => "ProgressEvent",
+            Self::XMLHttpRequestEventTarget => "XMLHttpRequestEventTarget",
+            Self::FileReader => "FileReader",
             Self::HeadersIterator => "Headers Iterator",
         }
     }
@@ -42,7 +44,8 @@ impl FetchInterface {
             Self::Response => 202,
             Self::XMLHttpRequest => 203,
             Self::XMLHttpRequestUpload => 204,
-            Self::ProgressEvent => 205,
+            Self::XMLHttpRequestEventTarget => 205,
+            Self::FileReader => 207,
             Self::HeadersIterator => 206,
         })
     }
@@ -120,13 +123,17 @@ pub enum FetchOperation {
     XhrWithCredentials,
     XhrSetWithCredentials,
     XhrUpload,
-    XhrAddEventListener,
-    XhrRemoveEventListener,
-    ProgressEventConstructor,
-    ProgressEventType,
-    ProgressEventLoaded,
-    ProgressEventTotal,
-    ProgressEventLengthComputable,
+    EventHandlerGet(&'static str),
+    EventHandlerSet(&'static str),
+    FileReaderConstructor,
+    FileReaderReadAsArrayBuffer,
+    FileReaderReadAsBinaryString,
+    FileReaderReadAsText,
+    FileReaderReadAsDataUrl,
+    FileReaderAbort,
+    FileReaderReadyState,
+    FileReaderResult,
+    FileReaderError,
     IllegalConstructor,
     HeaderIteratorNext,
     HeaderIteratorSelf,
@@ -143,7 +150,8 @@ pub enum FetchObject {
     Response(ApiResponse, Option<AbortSignalId>),
     Xhr(Xhr),
     XhrUpload(Rc<RefCell<FetchObject>>),
-    ProgressEvent { kind: String, loaded: u64, total: u64, length_computable: bool },
+    /// Native FileReader state lives in the host (it owns scheduling and JS values).
+    FileReader,
     HeaderIterator { source: Rc<RefCell<FetchObject>>, index: usize, kind: HeaderIterationKind },
 }
 
@@ -221,10 +229,12 @@ pub trait FetchHost: BindingHost {
     fn fetch_xhr_error(&mut self, error: XhrError) -> Self::Error;
     fn fetch_xhr_document(&mut self, receiver: &Self::Value, xhr: &Xhr) -> Result<Self::Value, Self::Error>;
     fn fetch_reject_throw(&mut self, error: Self::Error) -> Result<Self::Value, Self::Error>;
-    fn fetch_add_listener(&mut self, target: &Self::Value, name: String,
-        callback: Self::Value) -> Result<(), Self::Error>;
-    fn fetch_remove_listener(&mut self, target: &Self::Value, name: &str,
-        callback: &Self::Value) -> Result<(), Self::Error>;
+    /// EventHandler IDL attribute on an XHR / upload / FileReader receiver.
+    fn fetch_event_handler(&mut self, receiver: &Self::Value, name: &'static str,
+        new: Option<&Self::Value>) -> Result<Self::Value, Self::Error>;
+    /// FileReader constructor and every FileReader operation.
+    fn fetch_file_reader(&mut self, op: FetchOperation, receiver: &Self::Value,
+        args: &[Self::Value]) -> Result<Self::Value, Self::Error>;
     fn fetch_header_iterator(&mut self, source: Rc<RefCell<FetchObject>>,
         kind: HeaderIterationKind) -> Result<Self::Value, Self::Error>;
     fn fetch_iterator_result(&mut self, value: Self::Value, done: bool) -> Result<Self::Value, Self::Error>;
@@ -252,6 +262,10 @@ fn getter<H: FetchHost>(
     let setter = set.map(|op| host.fetch_native(name, 1, op, HostCallPolicy::CallOnly));
     host.define_accessor_property(prototype, name, Some(getter), setter, true, true)
 }
+fn handler<H: FetchHost>(host: &mut H, prototype: &H::Value, name: &'static str, attr: &'static str)
+    -> Result<(), H::Error> {
+    getter(host, prototype, name, FetchOperation::EventHandlerGet(attr), Some(FetchOperation::EventHandlerSet(attr)))
+}
 fn static_member<H: FetchHost>(
     host: &mut H,
     constructor: &H::Value,
@@ -272,8 +286,9 @@ pub fn install<H: FetchHost>(host: &mut H) -> Result<(), H::Error> {
         I::Request,
         I::Response,
         I::XMLHttpRequest,
+        I::XMLHttpRequestEventTarget,
         I::XMLHttpRequestUpload,
-        I::ProgressEvent,
+        I::FileReader,
     ] {
         let prototype = host.create_object(None)?;
         let constructor_op = match interface {
@@ -281,8 +296,8 @@ pub fn install<H: FetchHost>(host: &mut H) -> Result<(), H::Error> {
             I::Request => O::RequestConstructor,
             I::Response => O::ResponseConstructor,
             I::XMLHttpRequest => O::XhrConstructor,
-            I::XMLHttpRequestUpload => O::IllegalConstructor,
-            I::ProgressEvent => O::ProgressEventConstructor,
+            I::XMLHttpRequestUpload | I::XMLHttpRequestEventTarget => O::IllegalConstructor,
+            I::FileReader => O::FileReaderConstructor,
             I::HeadersIterator => unreachable!(),
         };
         let length = match interface {
@@ -383,9 +398,8 @@ pub fn install<H: FetchHost>(host: &mut H) -> Result<(), H::Error> {
                 install_body(host, &prototype)?;
             }
             I::XMLHttpRequest => {
+                handler(host, &prototype, "onreadystatechange", "onreadystatechange")?;
                 for (name, op, len) in [
-                    ("addEventListener", O::XhrAddEventListener, 2),
-                    ("removeEventListener", O::XhrRemoveEventListener, 2),
                     ("open", O::XhrOpen, 2),
                     ("setRequestHeader", O::XhrSetRequestHeader, 2),
                     ("send", O::XhrSend, 0),
@@ -438,17 +452,31 @@ pub fn install<H: FetchHost>(host: &mut H) -> Result<(), H::Error> {
                     host.define_data_property(&prototype, name, number, false, false, false)?;
                 }
             }
-            I::XMLHttpRequestUpload => {
-                for (name, op, len) in [
-                    ("addEventListener", O::XhrAddEventListener, 2),
-                    ("removeEventListener", O::XhrRemoveEventListener, 2),
-                ] { member(host, &prototype, name, op, len)?; }
+            I::XMLHttpRequestUpload => {}
+            I::XMLHttpRequestEventTarget => {
+                for name in ["onloadstart", "onprogress", "onabort", "onerror", "onload", "ontimeout", "onloadend"] {
+                    handler(host, &prototype, name, name)?;
+                }
             }
-            I::ProgressEvent => {
-                for (name, op) in [("type", O::ProgressEventType),
-                    ("loaded", O::ProgressEventLoaded), ("total", O::ProgressEventTotal),
-                    ("lengthComputable", O::ProgressEventLengthComputable)] {
+            I::FileReader => {
+                for (name, op, len) in [
+                    ("readAsArrayBuffer", O::FileReaderReadAsArrayBuffer, 1),
+                    ("readAsBinaryString", O::FileReaderReadAsBinaryString, 1),
+                    ("readAsText", O::FileReaderReadAsText, 1),
+                    ("readAsDataURL", O::FileReaderReadAsDataUrl, 1),
+                    ("abort", O::FileReaderAbort, 0),
+                ] { member(host, &prototype, name, op, len)?; }
+                for (name, op) in [("readyState", O::FileReaderReadyState),
+                    ("result", O::FileReaderResult), ("error", O::FileReaderError)] {
                     getter(host, &prototype, name, op, None)?;
+                }
+                for name in ["onloadstart", "onprogress", "onload", "onabort", "onerror", "onloadend"] {
+                    handler(host, &prototype, name, name)?;
+                }
+                for (name, value) in [("EMPTY", 0), ("LOADING", 1), ("DONE", 2)] {
+                    let number = host.number(value as f64);
+                    host.define_data_property(&constructor, name, number.clone(), false, false, false)?;
+                    host.define_data_property(&prototype, name, number, false, false, false)?;
                 }
             }
             I::HeadersIterator => unreachable!(),
@@ -1117,38 +1145,15 @@ pub fn invoke<H: FetchHost>(
         | O::BodyBytes => body(host, op, &receiver),
         O::XhrConstructor => host.fetch_allocate(FetchInterface::XMLHttpRequest,
             FetchObject::Xhr(Xhr::default())),
-        O::XhrAddEventListener | O::XhrRemoveEventListener => {
-            let _ = host.fetch_record(&receiver, FetchInterface::XMLHttpRequest)
-                .or_else(|_| host.fetch_record(&receiver, FetchInterface::XMLHttpRequestUpload))?;
-            let name = arg_usv(host, args, 0)?;
-            let callback = required(host, args, 1)?.clone();
-            if op == O::XhrAddEventListener { host.fetch_add_listener(&receiver, name, callback)?; }
-            else if op == O::XhrRemoveEventListener { host.fetch_remove_listener(&receiver, &name, &callback)?; }
-            Ok(host.undefined())
+        O::EventHandlerGet(name) => host.fetch_event_handler(&receiver, name, None),
+        O::EventHandlerSet(name) => {
+            let value = args.first().cloned().unwrap_or_else(|| host.undefined());
+            host.fetch_event_handler(&receiver, name, Some(&value))
         }
-        O::ProgressEventConstructor => {
-            let kind = arg_usv(host, args, 0)?;
-            let mut loaded = 0; let mut total = 0; let mut length_computable = false;
-            if let Some(init) = args.get(1).filter(|v| !host.is_nullish(v)) {
-                if let Some(v) = optional(host, init, "loaded")? { loaded = host.to_number(&v)? as u64; }
-                if let Some(v) = optional(host, init, "total")? { total = host.to_number(&v)? as u64; }
-                if let Some(v) = optional(host, init, "lengthComputable")? { length_computable = host.to_boolean(&v); }
-            }
-            host.fetch_allocate(FetchInterface::ProgressEvent, FetchObject::ProgressEvent {
-                kind, loaded, total, length_computable })
-        }
-        O::ProgressEventType | O::ProgressEventLoaded | O::ProgressEventTotal | O::ProgressEventLengthComputable => {
-            let record = host.fetch_record(&receiver, FetchInterface::ProgressEvent)?;
-            let record = record.borrow();
-            let FetchObject::ProgressEvent { kind, loaded, total, length_computable } = &*record
-                else { return Err(host.fetch_type_error("Expected ProgressEvent")); };
-            match op {
-                O::ProgressEventType => string(host, kind),
-                O::ProgressEventLoaded => Ok(host.number(*loaded as f64)),
-                O::ProgressEventTotal => Ok(host.number(*total as f64)),
-                _ => Ok(host.boolean(*length_computable)),
-            }
-        }
+        O::FileReaderConstructor | O::FileReaderReadAsArrayBuffer | O::FileReaderReadAsBinaryString
+        | O::FileReaderReadAsText | O::FileReaderReadAsDataUrl | O::FileReaderAbort
+        | O::FileReaderReadyState | O::FileReaderResult | O::FileReaderError =>
+            host.fetch_file_reader(op, &receiver, args),
         O::IllegalConstructor => Err(host.fetch_type_error("Illegal constructor")),
         O::HeaderIteratorSelf => {
             let _ = host.fetch_record(&receiver, FetchInterface::HeadersIterator)?;

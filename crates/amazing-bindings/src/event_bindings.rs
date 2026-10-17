@@ -9,7 +9,7 @@ use std::time::Duration;
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::MessageEventConstructor | O::MessageEventGet(_) | O::MessageEventInit | O::MouseGetModifierState | O::KeyboardGetModifierState | O::EventExtra(_) | O::UIEventConstructor | O::FocusEventConstructor
         | O::MouseEventConstructor | O::WheelEventConstructor | O::KeyboardEventConstructor
-        | O::CompositionEventConstructor | O::EventTargetConstructor | O::AddEventListener | O::RemoveEventListener
+        | O::CompositionEventConstructor | O::ProgressEventConstructor | O::EventTargetConstructor | O::AddEventListener | O::RemoveEventListener
         | O::DispatchEvent | O::EventConstructor | O::CustomEventConstructor
         | O::CustomEventDetail | O::CustomEventInit | O::CreateEvent | O::EventType
         | O::EventTargetValue | O::EventCurrentTarget | O::EventPhase | O::EventBubbles
@@ -150,7 +150,7 @@ fn dispatch_started_event<H: BindingHost>(host: &mut H, event: EventId,
         let Some(invocation) = invocation else { break };
         let result = callback_call(host, invocation.callback, invocation.current_target, event, invocation.handler);
         if invocation.once { host.release_value(invocation.callback); }
-        if result.is_err() { dispatch.report_exception("Native event listener threw".into()); }
+        if let Err(error) = result { host.report_listener_error(error); dispatch.report_exception("Native event listener threw".into()); }
     }
     crate::input_activation_bindings::complete(host, &mut dispatch)?;
     host.with_dom(|dom| dom.events().dispatch_result(event))
@@ -226,6 +226,7 @@ fn extra_spec(name: &'static str) -> EventExtra {
         "ctrlKey" | "shiftKey" | "altKey" | "metaKey" | "repeat" | "isComposing" | "momentum" => EventExtra::Boolean(false),
         name if name.starts_with("modifier") => EventExtra::Boolean(false),
         "key" | "code" | "data" => EventExtra::String(vec![]),
+        "lengthComputable" => EventExtra::Boolean(false),
         _ => EventExtra::Number(0.),
     }
 }
@@ -238,6 +239,7 @@ fn event_class(op: O) -> Option<EventClass> {
         O::WheelEventConstructor => EventClass::Wheel,
         O::KeyboardEventConstructor => EventClass::Keyboard,
         O::CompositionEventConstructor => EventClass::Composition,
+        O::ProgressEventConstructor => EventClass::Progress,
         _ => return None,
     })
 }
@@ -245,6 +247,7 @@ fn event_class(op: O) -> Option<EventClass> {
 // Inherited dictionaries precede derived dictionaries; each dictionary's
 // supported members are visited in lexicographic order (WebIDL conversion).
 fn event_fields(class: EventClass) -> Vec<&'static str> {
+    if class == EventClass::Progress { return vec!["lengthComputable", "loaded", "total"]; }
     let mut fields = vec!["detail", "view", "which"];
     if matches!(class, EventClass::Mouse | EventClass::Wheel | EventClass::Keyboard) {
         fields.extend(["altKey", "ctrlKey", "metaKey", "modifierAltGraph", "modifierCapsLock",
@@ -271,6 +274,11 @@ fn event_number<H: BindingHost>(host: &mut H, value: &H::Value, name: &str) -> R
         "button" => Some((16, true)),
         "buttons" => Some((16, false)),
         "which" | "location" | "keyCode" | "charCode" | "deltaMode" => Some((32, false)),
+        // unsigned long long: modulo 2^64, held in a double.
+        "loaded" | "total" => {
+            if !number.is_finite() { return Ok(0.); }
+            return Ok(number.trunc().rem_euclid(18_446_744_073_709_551_616.));
+        }
         _ => None,
     };
     if let Some((bits, signed)) = integer {

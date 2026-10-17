@@ -4,6 +4,8 @@ use super::*;
 mod xhr_streaming;
 #[path="runtime_host_net/base64_globals.rs"]
 mod base64_globals;
+#[path="runtime_host_net/event_targets.rs"]
+mod event_targets;
 use xhr_streaming::XhrPrepared;
 use super::html::receiving_context::{ReceivingDocumentIdentity,receiving_document_client_from_state};
 use amazing_fetch::{ReceivingDocumentClient,xhr::{XhrServiceRequest,XhrUrlContext}};
@@ -35,6 +37,7 @@ pub(super) enum NetNativeEntry {
     Operation(FetchOperation),
     PromiseExecutor,
     Pump,
+    FileReaderTask { slot: u64, generation: u64, stage: u8 },
     WebSocket(WebSocketOp),
     /// `document.cookie` getter/setter (NET-41), and the
     /// `test_driver.delete_all_cookies()` vendor hook it shares a store with.
@@ -142,7 +145,8 @@ pub(super) struct NetRuntime {
     fetch_interfaces: Vec<(FetchInterface, JsValue, JsValue)>,
     fetch_network: NetworkService,
     legacy_fetch: Option<JsValue>,
-    fetch_listeners: Vec<(u64, u64, String, JsValue)>,
+    events: event_targets::EventTargetRuntime,
+    pub(super) report_listener_errors: u32,
     fetch_header_iterator_prototype: Option<JsValue>,
     pub(super) fetch_resolver_capture: Option<(JsValue, JsValue)>,
     fetch_pending: Vec<(ServiceId, JsValue, JsValue, AbortSignalId)>,
@@ -166,7 +170,8 @@ impl NetRuntime {
             fetch_interfaces: Vec::new(),
             fetch_network: NetworkService::new_pending_io(DispatchLimits::default())?,
             legacy_fetch: None,
-            fetch_listeners: Vec::new(),
+            events: Default::default(),
+            report_listener_errors: 0,
             fetch_header_iterator_prototype: None,
             fetch_resolver_capture: None,
             fetch_pending: Vec::new(),
@@ -243,6 +248,7 @@ impl RuntimeBindingHost<'_> {
         let env = self.js.binding_create_global_environment_overlay();
         env.declare_lexical("fetch", fetch, false)?;
         self.js.global_env = env;
+        self.link_event_target_prototypes()?;
         self.install_websocket()?;
         self.install_document_cookie()?;
         self.install_base64_globals()?;
@@ -261,6 +267,7 @@ impl RuntimeBindingHost<'_> {
                 Ok(JsValue::Undefined)
             }
             NetNativeEntry::Pump => self.fetch_pump(),
+            NetNativeEntry::FileReaderTask { slot, generation, stage } => self.file_reader_task(slot, generation, stage),
             NetNativeEntry::WebSocket(op) => self.websocket_invoke(op, this, args),
             NetNativeEntry::CookieGet => self.document_cookie_get(),
             NetNativeEntry::CookieSet => self.document_cookie_set(args),
@@ -1271,7 +1278,7 @@ impl amazing_fetch::NetworkOrCache for FetchDataOnly {
     }
 }
 
-fn decode_xhr_text(bytes: &[u8], charset: Option<&str>) -> String {
+pub(super) fn decode_xhr_text(bytes: &[u8], charset: Option<&str>) -> String {
     use amazing_encoding::{decode, encoding_for_label, sniff_bom, Encoding};
     let (encoding, skip) = sniff_bom(bytes).unwrap_or_else(|| (
         charset.and_then(encoding_for_label).unwrap_or(Encoding::Utf8), 0,
@@ -1369,6 +1376,12 @@ impl FetchHost for RuntimeBindingHost<'_> {
             &prototype,
         )?;
         self.materialize_accessors(&value);
+        if matches!(interface, FetchInterface::XMLHttpRequest | FetchInterface::XMLHttpRequestUpload | FetchInterface::FileReader) {
+            if let Some(existing) = self.state.borrow().net.events.slots.get(&slot).copied() {
+                if let Some(known) = self.fetch_event_value_of(existing) { return Ok(known); }
+            }
+            self.fetch_register_event_target(slot, &value)?;
+        }
         Ok(value)
     }
     fn fetch_record(
@@ -1643,17 +1656,8 @@ impl FetchHost for RuntimeBindingHost<'_> {
     }
     fn fetch_upload_has_listeners(&mut self, receiver: &JsValue) -> Result<bool, Throw> {
         let upload = self.js.binding_get_property(receiver, "upload")?;
-        let key = self.platform_object(&upload, FetchInterface::XMLHttpRequestUpload.brand())
-            .ok_or_else(|| Throw::type_error("Invalid XHR upload target"))?;
-        if self.state.borrow().net.fetch_listeners.iter().any(|(slot, brand, _, _)|
-            *slot == key.slot && *brand == FetchInterface::XMLHttpRequestUpload.brand().0) {
-            return Ok(true);
-        }
-        for name in ["onloadstart", "onprogress", "onabort", "onerror", "onload", "ontimeout", "onloadend"] {
-            let handler = self.js.binding_get_property(&upload, name)?;
-            if self.js.binding_is_callable(&handler) { return Ok(true); }
-        }
-        Ok(false)
+        self.fetch_has_listeners(&upload,
+            &["loadstart", "progress", "abort", "error", "load", "timeout", "loadend"])
     }
     fn fetch_xhr_ready_state(&self, receiver: &JsValue, current: XhrState) -> XhrState {
         let Some(key) = self.platform_object(receiver, FetchInterface::XMLHttpRequest.brand())
@@ -1701,31 +1705,13 @@ impl FetchHost for RuntimeBindingHost<'_> {
         let reject = self.js.binding_get_property(&promise, "reject")?;
         binding_call(self.js, &reject, &promise, &[error.0])
     }
-    fn fetch_add_listener(&mut self, target: &JsValue, name: String, callback: JsValue) -> Result<(), Throw> {
-        if !self.js.binding_is_callable(&callback) { return Ok(()); }
-        let (key, brand) = if let Some(key) = self.platform_object(target, FetchInterface::XMLHttpRequest.brand()) {
-            (key, FetchInterface::XMLHttpRequest.brand())
-        } else {
-            let brand = FetchInterface::XMLHttpRequestUpload.brand();
-            (self.platform_object(target, brand).ok_or_else(|| Throw::type_error("Invalid XHR target"))?, brand)
-        };
-        let mut state = self.state.borrow_mut();
-        if !state.net.fetch_listeners.iter().any(|(slot, family, kind, value)|
-            *slot == key.slot && *family == brand.0 && kind == &name && binding_same_value(self.js, value, &callback)) {
-            state.net.fetch_listeners.push((key.slot, brand.0, name, callback));
-        }
-        Ok(())
+    fn fetch_event_handler(&mut self, receiver: &JsValue, name: &'static str,
+        new: Option<&JsValue>) -> Result<JsValue, Throw> {
+        self.fetch_event_handler_impl(receiver, name, new)
     }
-    fn fetch_remove_listener(&mut self, target: &JsValue, name: &str, callback: &JsValue) -> Result<(), Throw> {
-        let (key, brand) = if let Some(key) = self.platform_object(target, FetchInterface::XMLHttpRequest.brand()) {
-            (key, FetchInterface::XMLHttpRequest.brand())
-        } else {
-            let brand = FetchInterface::XMLHttpRequestUpload.brand();
-            (self.platform_object(target, brand).ok_or_else(|| Throw::type_error("Invalid XHR target"))?, brand)
-        };
-        self.state.borrow_mut().net.fetch_listeners.retain(|(slot, family, kind, value)|
-            !(*slot == key.slot && *family == brand.0 && kind == name && binding_same_value(self.js, value, callback)));
-        Ok(())
+    fn fetch_file_reader(&mut self, op: FetchOperation, receiver: &JsValue,
+        args: &[JsValue]) -> Result<JsValue, Throw> {
+        self.fetch_file_reader_impl(op, receiver, args)
     }
     fn fetch_header_iterator(&mut self, source: Rc<RefCell<FetchObject>>,
         kind: HeaderIterationKind) -> Result<JsValue, Throw> {

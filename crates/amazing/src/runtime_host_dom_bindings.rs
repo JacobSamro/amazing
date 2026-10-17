@@ -316,6 +316,7 @@ impl RuntimeBindingHost<'_> {
             EventClass::Wheel => Interface::WheelEvent,
             EventClass::Keyboard => Interface::KeyboardEvent,
             EventClass::Composition => Interface::CompositionEvent,
+            EventClass::Progress => Interface::ProgressEvent,
             EventClass::Message => Interface::MessageEvent,
             EventClass::HashChange => Interface::HashChangeEvent,
             EventClass::PopState => Interface::PopStateEvent,
