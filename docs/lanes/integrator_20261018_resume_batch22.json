@@ -1,0 +1,49 @@
+{
+ "schema": 1,
+ "ticket": "resume-batches-20-22",
+ "date": "2026-10-18",
+ "batches": [
+  {
+   "batch": 20,
+   "published": "033bddde4fc1c663680ae7820699ed38d18b8ff8",
+   "published_base": "634962b29d16187b47b1df4be731f594755d3a31",
+   "tickets": [
+    "10303e87d :state(), :defined, [*|attr] selectors, enumerated ARIA reflection (lane 92ad8481d)",
+    "299b82239 HTMLElement.nonce slot, col/colgroup span, img dimensions (lane d482c1276; element_internals.rs additive conflict kept both sides)",
+    "2f6aaa15c js: class-field await per spec, Date.parse forms, RegExp @@replace order, async disposal tick, static-block using (lane a44346f13)",
+    "033bddde4 dense Grid Lanes packing (lane 8e95f6baf)"
+   ],
+   "workspace": {"nextest": {"passed": 5801, "failed": 0, "skipped": 17}, "doctests": {"passed": 39, "failed": 0}},
+   "test262": {"shards": 16, "boxes": 4, "summary": {"files": {"pass": 53531, "fail": 47, "skipped": 294}, "variants": {"pass": 102832, "fail": 86}}, "gained_files": 7, "lost_files": 0, "lost_variants": 0, "baseline": "t262-d45bc6b5-resume-batch19", "result_sha256": "8bef7b9bce1342df679c8b0982ed3d97145f3cd29ac6d4bb6cc325b355aed482"},
+   "render": {"baseline": "634962b29", "css/css-grid": {"pass": [458, 487], "gained": 29, "lost": 0}, "css/selectors": {"pass": [82, 82], "lost": 0}},
+   "corpus": {"wpt_dom_suite_merged_head": {"files_pass": 288, "subtests_pass": 55100, "outcome_sha256": "fb20aaaed416cf5e12d0a8f375b3dd40d293d357286a6fcda31361ed9a249b6e"}, "lane_dom_html_custom_elements": {"files": [506, 510], "lost_files_outside_range_deadline": 0}}
+  },
+  {
+   "batch": 21,
+   "published": "dec2ed55a876d80654d0ca6488b392b4deadabe3",
+   "published_base": "033bddde4fc1c663680ae7820699ed38d18b8ff8",
+   "tickets": [
+    "055b90a14 CompressionStream/DecompressionStream, fetch ReadableStream request bodies read to completion (lane b3dc7c4c9; 2 h2 feature-detect subtests listed as vacuous passes)",
+    "e16897fed HTTP cache conditional revalidation, cache modes, request Cache-Control directives (lane f975a8aa3)",
+    "dec2ed55a delta source uploads for linux-run.sh with verified per-box cache and full-upload fallback (lane c026164aa)"
+   ],
+   "workspace": {"nextest": {"passed": 5803, "failed": 0, "skipped": 17}, "doctests": {"passed": 39, "failed": 0}, "source": "e16897fed (engine code identical to dec2ed55a)"},
+   "test262": {"shards": 16, "boxes": 2, "summary": {"files": {"pass": 53531, "fail": 47, "skipped": 294}, "variants": {"pass": 102832, "fail": 86}}, "gained_files": 0, "lost_files": 0, "lost_variants": 0, "baseline": "t262-033bddde-resume-batch20", "result_sha256": "c4f09f7649a88e23487d8e890dd381616f54c8292175eed51f194a6b1f41bc19", "note": "three earlier 16-shard attempts on e16897fed failed at source upload (exit 124); recorded in .agents/integrator-primary/questions.md"},
+   "corpus": {"merged_head_vs_batch17_per_test": {"fetch": {"files_pass": 114, "subtests_pass": 2464, "lost": 0}, "xhr": {"files_pass": 222, "subtests_pass": 1096, "lost": 0}, "FileAPI": {"files_pass": 27, "subtests_pass": 515, "lost": 0}, "streams": {"files_pass": 59, "subtests_pass": 1158, "lost": 0}}, "compression_lane": {"files": [0, 13], "subtests": [0, 299]}}
+  },
+  {
+   "batch": 22,
+   "published_base": "dec2ed55a876d80654d0ca6488b392b4deadabe3",
+   "gated_source_commit": "67f91bcf5da1d97ce45bade3c1d4000b56adc2b5",
+   "tickets": [
+    "2f959f781 js: RegExp/TypedArray NewTarget.prototype order, optional-chain early errors, strict ISO offsets (lane 3143f2c7a)",
+    "57301fafb formatRange collapsing, time zone names (lumen port), Arabic fractional seconds, ZonedDateTime day rounding (lane 283915246)",
+    "dec05436f js: VM by default for eligible top-level programs, for-let head pattern fix (lane edb44eba8)",
+    "67f91bcf5 js: Polish/en-IN/pt-PT locale data (lumen port), compact plural operands, Number/String/Date/WeakRef/FinalizationRegistry NewTarget order (lane c1b51c577; interp_stmt.rs owner list merged with ticket 2f959f781)"
+   ],
+   "workspace": {"nextest": {"passed": 5804, "failed": 0, "skipped": 17}, "doctests": {"passed": 39, "failed": 0}},
+   "test262": {"shards": 16, "boxes": 4, "summary": {"files": {"pass": 53561, "fail": 17, "skipped": 294}, "variants": {"pass": 102891, "fail": 27}}, "gained_files": 30, "lost_files": 0, "lost_variants": 0, "baseline": "t262-dec2ed55-resume-batch21e", "result_sha256": "81fee4abba5e3e16635782c0f9722ed2b9b4110f07caa9c9c0f5788db3ad331a"},
+   "corpus": {"wpt_dom_suite_vs_batch20_per_test": {"files": 627, "lost_files": 0, "lost_subtests": 0, "outcome_sha256": "fb20aaaed416cf5e12d0a8f375b3dd40d293d357286a6fcda31361ed9a249b6e"}}
+  }
+ ]
+}
