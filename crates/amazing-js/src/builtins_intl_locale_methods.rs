@@ -64,54 +64,15 @@ fn intl_date_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsVa
     let name = binary_current_name(i);
     let locales = args.first().cloned().unwrap_or(JsValue::Undefined);
     let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-    // ToDateTimeOptions(options, required, defaults): the options object is read for the
-    // required fields; when none is present the numeric defaults are layered on a child object.
-    let (required, defaults) = match name.as_str() {
+    let mode = match name.as_str() {
         "toLocaleDateString" => ("date", "date"),
         "toLocaleTimeString" => ("time", "time"),
         _ => ("any", "all"),
     };
-    let options = if options.is_undefined() {
-        // ECMA-402 builds default options with a null prototype, so inherited
-        // Object.prototype properties must not leak into the formatter.
-        JsValue::object(JsObject::ordinary())
-    } else if options.is_null() {
-        return Err(Throw::type_error("options must not be null"));
-    } else { array_receiver(i, options)? };
-    let mut need_defaults = true;
-    let date_fields: &[&str] = &["weekday", "year", "month", "day"];
-    let time_fields: &[&str] = &["dayPeriod", "hour", "minute", "second", "fractionalSecondDigits"];
-    for (group, fields) in [("date", date_fields), ("time", time_fields)] {
-        if required != "any" && required != group { continue; }
-        for field in fields {
-            if !i.get_prop(&options, *field)?.is_undefined() { need_defaults = false; }
-        }
-    }
-    let date_style = i.get_prop(&options, "dateStyle")?;
-    let time_style = i.get_prop(&options, "timeStyle")?;
-    if !date_style.is_undefined() || !time_style.is_undefined() {
-        need_defaults = false;
-        if required == "date" && !time_style.is_undefined() {
-            return Err(Throw::type_error("timeStyle is not allowed in toLocaleDateString"));
-        }
-        if required == "time" && !date_style.is_undefined() {
-            return Err(Throw::type_error("dateStyle is not allowed in toLocaleTimeString"));
-        }
-    }
-    let options = if need_defaults {
-        let JsValue::Object(parent) = &options else { unreachable!() };
-        let mut child = JsObject::ordinary();
-        child.proto = Some(parent.clone());
-        let child = JsValue::object(child);
-        if matches!(defaults, "date" | "all") {
-            for field in ["year", "month", "day"] { i.set_prop(&child, field, JsValue::str("numeric"))?; }
-        }
-        if matches!(defaults, "time" | "all") {
-            for field in ["hour", "minute", "second"] { i.set_prop(&child, field, JsValue::str("numeric"))?; }
-        }
-        child
-    } else { options };
-    let formatter = intl_construct_service(i, "DateTimeFormat", locales, options)?;
+    INTL_DATE_MODE.with(|slot| slot.set(Some(mode)));
+    let formatter = intl_construct_service(i, "DateTimeFormat", locales, options);
+    INTL_DATE_MODE.with(|slot| slot.set(None));
+    let formatter = formatter?;
     let format = i.get_prop(&formatter, "format")?;
     i.call_value(&format, JsValue::Undefined, vec![JsValue::num(timestamp)])
 }

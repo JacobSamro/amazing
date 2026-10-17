@@ -305,6 +305,14 @@ fn std_epoch_offset_text(offset_ns: i128) -> String {
     text
 }
 
+/// Offset rounded half-expand to whole minutes, as ZonedDateTime/Instant strings print it.
+fn std_epoch_offset_text_rounded(offset_ns: i128) -> String {
+    let minute = 60 * STD_TEMPORAL_NS_SECOND;
+    let rounded = if offset_ns >= 0 { (offset_ns + minute / 2) / minute * minute }
+        else { -((-offset_ns + minute / 2) / minute * minute) };
+    std_epoch_offset_text(rounded)
+}
+
 fn std_epoch_parse_offset(text: &str) -> Result<i128, Throw> {
     let invalid = || Throw::range_error("invalid Temporal offset");
     let (sign, digits) = if let Some(rest) = text.strip_prefix('+') { (1, rest) }
@@ -454,6 +462,7 @@ struct StdEpochParsed {
     offset: i128,
     minute_precision: bool,
     calendar: String,
+    date_only: bool,
 }
 
 fn std_epoch_parse_syntax(text: &str, kind: StdEpochKind) -> Result<StdEpochParsed, Throw> {
@@ -520,7 +529,7 @@ fn std_epoch_parse_syntax(text: &str, kind: StdEpochKind) -> Result<StdEpochPars
     if !time.is_empty() { std_temporal_parse_time(clock, &mut fields)?; }
     std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
     let minute_precision = !time.is_empty() && time[clock.len()..].matches(':').count() == 1;
-    Ok(StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision, calendar })
+    Ok(StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision, calendar, date_only: time.is_empty() })
 }
 
 fn std_epoch_check_range(epoch_ns: i128) -> Result<i128, Throw> {
@@ -533,22 +542,38 @@ fn std_epoch_check_range(epoch_ns: i128) -> Result<i128, Throw> {
 fn std_epoch_resolve_parsed(parsed: StdEpochParsed, kind: StdEpochKind, offset_option: &str,
     disambiguation: &str) -> Result<(i128, String, String), Throw> {
     let invalid = || Throw::range_error("invalid Temporal instant string");
-    let StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision, calendar } = parsed;
+    let StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision, calendar, date_only } = parsed;
     if kind == StdEpochKind::ZonedDateTime && offset_absent {
-        let epoch_ns = std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?;
+        // A date-only string means the start of that day, which a midnight gap shifts forward.
+        let epoch_ns = if date_only { std_epoch_start_of_day_ns(&zone, &fields)? }
+            else { std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)? };
         return Ok((std_epoch_check_range(epoch_ns)?, zone, calendar));
     }
     let epoch_ns = std_epoch_check_range(std_temporal_epoch_ns(&fields) - offset)?;
     if kind == StdEpochKind::ZonedDateTime && !exact {
-        let actual_offset = tz_offset_ns(&zone, epoch_ns);
-        let matches = actual_offset == offset || (minute_precision
-            && std_temporal_round_integer(actual_offset, 60 * STD_TEMPORAL_NS_SECOND, "halfExpand")? == offset);
+        // InterpretISODateTimeOffset: the first possible instant whose offset equals the
+        // string's offset (or, for an HH:MM string offset, whose offset rounds to it) wins.
+        let local = std_temporal_epoch_ns(&fields);
+        let minute = 60 * STD_TEMPORAL_NS_SECOND;
+        let matched = tz_possible_epoch_ns(&zone, local).into_iter().find(|candidate| {
+            let candidate_offset = local - candidate;
+            candidate_offset == offset || (minute_precision
+                && std_temporal_round_integer(candidate_offset, minute, "halfExpand").is_ok_and(|r| r == offset))
+        });
+        let disambiguated = |zone: &String| -> Result<i128, Throw> {
+            std_epoch_check_range(std_epoch_disambiguate(zone, local, disambiguation)?)
+        };
         return match offset_option {
             "use" => Ok((epoch_ns, zone, calendar)),
-            "ignore" => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone, calendar)),
-            "prefer" if !matches => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone, calendar)),
-            _ if matches => Ok((epoch_ns, zone, calendar)),
-            _ => Err(invalid()),
+            "ignore" => { let at = disambiguated(&zone)?; Ok((at, zone, calendar)) }
+            "prefer" => match matched {
+                Some(at) => Ok((std_epoch_check_range(at)?, zone, calendar)),
+                None => { let at = disambiguated(&zone)?; Ok((at, zone, calendar)) }
+            },
+            _ => match matched {
+                Some(at) => Ok((std_epoch_check_range(at)?, zone, calendar)),
+                None => Err(invalid()),
+            },
         };
     }
     Ok((epoch_ns, zone, calendar))
@@ -655,13 +680,7 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
             } else {
                 Some(std_epoch_parse_offset(&std_epoch_string_field_value(i, &given_offset)?)?)
             };
-            let time_absent = ["hour", "minute", "second", "millisecond", "microsecond", "nanosecond"].iter()
-                .all(|name| i.get_prop(&value, *name).map(|v| v.is_undefined()).unwrap_or(false));
-            let epoch_ns = if offset_ns.is_none() && time_absent {
-                // No time-of-day at all: the start of the day (which differs
-                // from midnight when a DST gap swallows it).
-                std_epoch_start_of_day_ns(&zone, &fields)?
-            } else if offset_ns.is_none() || offset_option == "ignore" {
+            let epoch_ns = if offset_ns.is_none() || offset_option == "ignore" {
                 std_epoch_disambiguate(&zone, local_ns, &disambiguation)?
             } else {
                 let offset_ns = offset_ns.unwrap();
@@ -842,7 +861,7 @@ fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
     let date = std_temporal_date_text(fields[0], fields[1], fields[2]);
     let time = std_temporal_time_text(&fields);
     if data.kind == StdEpochKind::Instant { Ok(format!("{date}T{time}Z")) }
-    else { Ok(format!("{date}T{time}{}[{}]", std_epoch_offset_text(std_epoch_offset(data)),
+    else { Ok(format!("{date}T{time}{}[{}]", std_epoch_offset_text_rounded(std_epoch_offset(data)),
         data.zone_id)) }
 }
 // toLocaleString(locales, options) takes Intl.DateTimeFormat constructor
@@ -901,9 +920,9 @@ fn std_epoch_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
         std_temporal_time_text_options(&fields, digits, minute_only));
     if data.kind == StdEpochKind::Instant {
         if std_epoch_offset(&data) == 0 && !zone_given { text.push('Z'); }
-        else { text.push_str(&std_epoch_offset_text(std_epoch_offset(&data))); }
+        else { text.push_str(&std_epoch_offset_text_rounded(std_epoch_offset(&data))); }
     } else {
-        if offset == "auto" { text.push_str(&std_epoch_offset_text(std_epoch_offset(&data))); }
+        if offset == "auto" { text.push_str(&std_epoch_offset_text_rounded(std_epoch_offset(&data))); }
         if time_zone_name != "never" {
             text.push('[');
             if time_zone_name == "critical" { text.push('!'); }
@@ -934,6 +953,7 @@ fn std_epoch_value_of(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
 // TimeZoneEquals: identifiers naming the same zone (IANA links, UTC
 // spellings, equal numeric offsets) are equal.
 fn std_epoch_zone_equal(a: &str, b: &str) -> bool {
+    let (a, b) = (&tz_primary_identifier(a), &tz_primary_identifier(b));
     if a == b || a.eq_ignore_ascii_case(b) { return true; }
     let utc = |id: &str| ["UTC", "Etc/UTC", "Etc/GMT", "GMT"].iter().any(|name| name.eq_ignore_ascii_case(id));
     if utc(a) || utc(b) { return utc(a) && utc(b); }
@@ -1339,6 +1359,12 @@ fn std_epoch_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
         // calendar (including the ISO-grid family -- this was never
         // calendar-specific).
         let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
+        // AddZonedDateTime: with no date units the result is a plain exact-time shift (the
+        // wall-clock round trip below would re-resolve an ambiguous local time).
+        if duration[..4].iter().all(|part| *part == 0) {
+            let shifted = data.epoch_ns + sign as i128 * std_temporal_duration_time_ns(&duration);
+            return std_epoch_make_cal(i, data.kind, shifted, data.zone_id.clone(), data.calendar.clone());
+        }
         let local = std_epoch_local_fields(&data)?;
         // (2026-09-27: confirmed required, not parkable -- add()/subtract()
         // must stay calendar-native here to match the calendar-real getter

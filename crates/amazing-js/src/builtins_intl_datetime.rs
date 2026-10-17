@@ -1,3 +1,5 @@
+// Portions ported from lucid-softworks/lumen (crates/lumen/src/intl/datetimeformat.rs, non-Gregorian calendar fields, era names,
+// chinese/dangi related-year cluster) @ a0f0314de7835f76eaa913995489945aabebf345, MIT.
 // Gregorian Intl.DateTimeFormat with UTC and fixed-offset time zones.
 
 #[derive(Clone)]
@@ -84,9 +86,16 @@ fn intl_calendar_supported(value: &str) -> bool {
     INTL_KNOWN_CALENDARS.contains(&canonical)
 }
 
+thread_local! {
+    // Date.prototype.toLocale{,Date,Time}String hand their ToDateTimeOptions
+    // (required, defaults) pair to the DateTimeFormat intrinsic through this slot.
+    static INTL_DATE_MODE: std::cell::Cell<Option<(&'static str, &'static str)>> = const { std::cell::Cell::new(None) };
+}
+
 fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let mode = INTL_DATE_MODE.with(|slot| slot.take());
     let state = intl_date_create_state(i, args.first().unwrap_or(&JsValue::Undefined),
-        args.get(1).unwrap_or(&JsValue::Undefined), None)?;
+        args.get(1).unwrap_or(&JsValue::Undefined), mode)?;
     intl_chain_construct(i, this, "DateTimeFormat", IntlState::DateTime(state))
 }
 
@@ -172,7 +181,7 @@ fn intl_date_create_state(i: &mut Interpreter, locales: &JsValue, options_arg: &
     let mut second = second;
     let ymd_defaulted = match mode {
         None => date_style.is_none() && time_style.is_none()
-            && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
+            && [weekday.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
                 hour.as_ref(), minute.as_ref(), second.as_ref()].iter().all(|field| field.is_none())
             && fractional_second_digits.is_none(),
         Some((required, defaults)) => {
@@ -264,11 +273,59 @@ fn intl_date_data(locale: &str) -> &'static IntlDateData {
     INTL_DATE_DATA.iter().find(|data| data.locale == locale).unwrap_or(&INTL_DATE_DATA[0])
 }
 
+// Rewrites a CLDR time pattern written for the locale's default hour cycle into the requested one.
+fn intl_adapt_hour_cycle(pattern: &str, cycle: &str) -> String {
+    let is_24 = matches!(cycle, "h23" | "h24");
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut out = String::new();
+    let mut index = 0;
+    if is_24 && pattern.contains('h') {
+        while index < chars.len() {
+            let c = chars[index];
+            if c == 'h' {
+                while index < chars.len() && chars[index] == 'h' { index += 1; }
+                out.push_str("HH");
+                continue;
+            }
+            if c == 'a' {
+                if matches!(out.chars().last(), Some(' ') | Some('\u{202f}')) { out.pop(); }
+                else if matches!(chars.get(index + 1), Some(' ') | Some('\u{202f}')) { index += 1; }
+                index += 1;
+                continue;
+            }
+            out.push(c);
+            index += 1;
+        }
+        out
+    } else if !is_24 && pattern.contains('H') && !pattern.contains('a') {
+        let mut last_digits = 0;
+        while index < chars.len() {
+            let c = chars[index];
+            if c == 'H' {
+                while index < chars.len() && chars[index] == 'H' { index += 1; }
+                out.push('h');
+                continue;
+            }
+            out.push(c);
+            index += 1;
+            if c == 's' || (c == 'm' && !pattern.contains('s')) {
+                while index < chars.len() && chars[index] == c { out.push(c); index += 1; }
+                last_digits = out.len();
+            }
+        }
+        if last_digits > 0 { out.insert_str(last_digits, "\u{202f}a"); } else { out.push_str("\u{202f}a"); }
+        out
+    } else {
+        pattern.to_string()
+    }
+}
+
 fn intl_date_pattern(state: &IntlDateState) -> String {
     let data = intl_date_data(&state.locale);
     let style_index = |style: &str| match style { "full" => 0, "long" => 1, "medium" => 2, _ => 3 };
     let date = state.date_style.as_ref().map(|style| data.date[style_index(style)].to_string());
-    let time = state.time_style.as_ref().map(|style| data.time[style_index(style)].to_string());
+    let time = state.time_style.as_ref()
+        .map(|style| intl_adapt_hour_cycle(data.time[style_index(style)], &state.hour_cycle));
     if let (Some(date), Some(time)) = (&date, &time) {
         return data.date_time[style_index(state.date_style.as_deref().unwrap())]
             .replace("{1}", date).replace("{0}", time);
@@ -314,6 +371,19 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     } else {
         date.push_str(&fields.join(if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) { "." } else { "/" }));
     }
+    if let Some(era) = &state.era {
+        if state.calendar != "chinese" && state.calendar != "dangi" {
+            let token = match era.as_str() { "long" => "GGGG", "narrow" => "GGGGG", _ => "G" };
+            if ["ja", "zh", "zh-Hans", "zh-Hant", "ko"].contains(&state.locale.as_str()) {
+                date = format!("{token}{date}");
+            } else if date.is_empty() {
+                date.push_str(token);
+            } else {
+                date.push(' ');
+                date.push_str(token);
+            }
+        }
+    }
     let mut time = String::new();
     if let Some(hour) = &state.hour {
         // CLDR 24-hour skeletons ("Hms", "Hm") use a two-digit hour in every
@@ -337,11 +407,13 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
         time.push('.');
         time.push_str(&"S".repeat(digits));
     }
+    let period_space = if ["en", "en-GB", "hi"].contains(&state.locale.as_str()) { '\u{202f}' } else { ' ' };
     if state.day_period.is_some() {
         if !time.is_empty() { time.push(' '); }
         time.push('B');
     } else if state.hour.is_some() && ["h11", "h12"].contains(&state.hour_cycle.as_str()) {
-        time.push_str(" a");
+        time.push(period_space);
+        time.push('a');
     }
     // timeZoneName can never combine with dateStyle/timeStyle (rejected at
     // construction), so it only needs adding to the manually-built pattern
@@ -395,7 +467,7 @@ fn intl_civil_date_from_temporal(kind: IntlTemporalKind, fields: &[i64; 10]) -> 
         // YearMonth/MonthDay carry a placeholder reference day/year (never
         // rendered, since intl_temporal_adapt_state always drops the field
         // the kind doesn't have).
-        IntlTemporalKind::YearMonth => (fields[0], fields[1], 1, 0, 0, 0, 0),
+        IntlTemporalKind::YearMonth => (fields[0], fields[1], fields[2].max(1), 0, 0, 0, 0),
         IntlTemporalKind::MonthDay => (1972, fields[1], fields[2], 0, 0, 0, 0),
     };
     let days = days_from_civil(year, month, day);
@@ -463,6 +535,18 @@ fn intl_temporal_adapt_state(state: &IntlDateState, kind: IntlTemporalKind) -> R
         }
     }
     adapted.time_zone_name = None;
+    if matches!(kind, IntlTemporalKind::YearMonth | IntlTemporalKind::MonthDay) {
+        // A dateStyle on a partial date expands to the matching year-month / month-day skeleton.
+        if let Some(style) = adapted.date_style.take() {
+            let month = match style.as_str() { "full" | "long" => "long", "medium" => "short", _ => "numeric" };
+            adapted.month = Some(month.to_string());
+            if kind == IntlTemporalKind::YearMonth {
+                adapted.year = Some(if style == "short" { "2-digit" } else { "numeric" }.to_string());
+            } else {
+                adapted.day = Some("numeric".to_string());
+            }
+        }
+    }
     if !has_date { adapted.date_style = None; }
     if !has_time { adapted.time_style = None; }
     if !has_weekday { adapted.weekday = None; }
@@ -521,6 +605,9 @@ fn intl_render_civil(state: &IntlDateState, date: IntlCivilDate, offset_seconds:
     let mut chars = pattern.chars().peekable();
     let mut literal = String::new();
     let mut quoted = false;
+    let calendar_fields = intl_calendar_fields(&state.calendar, date.year as i64, date.month as i64, date.day as i64);
+    let foreign = intl_calendar_is_foreign(&state.calendar);
+    let era_shown = state.era.is_some();
     while let Some(ch) = chars.next() {
         if ch == '\'' {
             if chars.peek() == Some(&'\'') { literal.push('\''); chars.next(); }
@@ -534,14 +621,44 @@ fn intl_render_civil(state: &IntlDateState, date: IntlCivilDate, offset_seconds:
         if !literal.is_empty() { parts.push(("literal", std::mem::take(&mut literal))); }
         let mut count = 1;
         while chars.peek() == Some(&ch) { chars.next(); count += 1; }
+        if ch == 'y' && calendar_fields.related_year.is_some() {
+            let related = calendar_fields.related_year.unwrap_or(0);
+            let name = intl_cycle_year_name(related, &state.locale);
+            let chinese = intl_cldr_locale(&state.locale).starts_with("zh");
+            parts.push(("relatedYear", intl_localize_digits(&related.to_string(), &state.numbering_system)));
+            if chinese {
+                parts.push(("yearName", name));
+                if chars.peek() != Some(&'年') { parts.push(("literal", "年".into())); }
+            } else {
+                parts.push(("literal", "(".into()));
+                parts.push(("yearName", name));
+                parts.push(("literal", ")".into()));
+            }
+            continue;
+        }
+        let display_year = if foreign { calendar_fields.year }
+            else if era_shown && date.year <= 0 { 1 - date.year as i64 } else { date.year as i64 };
+        let named_month = if (count >= 3 && foreign) || state.calendar == "hebrew" {
+            let width = match count { 3 => "short", 4 => "long", _ => "narrow" };
+            let width = if state.calendar == "hebrew" { "long" } else { width };
+            if calendar_fields.adar_ii && intl_cldr_locale(&state.locale) == "en" { Some("Adar II") }
+            else { intl_cldr_month_name(&state.locale, &state.calendar, width, calendar_fields.month) }
+        } else { None };
+        let numeric_month = if foreign { calendar_fields.month } else { date.month as i64 };
+        let numeric_day = if foreign { calendar_fields.day } else { date.day as i64 };
         let (kind, value) = match ch {
-            'y' => ("year", if count == 2 { format!("{:02}", date.year.rem_euclid(100)) } else { date.year.to_string() }),
+            'y' => ("year", if count == 2 { format!("{:02}", display_year.rem_euclid(100)) } else { display_year.to_string() }),
+            'M' | 'L' if named_month.is_some() => ("month", named_month.unwrap_or("").to_string()),
+            'M' | 'L' if foreign => ("month", {
+                let bis = if calendar_fields.leap_month { "bis" } else { "" };
+                if count == 2 { format!("{:02}{bis}", numeric_month) } else { format!("{numeric_month}{bis}") }
+            }),
             'M' | 'L' => ("month", if count >= 4 {
                 data.months_wide[(date.month - 1) as usize].to_string()
             } else if count == 3 {
                 data.months_abbr[(date.month - 1) as usize].to_string()
             } else if count == 2 { format!("{:02}", date.month) } else { date.month.to_string() }),
-            'd' => ("day", if count == 2 { format!("{:02}", date.day) } else { date.day.to_string() }),
+            'd' => ("day", if count == 2 { format!("{:02}", numeric_day) } else { numeric_day.to_string() }),
             'E' | 'e' | 'c' => ("weekday", if count >= 4 {
                 data.weekdays_wide[date.weekday].to_string()
             } else { data.weekdays_abbr[date.weekday].to_string() }),
@@ -561,12 +678,35 @@ fn intl_render_civil(state: &IntlDateState, date: IntlCivilDate, offset_seconds:
                 Some("short") => data.day_period_short[date.hour as usize],
                 _ => data.day_period_long[date.hour as usize],
             }.to_string()),
-            'G' => ("era", if date.year > 0 { "AD".into() } else { "BC".into() }),
-            'z' | 'Z' | 'O' | 'v' | 'V' | 'X' | 'x' => ("timeZoneName", if offset_seconds == 0 {
-                "UTC".into()
-            } else {
+            'G' => ("era", {
+                let width = match count { 4 => "long", 5 => "narrow", _ => "short" };
+                let fallback = if date.year > 0 { "AD" } else { "BC" };
+                match &calendar_fields.era {
+                    Some((key, era)) if foreign || state.calendar == "gregory" =>
+                        intl_cldr_era_name(&state.locale, key, width, era).unwrap_or(fallback).to_string(),
+                    _ => fallback.to_string(),
+                }
+            }),
+            'z' | 'Z' | 'O' | 'v' | 'V' | 'X' | 'x' => ("timeZoneName", {
                 let minutes = offset_seconds.unsigned_abs() / 60;
-                format!("GMT{}{:02}:{:02}", if offset_seconds < 0 { '-' } else { '+' }, minutes / 60, minutes % 60)
+                let sign = if offset_seconds < 0 { '-' } else { '+' };
+                let name = state.time_zone_name.as_deref();
+                let utc_zone = matches!(state.time_zone.as_str(), "UTC" | "Etc/UTC" | "Etc/GMT" | "GMT");
+                if name == Some("shortOffset") {
+                    if offset_seconds == 0 { "GMT".to_string() }
+                    else if minutes % 60 == 0 { format!("GMT{sign}{}", minutes / 60) }
+                    else { format!("GMT{sign}{}:{:02}", minutes / 60, minutes % 60) }
+                } else if name == Some("longOffset") {
+                    if offset_seconds == 0 { "GMT".to_string() }
+                    else { format!("GMT{sign}{:02}:{:02}", minutes / 60, minutes % 60) }
+                } else if offset_seconds == 0 && utc_zone {
+                    if count >= 4 || name == Some("long") { "Coordinated Universal Time".to_string() } else { "UTC".to_string() }
+                } else if offset_seconds == 0 {
+                    if tz_fixed_offset_seconds(&state.time_zone).is_some() { "GMT".to_string() } else { "UTC".to_string() }
+                } else if count >= 4 || matches!(name, Some("long")) {
+                    format!("GMT{sign}{:02}:{:02}", minutes / 60, minutes % 60)
+                } else if minutes % 60 == 0 { format!("GMT{sign}{}", minutes / 60) }
+                else { format!("GMT{sign}{}:{:02}", minutes / 60, minutes % 60) }
             }),
             _ => ("literal", ch.to_string().repeat(count)),
         };
@@ -823,7 +963,7 @@ fn intl_temporal_to_locale_string(i: &mut Interpreter, value: &JsValue, locales:
     let mut state = intl_date_create_state(i, locales, options, Some(mode))?;
     if let Some(data) = &zoned {
         state.time_zone = data.zone_id.clone();
-        if state.time_zone_name.is_none() && state.date_style.is_none() && state.time_style.is_none() {
+        if state.time_zone_name.is_none() && state.date_style.is_none() && state.time_style.is_none() && state.ymd_defaulted {
             state.time_zone_name = Some("short".to_string());
         }
     }

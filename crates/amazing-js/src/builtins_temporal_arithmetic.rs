@@ -361,7 +361,21 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
         }
         StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime => {
             let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
-            result = std_temporal_add_calendar_cal(&data.calendar, &result, &duration, factor, reject)?;
+            // A PlainDate has no time of day: the duration's time part balances into whole days
+            // (truncating toward zero) and joins the date units in one CalendarDateAdd.
+            let mut effective = duration;
+            if data.kind == StdTemporalKind::PlainDate {
+                let time_ns = duration[4] as i128 * 3_600_000_000_000
+                    + duration[5] as i128 * 60_000_000_000
+                    + duration[6] as i128 * 1_000_000_000
+                    + duration[7] as i128 * 1_000_000
+                    + duration[8] as i128 * 1_000 + duration[9] as i128;
+                let extra = i64::try_from(time_ns / STD_TEMPORAL_NS_DAY)
+                    .map_err(|_| Throw::range_error("Temporal date outside valid range"))?;
+                effective[3] = effective[3].checked_add(extra)
+                    .ok_or_else(|| Throw::range_error("Temporal date outside valid range"))?;
+            }
+            result = std_temporal_add_calendar_cal(&data.calendar, &result, &effective, factor, reject)?;
             if data.kind == StdTemporalKind::PlainDateTime {
                 let time_delta = factor as i128 * (duration[4] as i128 * 3_600_000_000_000
                     + duration[5] as i128 * 60_000_000_000
@@ -370,16 +384,6 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
                     + duration[8] as i128 * 1_000 + duration[9] as i128);
                 let epoch_ns = std_temporal_epoch_ns(&result) + time_delta;
                 std_temporal_set_epoch_ns(&mut result, epoch_ns)?;
-            } else if data.kind == StdTemporalKind::PlainDate {
-                let time_delta = factor as i128 * (duration[4] as i128 * 3_600_000_000_000
-                    + duration[5] as i128 * 60_000_000_000
-                    + duration[6] as i128 * 1_000_000_000
-                    + duration[7] as i128 * 1_000_000
-                    + duration[8] as i128 * 1_000 + duration[9] as i128);
-                let shifted = std_temporal_epoch_ns(&result) + time_delta;
-                let day = i64::try_from(shifted.div_euclid(STD_TEMPORAL_NS_DAY))
-                    .map_err(|_| Throw::range_error("Temporal date outside valid range"))?;
-                (result[0], result[1], result[2]) = std_temporal_civil_from_epoch_day(day);
             }
         }
         StdTemporalKind::PlainMonthDay => return Err(Throw::type_error("PlainMonthDay does not support addition")),
@@ -1394,14 +1398,15 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
 }
 
 fn std_temporal_datetime_with_time(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainDateTime))?.fields;
+    let record = std_temporal_record(&this, Some(StdTemporalKind::PlainDateTime))?;
+    let mut fields = record.fields;
     let time = std_reflect_arg(&args, 0);
     if time.is_undefined() { fields[3..9].fill(0); }
     else {
         let values = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?.0;
         fields[3..9].copy_from_slice(&values[3..9]);
     }
-    std_temporal_make(i, StdTemporalKind::PlainDateTime, fields)
+    std_temporal_make_cal(i, StdTemporalKind::PlainDateTime, fields, record.calendar)
 }
 
 fn std_temporal_unit_ns(name: &str) -> Option<i128> {

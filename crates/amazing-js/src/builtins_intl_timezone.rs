@@ -37,6 +37,15 @@ fn tz_zones() -> &'static [TzZone] {
                 let offset = i32::from_be_bytes(read(4).try_into().unwrap());
                 transitions.push((epoch, offset));
             }
+            // The generator bounded zic output to 1800..2500: its first record is the offset in
+            // effect at the lower bound (the zone's earlier local mean time) and its last is an
+            // artificial return to offset 0 at the upper bound. Fold the former into the initial
+            // offset and drop the latter.
+            let mut initial_offset_seconds = initial_offset_seconds;
+            if transitions.first().is_some_and(|(at, _)| *at == -5_364_662_400) {
+                initial_offset_seconds = transitions.remove(0).1;
+            }
+            if transitions.last().is_some_and(|(at, _)| *at == 16_725_225_600) { transitions.pop(); }
             zones.push(TzZone { name, canonical, initial_offset_seconds, transitions });
         }
         zones
@@ -56,7 +65,8 @@ fn tz_supported_ids() -> Vec<&'static str> {
     // ICU's own supported set omits it too; drop it alongside Etc/GMT/Etc/UTC.
     let mut ids: Vec<_> = tz_zones().iter().filter(|zone| zone.name == zone.canonical)
         .map(|zone| zone.name.as_str())
-        .filter(|name| !["Etc/GMT", "Etc/UTC", "Etc/GMT0", "GMT0", "GMT"].contains(name)).collect();
+        .filter(|name| !["Etc/GMT", "Etc/UTC", "Etc/GMT0", "GMT0", "GMT"].contains(name))
+        .filter(|name| !TZ_PRIMARY_LINKS.iter().any(|(alias, _)| alias == name)).collect();
     if !ids.contains(&"UTC") { ids.push("UTC"); }
     ids.sort_unstable();
     ids

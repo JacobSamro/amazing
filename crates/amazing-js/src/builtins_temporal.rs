@@ -1996,9 +1996,12 @@ fn std_temporal_to_json(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> 
 
 fn std_temporal_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
-    // Duration.prototype.toLocaleString formats through Intl.DurationFormat,
-    // which is not wired here; it keeps returning the ISO string.
-    if data.kind == StdTemporalKind::Duration { return std_temporal_to_string(i, this, vec![]); }
+    // Duration.prototype.toLocaleString formats through Intl.DurationFormat.
+    if data.kind == StdTemporalKind::Duration {
+        let formatter = intl_construct_service(i, "DurationFormat", std_reflect_arg(&args, 0), std_reflect_arg(&args, 1))?;
+        let format = i.get_prop(&formatter, "format")?;
+        return i.call_value(&format, formatter, vec![this]);
+    }
     intl_temporal_to_locale_string(i, &this, &std_reflect_arg(&args, 0), &std_reflect_arg(&args, 1))
 }
 
