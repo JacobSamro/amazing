@@ -415,7 +415,8 @@ fn date_parse_iso(text: &str) -> Option<f64> {
                         }
                         minutes
                     } else {
-                        0
+                        // Date Time String Format offsets are ±HH:mm; hours alone are invalid.
+                        return None;
                     };
                     offset_minutes = Some(sign * (hours * 60 + minutes));
                 }

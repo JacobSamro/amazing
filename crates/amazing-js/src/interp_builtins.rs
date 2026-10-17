@@ -1274,6 +1274,22 @@ fn native_error_stack_setter(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
     if Rc::ptr_eq(&object.0, &i.error_proto.0) {
         return Err(Throw::type_error("cannot set \"stack\" on Error.prototype"));
     }
+    // The running setter's home object is the receiver that owns it as its own "stack"
+    // accessor: SameValue(this, home) holds even when the receiver is another realm's
+    // %Error.prototype% (the error is then created in that setter's realm).
+    if let Some(running) = i.native_stack.last().cloned() {
+        let owns = !matches!(object.borrow().exotic, Exotic::Proxy(_))
+            && object.borrow().own_prop("stack").is_some_and(|p| matches!(&p.setter, Some(JsValue::Object(setter)) if Rc::ptr_eq(&setter.0, &running.0)));
+        if owns {
+            let realm = running.borrow().realm.filter(|realm| *realm != i.host_realm);
+            return match realm {
+                Some(realm) => i.binding_with_realm(RealmHandle { agent: i.agent_id, realm }, |_| {
+                    Err(Throw::type_error("cannot set \"stack\" on Error.prototype"))
+                }),
+                None => Err(Throw::type_error("cannot set \"stack\" on Error.prototype")),
+            };
+        }
+    }
     let key = PropertyKey::from("stack");
     let existing = i.default_get_own_property(object, &key)?;
     match existing {

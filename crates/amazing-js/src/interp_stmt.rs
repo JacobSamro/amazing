@@ -2584,6 +2584,12 @@ impl Interpreter {
                 || std::ptr::fn_addr_eq(*native, std_set_constructor as crate::value::NativeFn)) {
             return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
         }
+        // RegExp reads P and F, then NewTarget.prototype, then coerces (RegExpAlloc precedes
+        // RegExpInitialize), so it owns allocation too.
+        if matches!(&fun.body, FunctionBody::Native(native)
+            if std::ptr::fn_addr_eq(*native, native_regexp as crate::value::NativeFn)) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
+        }
         // %AbstractModuleSource% always rejects construction in its own realm;
         // its algorithm never allocates or reads NewTarget.prototype.
         if matches!(&fun.body, FunctionBody::Native(native)
@@ -2600,6 +2606,14 @@ impl Interpreter {
             let result = self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target))?;
             return if result.is_object() { Ok(result) }
                 else { Err(Throw::type_error("allocating host constructor returned a non-object")) };
+        }
+        // TypedArray ( ...args ) with a non-Object first argument is the `length` form:
+        // ToIndex(length) runs before AllocateTypedArray reads NewTarget.prototype.
+        if matches!(&fun.body, FunctionBody::Native(native)
+            if std::ptr::fn_addr_eq(*native, binary_typed_ctor as crate::value::NativeFn)) {
+            if let Some(first) = args.first().filter(|v| !v.is_object() && !v.is_undefined()) {
+                binary_index(self, first)?;
+            }
         }
         let proto = match self.get_prop(&new_target, "prototype")? {
             JsValue::Object(p) => p,

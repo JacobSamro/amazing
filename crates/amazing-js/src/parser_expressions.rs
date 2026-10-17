@@ -474,6 +474,14 @@ impl Parser {
                     span,
                 );
             } else if self.at_punct(Punct::QuestionDot) {
+                // OptionalChain is never a MemberExpression: `new a?.b()`, `new a?.()`, and
+                // `super?.x` / `super?.()` are early errors.
+                if !allow_calls {
+                    return Err(self.err("optional chain is not allowed in a new expression"));
+                }
+                if matches!(&e.kind, ExprKind::Super) {
+                    return Err(self.err("super cannot be used with optional chaining"));
+                }
                 self.bump();
                 if self.at_punct(Punct::LParen) {
                     if !allow_calls {

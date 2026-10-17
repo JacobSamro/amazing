@@ -1008,7 +1008,9 @@ fn intl_locale_minimize(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> 
     let script = pieces.get(1).copied().unwrap_or("Latn");
     let region = pieces.get(2).copied().unwrap_or("US");
     let maximal_base = format!("{language}-{script}-{region}");
-    let shortened = if intl_locale_maximized_base(language) == maximal_base { language.to_string() }
+    // No likely-subtags data for the language: maximize left it alone, so minimize does too.
+    let shortened = if pieces.len() == 1 { language.to_string() }
+        else if intl_locale_maximized_base(language) == maximal_base { language.to_string() }
         else if intl_locale_maximized_base(&format!("{language}-{region}")) == maximal_base {
             format!("{language}-{region}")
         } else if intl_locale_maximized_base(&format!("{language}-{script}")) == maximal_base {

@@ -595,7 +595,11 @@ fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Resu
     // `this` carries `regexp_proto` as its prototype, which a plain
     // `RegExp(...)` call's `this` (the global object, or undefined) does
     // not.
-    let constructing = matches!(&this, JsValue::Object(o) if o.borrow().proto.as_ref().is_some_and(|p| Rc::ptr_eq(&p.0, &i.regexp_proto.0)));
+    // The constructor owns allocation (see construct_with_new_target_admitted), so
+    // `this` is not a pre-allocated instance: construction is simply a live NewTarget.
+    let _ = &this;
+    let new_target = i.current_new_target();
+    let constructing = new_target.is_some();
     if pattern_is_regexp && flag_value.is_undefined() && !constructing {
         // Step 4b: only short-circuits to the *same* pattern object when
         // its own "constructor" is exactly this realm's active %RegExp%
@@ -628,39 +632,47 @@ fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Resu
     // unread once an explicit `flags` argument is given -- never from
     // ToString-ing the whole object (which is what a plain, non-regexp-like
     // pattern gets instead).
-    let (pattern_units, flags_string) = if let Some(other) = regexp_data(&pattern) {
-        let flags_string = if flag_value.is_undefined() {
-            other.flags().as_string()
-        } else {
-            i.to_string(&flag_value)?
-        };
-        (other.pattern_utf16().to_vec(), flags_string)
+    // RegExp ( pattern, flags ) steps 4-6 read P and F; RegExpAlloc (the NewTarget.prototype
+    // Get) comes next; ToString(P) / ToString(F) happen inside RegExpInitialize afterwards.
+    enum Source { Ready(Vec<u16>, String, JsValue), Raw(JsValue, JsValue) }
+    let source = if let Some(other) = regexp_data(&pattern) {
+        Source::Ready(other.pattern_utf16().to_vec(), other.flags().as_string(), flag_value.clone())
     } else if pattern_is_regexp {
         let source = i.get_prop(&pattern, "source")?;
-        let source_units = i.to_js_string(&source)?.units().to_vec();
-        let flags_string = if flag_value.is_undefined() {
-            let flags = i.get_prop(&pattern, "flags")?;
-            i.to_string(&flags)?
-        } else {
-            i.to_string(&flag_value)?
-        };
-        (source_units, flags_string)
+        let flags = if flag_value.is_undefined() { i.get_prop(&pattern, "flags")? } else { flag_value.clone() };
+        Source::Raw(source, flags)
     } else {
-        let pattern_units = if pattern.is_undefined() {
-            Vec::new()
-        } else {
-            i.to_js_string(&pattern)?.units().to_vec()
-        };
-        let flags_string = if flag_value.is_undefined() {
-            String::new()
-        } else {
-            i.to_string(&flag_value)?
-        };
-        (pattern_units, flags_string)
+        Source::Raw(pattern.clone(), flag_value.clone())
     };
-    i.make_regexp(Rc::new(
+    let prototype = match &new_target {
+        Some(target) => match i.get_prop(target, "prototype")? {
+            JsValue::Object(prototype) => Some(prototype),
+            _ => {
+                let constructor = JsValue::Object(i.native_stack.last().cloned()
+                    .ok_or_else(|| Throw::type_error("missing RegExp constructor context"))?);
+                Some(i.constructor_fallback_prototype(&constructor, target)?)
+            }
+        },
+        None => None,
+    };
+    let (pattern_units, flags_string) = match source {
+        Source::Ready(units, original_flags, flag_value) => {
+            let flags = if flag_value.is_undefined() { original_flags } else { i.to_string(&flag_value)? };
+            (units, flags)
+        }
+        Source::Raw(pattern, flags) => {
+            let units = if pattern.is_undefined() { Vec::new() } else { i.to_js_string(&pattern)?.units().to_vec() };
+            let flags = if flags.is_undefined() { String::new() } else { i.to_string(&flags)? };
+            (units, flags)
+        }
+    };
+    let result = i.make_regexp(Rc::new(
         amazing_regex::Regex::new_utf16(&pattern_units, &flags_string).map_err(regexp_error)?,
-    ))
+    ))?;
+    if let (Some(prototype), JsValue::Object(object)) = (prototype, &result) {
+        object.borrow_mut().proto = Some(prototype);
+    }
+    Ok(result)
 }
 fn native_regexp_getter(
     i: &mut Interpreter,
