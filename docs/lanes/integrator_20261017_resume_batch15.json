@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "ticket": "resume-batches-11-15",
+ "date": "2026-10-17",
+ "note": "Batches 11-13 were pushed on 2026-10-11 without a committed record; their numbers are recorded here with batch 15.",
+ "batches": [
+  {
+   "batch": 11,
+   "published": "011c7ea0b",
+   "tickets": ["011c7ea0b net: xhr/ and fetch/ WPT through pinned wptserve; atob/btoa, Response.json, fetch Referer, isomorphic XHR header bytes"],
+   "workspace": {"nextest": {"passed": 5699, "failed": 0}},
+   "test262": {"files_pass": 53266, "variants_pass": 102307, "lost_files": 0, "lost_variants": 0, "result_sha256": "ea60ebc7cf72915426a3be37793cd86f2699fa09290b041aec9be2eabda0242c"},
+   "corpus": {"xhr_files_pass": [201, 212], "fetch_files_pass": [76, 86], "server": "pinned wptserve (new)", "accepted_subtest_changes": "7 fetch subtests that passed only because the old server could not reach the cross-origin host: cors-preflight-redirect.any.js 5, bad-gzip-body.any.js 2"}
+  },
+  {
+   "batch": 12,
+   "published": "2e68c83b9",
+   "tickets": ["2e68c83b9 text-autospace across inline boxes"],
+   "workspace": {"nextest": {"passed": 5758, "failed": 0}},
+   "test262": {"files_pass": 53266, "variants_pass": 102307, "lost_files": 0, "lost_variants": 0, "result_sha256": "bfae61069e03e6641c6c9250467553b8a7b2ccf80ae01bd461102eb47baebd1e"},
+   "render": {"baseline": "011c7ea0b", "css-text": [244, 246], "css-values": [65, 67], "unchanged": ["css-ruby", "css-fonts", "css-inline", "CSS2/normal-flow"], "lost": 0}
+  },
+  {
+   "batch": 13,
+   "published": "d813a2177",
+   "tickets": ["ccb6f36a0 js: VM coverage counting, benchmark suite, performance baseline", "d813a2177 js: fast hasher, small-object linear scan, cached short key strings"],
+   "workspace": {"nextest": {"passed": 5761, "failed": 0}},
+   "test262": {"files_pass": 53266, "variants_pass": 102307, "lost_files": 0, "lost_variants": 0, "result_sha256": "2b37d28f01a8776c5a44dd34eb6f313b4008ebc13db45f403147a29941e83096"}
+  },
+  {
+   "batch": 15,
+   "published_base": "d813a21774750085bc5648af30d2c09c2d5516f7",
+   "gated_source_commit": "db6e03bb7ee0444d34eea342b72868b2d38d7f51",
+   "tickets": [
+    "f0a0a8ab3 ElementInternals and form-associated custom elements (lane c9ac54bb2)",
+    "3b2019bfb reflected HTML IDL attributes and Document.dir (lane e9483eee9)",
+    "db6e03bb7 Temporal Duration relativeTo / ZonedDateTime DST-aware arithmetic (lane 390a42841)"
+   ],
+   "workspace": {"nextest": {"passed": 5768, "failed": 0, "skipped": 17}, "doctests": {"passed": 39, "failed": 0}},
+   "test262": {
+    "shards": 16,
+    "summary": {"files": {"pass": 53366, "fail": 212, "skipped": 294}, "variants": {"pass": 102507, "fail": 411}},
+    "gained_files": 100,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "baseline": "t262-d813a217-resume-batch13-20261011 (published d813a2177)",
+    "result_sha256": "915bb0cc243bb1baa1c404ade7d4a1378a3db9032a99182751a5f01fe1fcbb51"
+   },
+   "corpus": {
+    "wpt_dom_html_custom_elements_files_pass": [457, 505],
+    "measured_by": "lane r2-html, pinned WPT c2a2fce, 20 s deadline",
+    "accepted_subtest_changes": "subtest losses only in dom/ranges/Range-set.html and Range-mutations-dataChange.html at the 20 s deadline; 120 s control totals identical before and after"
+   }
+  }
+ ]
+}

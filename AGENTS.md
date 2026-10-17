@@ -135,6 +135,10 @@ code copied and adapted into our crates, never new crate dependencies.
   onto our own types; do not pull them in.
 - Port whole areas in bulk (a builtin, a parser section), not line-by-line snippets, and record
   the upstream commit in the lane's `docs/lanes/` decision map.
+- **Port first (2026-10-17, user-approved):** "Use boa, lumen to speed up the work; once we get a
+  working Chrome, we can tweak it." Before writing a JS area yourself, check lumen (std-only,
+  easiest to adapt) and boa for an implementation and port it; tune or redesign later. Reference
+  checkouts: `../amazing-ref/{boa,lumen}`.
 
 Suggested sources per lane (verify the license at the commit you port from):
 
