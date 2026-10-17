@@ -326,3 +326,103 @@ class TextDecoderStream {
     return ReflectApply(tsWritableGet, slotOf(tdsBrand, this, 'TextDecoderStream').transform, []);
   }
 }
+
+// ---- CompressionStream / DecompressionStream ----------------------------------------
+const compressionFormats = ['gzip', 'deflate', 'deflate-raw', 'brotli'];
+const csBrand = makeBrand('csBrand');
+const dsBrand = makeBrand('dsBrand');
+function convertFormat(format) {
+  const value = '' + format;
+  if (compressionFormats.indexOf(value) < 0) throw new TypeErrorCtor("Unsupported compression format: '" + value + "'");
+  return value;
+}
+// BufferSource that is not backed by a SharedArrayBuffer.
+function chunkBytes(chunk) {
+  let buffer;
+  let offset = 0;
+  let length;
+  if (ReflectApply(ArrayBufferIsView, ArrayBufferCtor, [chunk])) {
+    buffer = viewBuffer(chunk);
+    offset = viewByteOffset(chunk);
+    length = viewByteLength(chunk);
+  } else {
+    try {
+      length = bufferByteLength(chunk);
+    } catch (e) {
+      throw new TypeErrorCtor('Chunk must be an ArrayBuffer or ArrayBufferView');
+    }
+    buffer = chunk;
+  }
+  let view;
+  try {
+    view = new Uint8ArrayCtor(buffer, offset, length);
+  } catch (e) {
+    throw new TypeErrorCtor('Chunk must be a non-shared BufferSource');
+  }
+  const copy = new Uint8ArrayCtor(length);
+  copy.set(view);
+  return copy;
+}
+class CompressionStream {
+  constructor(format) {
+    if (arguments.length < 1) throw new TypeErrorCtor('CompressionStream requires a format');
+    const fmt = convertFormat(format);
+    const chunks = [];
+    let total = 0;
+    const transform = new TransformStream({
+      transform(chunk) {
+        const bytes = chunkBytes(chunk);
+        ReflectApply(ArrayPush, chunks, [bytes]);
+        total += bytes.byteLength;
+      },
+      flush(controller) {
+        const out = native.compress(fmt, concatChunks(chunks, total));
+        if (out.byteLength > 0) controller.enqueue(out);
+      },
+    });
+    setSlot(csBrand, this, transform);
+  }
+  get readable() {
+    return ReflectApply(tsReadableGet, slotOf(csBrand, this, 'CompressionStream'), []);
+  }
+  get writable() {
+    return ReflectApply(tsWritableGet, slotOf(csBrand, this, 'CompressionStream'), []);
+  }
+}
+class DecompressionStream {
+  constructor(format) {
+    if (arguments.length < 1) throw new TypeErrorCtor('DecompressionStream requires a format');
+    const fmt = convertFormat(format);
+    const chunks = [];
+    let total = 0;
+    let finished = false;
+    const transform = new TransformStream({
+      transform(chunk, controller) {
+        const bytes = chunkBytes(chunk);
+        if (finished) {
+          if (bytes.byteLength > 0) throw new TypeErrorCtor('Unexpected data after the end of the compressed stream');
+          return;
+        }
+        ReflectApply(ArrayPush, chunks, [bytes]);
+        total += bytes.byteLength;
+        if (total === 0) return;
+        const result = native.decompress(fmt, concatChunks(chunks, total));
+        if (result !== null) {
+          finished = true;
+          if (result[0].byteLength > 0) controller.enqueue(result[0]);
+          if (result[1] < total) throw new TypeErrorCtor('Unexpected data after the end of the compressed stream');
+        }
+      },
+      flush() {
+        if (!finished) throw new TypeErrorCtor('Unexpected end of the compressed stream');
+      },
+    });
+    setSlot(dsBrand, this, transform);
+  }
+  get readable() {
+    return ReflectApply(tsReadableGet, slotOf(dsBrand, this, 'DecompressionStream'), []);
+  }
+  get writable() {
+    return ReflectApply(tsWritableGet, slotOf(dsBrand, this, 'DecompressionStream'), []);
+  }
+}

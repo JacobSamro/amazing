@@ -29,6 +29,7 @@ function installClass(klass, name, withTag) {
     ['WritableStreamDefaultController', WritableStreamDefaultController],
     ['ByteLengthQueuingStrategy', ByteLengthQueuingStrategy], ['CountQueuingStrategy', CountQueuingStrategy],
     ['TextEncoderStream', TextEncoderStream], ['TextDecoderStream', TextDecoderStream],
+    ['CompressionStream', CompressionStream], ['DecompressionStream', DecompressionStream],
   ];
   const proto = ReadableStream.prototype;
   ObjectDefineProperty(proto, SymbolAsyncIterator, { value: proto.values, writable: true, enumerable: false, configurable: true });
@@ -127,8 +128,10 @@ const hooks = {
       attachBodyStream(object, initBody, true);
     } else if ((initBody === undefined || initBody === null) && isObject(input)) {
       const entry = bodyEntry(input);
+      if (entry !== undefined && (isReadableStreamLocked(entry.stream) || entry.stream.disturbed)) {
+        throw new TypeErrorCtor('Request body stream is locked or disturbed');
+      }
       if (entry !== undefined && entry.user) {
-        if (isReadableStreamLocked(entry.stream) || entry.stream.disturbed) throw new TypeErrorCtor('Request body stream is locked or disturbed');
         const proxy = new TransformStream();
         markHandled(readableStreamPipeTo(entry.stream, slotOf(wsBrand, proxy.writable), false, false, false, undefined));
         attachBodyStream(object, proxy.readable, true);
@@ -164,6 +167,39 @@ const hooks = {
       const init = mime ? { headers: { 'content-type': mime } } : {};
       const response = new ResponseCtor(bytes, init);
       return response[method]();
+    });
+  },
+  upload(input, init) {
+    const RequestCtor = globalObject.Request;
+    let stream;
+    let fromInit = false;
+    const initBody = isObject(init) ? init.body : undefined;
+    if (hasSlot(rsBrand, initBody)) {
+      if (init.duplex !== 'half') return rejectedPromise(new TypeErrorCtor('RequestInit: duplex option is required when sending a body'));
+      stream = readableStreamState(initBody);
+      fromInit = true;
+    } else if ((initBody === undefined || initBody === null) && isObject(input) && typeof RequestCtor === 'function') {
+      const entry = bodyEntry(input);
+      if (entry === undefined || !entry.user) return undefined;
+      stream = entry.stream;
+    } else {
+      return undefined;
+    }
+    if (isReadableStreamLocked(stream) || stream.disturbed) {
+      return rejectedPromise(new TypeErrorCtor('Request body stream is locked or disturbed'));
+    }
+    return transformPromise(readAllBytes(stream), (bytes) => {
+      let request;
+      if (fromInit) {
+        const copy = {};
+        for (const key of ObjectGetOwnPropertyNames(init)) copy[key] = init[key];
+        copy.body = bytes;
+        delete copy.duplex;
+        request = new RequestCtor(input, copy);
+      } else {
+        request = new RequestCtor(input, { body: bytes });
+      }
+      return native.fetchRaw(request);
     });
   },
   cloneCheck(object) {

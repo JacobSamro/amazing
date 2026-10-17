@@ -55,6 +55,7 @@
 //! - IDNA/punycode: Unicode special hosts fail via the deferred provider seam
 
 mod coding;
+pub use coding::{compress_format, decompress_format, decompress_prefix};
 pub mod dispatch;
 pub mod fetch;
 pub mod headers;

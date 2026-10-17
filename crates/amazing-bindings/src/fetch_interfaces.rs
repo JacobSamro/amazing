@@ -1017,6 +1017,11 @@ pub fn invoke<H: FetchHost>(
             if let Some(promise) = host.fetch_local_file(args)? {
                 return Ok(promise);
             }
+            if let Some(upload) = host.fetch_stream_hook("upload", &[
+                args.first().cloned().unwrap_or_else(|| host.undefined()),
+                args.get(1).cloned().unwrap_or_else(|| host.undefined())])? {
+                if !host.is_undefined(&upload) { return Ok(upload); }
+            }
             let (request, signal) = match request(host, args) {
                 Ok(request) => request, Err(error) => return host.fetch_reject_throw(error),
             };

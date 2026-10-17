@@ -126,7 +126,7 @@ def inventory(root, suite='dom', served=False):
             excluded.append({'test': name, 'reason': 'no external testharness script (e.g. crash/reference/support)'})
             continue
         reason = None
-        any_window = bool(name.endswith('.any.js') and suite in ('url', 'xhr', 'fetch', 'FileAPI', 'streams'))
+        any_window = bool(name.endswith('.any.js') and suite in ('url', 'xhr', 'fetch', 'FileAPI', 'streams', 'compression'))
         if generated and not any_window:
             reason = 'generated JavaScript test globals/worker wrappers are unsupported'
         elif any_window and re.search(rb'^//\s*META:\s*global=(.*)$', data, re.M) and not re.search(rb'^//\s*META:\s*global=.*\bwindow\b', data, re.M):
@@ -271,7 +271,7 @@ def main():
     ap.add_argument('--wpt-root', type=Path, required=True)
     ap.add_argument('--output', type=Path, required=True)
     ap.add_argument('--proof-only', action='store_true')
-    ap.add_argument('--suite', choices=('dom', 'url', 'xhr', 'fetch', 'FileAPI', 'streams'), default='dom')
+    ap.add_argument('--suite', choices=('dom', 'url', 'xhr', 'fetch', 'FileAPI', 'streams', 'compression'), default='dom')
     ap.add_argument('--jobs', type=int, default=3)
     ap.add_argument('--only', default='', help='comma-separated exact test paths (exploratory runs only)')
     ap.add_argument('--rounds', type=int, choices=(1, 2), default=2,

@@ -1,6 +1,7 @@
 //! Bounded RFC 1950/1951/1952 decoding. No dictionaries, raw-deflate HTTP
 //! fallback. Brotli crosses the isolated approved adapter. Each coding layer
 //! has the caller's output ceiling.
+mod deflate;
 mod inflate;
 pub(crate) mod stream;
 use crate::NetError;
@@ -23,6 +24,13 @@ pub(crate) fn decode(input: &[u8], coding: &str, limit: usize) -> Result<Vec<u8>
     }
 }
 
+fn gzip(input: &[u8], limit: usize) -> Result<Vec<u8>, NetError> {
+    gzip_with(input, limit, false).map(|(bytes, _)| bytes)
+}
+fn zlib(input: &[u8], limit: usize) -> Result<Vec<u8>, NetError> {
+    zlib_with(input, limit, false).map(|(bytes, _)| bytes)
+}
+
 fn take<'a>(input: &'a [u8], pos: &mut usize, count: usize) -> Result<&'a [u8], NetError> {
     let end = pos
         .checked_add(count)
@@ -35,7 +43,7 @@ fn le32(bytes: &[u8]) -> u32 {
     u32::from_le_bytes(bytes.try_into().expect("four bytes"))
 }
 
-fn gzip(input: &[u8], limit: usize) -> Result<Vec<u8>, NetError> {
+fn gzip_with(input: &[u8], limit: usize, allow_trailing: bool) -> Result<(Vec<u8>, usize), NetError> {
     let mut pos = 0;
     let mut out = Output::new(limit);
     // RFC 1952 members concatenate, but dictionaries never cross members.
@@ -77,14 +85,14 @@ fn gzip(input: &[u8], limit: usize) -> Result<Vec<u8>, NetError> {
         if member.len() as u32 != le32(&trailer[4..]) {
             return Err(invalid("gzip ISIZE mismatch"));
         }
-        if pos == input.len() {
-            return Ok(out.bytes);
+        if pos == input.len() || (allow_trailing && !input[pos..].starts_with(&[0x1f, 0x8b])) {
+            return Ok((out.bytes, pos));
         }
         // Trailing garbage is not a gzip member and fails on its header.
     }
 }
 
-fn zlib(input: &[u8], limit: usize) -> Result<Vec<u8>, NetError> {
+fn zlib_with(input: &[u8], limit: usize, allow_trailing: bool) -> Result<(Vec<u8>, usize), NetError> {
     let mut pos = 0;
     let head = take(input, &mut pos, 2)?;
     if head[0] & 15 != 8 || head[0] >> 4 > 7 || u16::from_be_bytes([head[0], head[1]]) % 31 != 0 {
@@ -100,10 +108,10 @@ fn zlib(input: &[u8], limit: usize) -> Result<Vec<u8>, NetError> {
     if adler32(&out.bytes) != expected {
         return Err(invalid("zlib Adler32 mismatch"));
     }
-    if pos != input.len() {
+    if pos != input.len() && !allow_trailing {
         return Err(invalid("trailing zlib data"));
     }
-    Ok(out.bytes)
+    Ok((out.bytes, pos))
 }
 
 fn crc32(bytes: &[u8]) -> u32 {
@@ -145,3 +153,80 @@ fn adler32(bytes: &[u8]) -> u32 {
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+/// `CompressionStream` formats: "gzip", "deflate" (zlib) and "deflate-raw".
+pub fn compress_format(input: &[u8], format: &str) -> Option<Vec<u8>> {
+    let raw = deflate::deflate_raw(input);
+    match format {
+        "deflate-raw" => Some(raw),
+        "deflate" => {
+            let mut out = vec![0x78, 0x01];
+            out.extend_from_slice(&raw);
+            out.extend_from_slice(&adler32(input).to_be_bytes());
+            Some(out)
+        }
+        "gzip" => {
+            let mut out = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255];
+            out.extend_from_slice(&raw);
+            out.extend_from_slice(&crc32(input).to_le_bytes());
+            out.extend_from_slice(&(input.len() as u32).to_le_bytes());
+            Some(out)
+        }
+        "brotli" => Some(deflate::brotli_uncompressed(input)),
+        _ => None,
+    }
+}
+
+/// `DecompressionStream` formats. Returns the decoded bytes and how many input
+/// bytes the compressed stream occupied; anything after that is trailing data.
+pub fn decompress_prefix(input: &[u8], format: &str, limit: usize) -> Result<(Vec<u8>, usize), NetError> {
+    match format {
+        "gzip" => gzip_with(input, limit, true),
+        "deflate" => zlib_with(input, limit, true),
+        "deflate-raw" => {
+            let mut out = Output::new(limit);
+            let used = inflate(input, &mut out, 32768)?;
+            Ok((out.bytes, used))
+        }
+        "brotli" => amazing_net_brotli::decode(input, limit)
+            .map(|bytes| (bytes, input.len()))
+            .map_err(|error| match error {
+                amazing_net_brotli::DecodeError::OutputLimit => NetError::ResponseTooLarge,
+                amazing_net_brotli::DecodeError::Truncated => NetError::IncompleteBody,
+                _ => invalid(&error.to_string()),
+            }),
+        _ => Err(invalid("unsupported format")),
+    }
+}
+
+/// Whole-input variant: any trailing data is an error.
+pub fn decompress_format(input: &[u8], format: &str, limit: usize) -> Result<Vec<u8>, NetError> {
+    let (bytes, used) = decompress_prefix(input, format, limit)?;
+    if used != input.len() {
+        return Err(invalid("trailing data"));
+    }
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod compression_stream_tests {
+    use super::*;
+
+    #[test]
+    fn compress_then_decompress_round_trips_every_format() {
+        let mut data = Vec::new();
+        for i in 0..20000u32 {
+            data.extend_from_slice(format!("line {} of the corpus {}\n", i % 97, i % 13).as_bytes());
+        }
+        for input in [&b""[..], &b"a"[..], &b"hello hello hello hello"[..], &data[..]] {
+            for format in ["gzip", "deflate", "deflate-raw", "brotli"] {
+                let packed = compress_format(input, format).unwrap();
+                assert_eq!(decompress_format(&packed, format, 1 << 26).unwrap(), input, "{format}");
+                if packed.len() > 4 {
+                    assert!(decompress_format(&packed[..packed.len() - 1], format, 1 << 26).is_err());
+                }
+            }
+        }
+        assert!(compress_format(&data, "gzip").unwrap().len() < data.len() / 3);
+    }
+}
