@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "ticket": "resume-batch17",
+ "date": "2026-10-17",
+ "published_base": "65d26cc94104cb2a54490af87f9a8ff1e553caa5",
+ "gated_source_commit": "e9d07d8992b9a50067fcf00eb9014d29993e1fb1",
+ "tickets": [
+  "6e38e4580 Temporal PlainMonthDay reference dates for every calendar, era/eraYear pairing (lane 40a5e1d11)",
+  "7b751ff54 blob URL store, blob: fetch/XHR with Range, Blob/File completeness, FileAPI WPT suite (lane 52b47f5bd)",
+  "9a90f6637 ProgressEvent as a real Event; XHR, XHR upload, FileReader as DOM EventTargets; FileReader (lane 7ea6a025d)",
+  "e9d07d899 WHATWG Streams; Request/Response bodies as ReadableStream (lane 78c284fe6; measure-wpt-dom.py suite-list conflict resolved as a union)"
+ ],
+ "workspace": {"nextest": {"passed": 5774, "failed": 0, "skipped": 17}, "doctests": {"passed": 39, "failed": 0}},
+ "test262": {
+  "shards": 16,
+  "boxes": 4,
+  "summary": {"files": {"pass": 53415, "fail": 163, "skipped": 294}, "variants": {"pass": 102605, "fail": 313}},
+  "gained_files": 49,
+  "lost_files": 0,
+  "lost_variants": 0,
+  "baseline": "t262-db6e03bb-resume-batch15 (published 65d26cc94)",
+  "result_sha256": "2aa8400c94953550ecd39c9f89e9247b1e235297a9d60f9ae1cb0c1b4944f632",
+  "note": "An earlier run of 40a5e1d11 alone on 2 boxes (8 shards per box) timed out staging/sm/regress/regress-1507322-deep-weakmap.js; it passes alone on 65d26cc94 three times and passes in this 4-box run."
+ },
+ "corpus": {
+  "merged_head_wpt_round1": {
+   "streams": {"files_pass": 59, "subtests_pass": 1158, "raw_sha256": "c5002b41ed146e889b5858993385a48f6611242213d6f0592028b0a07ae73d1e"},
+   "FileAPI": {"files_pass": 27, "subtests_pass": 515, "raw_sha256": "54fbcbcc842f4893a229430e1f760c10f163fb69b9a975ba457cd8a4b4657c67"},
+   "xhr": {"files_pass": 222, "subtests_pass": 1096, "raw_sha256": "bc7b8d4297e9817a04c90d4a086f0341e4153542a994f523ef3731658f6aa357"},
+   "fetch": {"files_pass": 106, "subtests_pass": 2369, "raw_sha256": "fccdfe054fd2f15448a65dd0861ef9c819f88347357ee0ceea126b24fb9d2809"}
+  },
+  "lane_before_after": {
+   "streams": {"files": [0, 59], "subtests": [22, 1158]},
+   "FileAPI": {"files": [5, 27], "subtests": [277, 515]},
+   "xhr": {"files": [212, 222], "subtests": [1043, 1086]},
+   "fetch": {"files": [86, 106], "subtests": [2181, 2331]},
+   "lost": 0
+  }
+ }
+}
