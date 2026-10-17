@@ -40,20 +40,17 @@ fn intl_state(object: &Obj) -> Option<IntlState> {
 }
 
 thread_local! {
-    static INTL_FALLBACK_SYMBOL: RefCell<Option<JsSymbol>> = RefCell::new(None);
+    static INTL_FALLBACK_SYMBOLS: RefCell<std::collections::HashMap<u64, JsSymbol>> = RefCell::new(std::collections::HashMap::new());
 }
 
 // %Intl%.[[FallbackSymbol]]: a Symbol with description "IntlLegacyConstructedSymbol",
-// created once per realm and shared by ChainDateTimeFormat/ChainNumberFormat below.
-// One process runs one JS realm in this host, so a thread-local stands in for "per
-// realm"; a genuine $262.createRealm() still won't hand back a second distinct one.
-fn intl_fallback_symbol() -> JsSymbol {
-    INTL_FALLBACK_SYMBOL.with(|cell| {
-        let mut slot = cell.borrow_mut();
-        if slot.is_none() {
-            slot.replace(JsSymbol::new(Some(crate::value::JsString::from("IntlLegacyConstructedSymbol"))));
-        }
-        slot.clone().unwrap()
+// created once per realm (keyed by the active host realm) and shared by
+// ChainDateTimeFormat/ChainNumberFormat below.
+fn intl_fallback_symbol(i: &Interpreter) -> JsSymbol {
+    INTL_FALLBACK_SYMBOLS.with(|cell| {
+        cell.borrow_mut().entry(i.host_realm)
+            .or_insert_with(|| JsSymbol::new(Some(crate::value::JsString::from("IntlLegacyConstructedSymbol"))))
+            .clone()
     })
 }
 
@@ -102,7 +99,7 @@ fn intl_chain_construct(i: &mut Interpreter, this: JsValue, ctor_key: &str, stat
     intl_register(&internal, state);
     if i.ordinary_has_instance(&this, &constructor)?.to_boolean() {
         if let JsValue::Object(receiver) = &this {
-            let _ = receiver.borrow_mut().define(intl_fallback_symbol(),
+            let _ = receiver.borrow_mut().define(intl_fallback_symbol(i),
                 binary_locked_property(JsValue::Object(internal)));
             return Ok(this);
         }
@@ -123,7 +120,7 @@ fn intl_unwrap_state(i: &mut Interpreter, object: &Obj, ctor_key: &str) -> Resul
     let constructor = i.get_prop(&intl, ctor_key)?;
     let this = JsValue::Object(object.clone());
     if !i.ordinary_has_instance(&this, &constructor)?.to_boolean() { return Ok(None); }
-    match i.get_prop(&this, intl_fallback_symbol())? {
+    match i.get_prop(&this, intl_fallback_symbol(i))? {
         JsValue::Object(inner) => Ok(intl_state(&inner)),
         _ => Ok(None),
     }

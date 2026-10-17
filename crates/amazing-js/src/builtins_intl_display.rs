@@ -49,6 +49,31 @@ fn intl_display_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
     Ok(JsValue::Object(object))
 }
 
+/// unicode_language_id = language ["-" script] ["-" region] *("-" variant); unlike a full
+/// BCP 47 tag it admits no extension or private-use singletons.
+fn intl_is_unicode_language_id(value: &str) -> bool {
+    if !value.is_ascii() { return false; }
+    let parts: Vec<&str> = value.split('-').collect();
+    let alpha = |part: &str| part.bytes().all(|b| b.is_ascii_alphabetic());
+    let digit = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    let alnum = |part: &str| part.bytes().all(|b| b.is_ascii_alphanumeric());
+    let language = parts[0];
+    if !(((2..=3).contains(&language.len()) || (5..=8).contains(&language.len())) && alpha(language)) { return false; }
+    let mut at = 1;
+    if parts.get(at).is_some_and(|part| part.len() == 4 && alpha(part)) { at += 1; }
+    if parts.get(at).is_some_and(|part| (part.len() == 2 && alpha(part)) || (part.len() == 3 && digit(part))) { at += 1; }
+    let variants = &parts[at..];
+    let mut seen: Vec<String> = Vec::new();
+    for part in variants {
+        let valid = ((5..=8).contains(&part.len()) && alnum(part))
+            || (part.len() == 4 && part.as_bytes()[0].is_ascii_digit() && alnum(part));
+        let lower = part.to_ascii_lowercase();
+        if !valid || seen.contains(&lower) { return false; }
+        seen.push(lower);
+    }
+    true
+}
+
 fn intl_display_state(this: &JsValue) -> Result<IntlDisplayState, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("incompatible DisplayNames receiver")); };
     match intl_state(object) {
@@ -61,7 +86,7 @@ fn intl_display_of(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
     let state = intl_display_state(&this)?;
     let value = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let code = match state.kind.as_str() {
-        "language" => intl_canonical_tag(&value)?,
+        "language" if intl_is_unicode_language_id(&value) => intl_canonical_tag(&value)?,
         "region" if (value.len() == 2 && value.bytes().all(|b| b.is_ascii_alphabetic()))
             || (value.len() == 3 && value.bytes().all(|b| b.is_ascii_digit())) => value.to_ascii_uppercase(),
         "script" if value.len() == 4 && value.bytes().all(|b| b.is_ascii_alphabetic()) => intl_title(&value),

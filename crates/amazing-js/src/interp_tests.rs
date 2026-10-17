@@ -1352,7 +1352,7 @@ mod tests {
             "Function.prototype.call.toString()==='function call() { [native code] }' && Function.prototype.apply.toString()==='function apply() { [native code] }' && Function.prototype.bind.toString()==='function bind() { [native code] }'",
             "Function.prototype.hasOwnProperty('call') && Function.prototype.hasOwnProperty('apply') && Function.prototype.hasOwnProperty('bind') && Function.prototype.call.length===1 && Function.prototype.apply.length===2 && Function.prototype.bind.length===1",
             "typeof Function.prototype==='function' && Function.prototype()===undefined && Function.prototype.length===0 && !('prototype' in Function.prototype)",
-            "function testCase(){}; testCase.call.toString()==='function call() { [native code] }' && testCase.bind(null).toString()==='function bound() { [native code] }'",
+            "function testCase(){}; testCase.call.toString()==='function call() { [native code] }' && testCase.bind(null).toString()==='function () { [native code] }'",
             "function F(a,b){this.sum=a+b}; var B=F.bind(null,2); var x=new B(3); x.sum===5 && B.name==='bound F' && B.length===1 && !('prototype' in B)",
             "function f(a,b){return a+b}; f.apply(null,{0:2,1:3,length:2})===5",
             "function f(){}; var p={}; Object.setPrototypeOf(f,p); Object.getPrototypeOf(Function.prototype.bind.call(f,null))===p",

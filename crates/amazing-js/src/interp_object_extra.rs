@@ -759,7 +759,9 @@ fn native_function_to_string(
     // branch when no retained source is available and this fallback.
     // Render it as the anonymous form instead, exactly like a nameless
     // function already does.
-    let name = if function.name.starts_with('#') { "" } else { function.name.as_str() };
+    // Bound function exotic objects have no name slot in their NativeFunction form.
+    let is_bound = matches!(function.body, FunctionBody::Native(f) if f as usize == native_bound as crate::value::NativeFn as usize);
+    let name = if function.name.starts_with('#') || is_bound { "" } else { function.name.as_str() };
     // NativeFunctionAccessor and PropertyName are separate grammar slots
     // (`function NativeFunctionAccessor? PropertyName? (...) {...}`), and
     // harness/nativeFunctionMatcher.js's PropertyName handling only accepts
