@@ -4,6 +4,31 @@ A from-scratch web browser engine in pure Rust — **zero third-party crates**
 in every engine core component. Not a wrapper, not a fork, not a Chromium/
 Servo/Ladybird embed.
 
+## What's built so far
+
+Measured on `dev` (`c103cdcef`, 2026-10-18): 34 crates, about 540,000 lines of Rust, 3,173 commits
+since 2026-08-21. Every number below comes from a gated Linux run on Boat; none are estimates.
+
+| Area | What works | Measured |
+|------|-----------|----------|
+| JavaScript language | Parser, bytecode VM (default for top-level code; tree-walking interpreter as fallback), modules, generators, async, classes, Proxy, Annex B | **Test262 53,561 / 53,578 files (99.97%)**, 102,891 variants; 17 files fail |
+| JavaScript built-ins | Full ES library incl. Temporal (all calendars), Intl (CLDR dates ported from lumen, time zones, plural rules, collation), Atomics, TypedArrays, iterator helpers | included in the Test262 count above |
+| JavaScript speed | Interned property keys, fast hashing, small-object linear scan, leaner calls | 12-program benchmark: about 1.5× faster at top level, 2× in functions since 2026-10-11 (it was 11–63× slower than `node --jitless` before that; not re-measured against Node since) |
+| DOM | Nodes, Range, events, MutationObserver, custom elements incl. ElementInternals and form association, reflected attributes, `:state()` / `:defined` | WPT `dom/` suite 288 files; `dom/` + `html/dom/` + `custom-elements/` 510 of 1,001 files |
+| HTML | WHATWG tokenizer and tree construction, encodings | html5lib/WPT tree subset 243 / 243 |
+| CSS and layout | Cascade, selectors, block/inline, floats, tables, flexbox, grid incl. Grid Lanes dense packing, text-autospace, CJK fallback | WPT render: css-grid 487, css-flexbox 350, css-sizing 100, css-text 246 passing reftests |
+| Networking | HTTP/1.1, HTTP/2 client, TLS, cookies, CORS, HTTP cache with revalidation and cache modes, XHR | WPT `fetch/` 114 files (2,464 subtests), `xhr/` 222 files |
+| Web APIs | Fetch, Streams (readable/writable/transform, byte streams), compression streams, `blob:` URLs, File/FileReader, ProgressEvent, WebSocket | WPT `streams/` 59, `FileAPI/` 27, `compression/` 13 files |
+| WebAssembly | Wasm 2.0 core engine (own crate); JS API, SIMD and exception handling are in review | pinned Wasm spec testsuite passes in full |
+| Paint and compositor | Software rasterizer, tiled compositor, retained frames | render corpora above; frame-time report in `amazing-compositor` tests |
+| Media and WebRTC | Images, PCM/Opus audio, VP8/H.264 video, ICE/TURN, DTLS-SRTP, live Chromium interop | Phase 9 artifacts and screenshots below |
+| Browser shell | GPUI window with tabs, tab groups, address bar, back/forward/reload, bookmarks bar, find-in-page, downloads panel, session history | runs on Windows and Linux; no macOS build yet |
+| Workspace tests | Unit and integration tests across all crates | 5,804 nextest tests + 39 doctests, 0 failing |
+
+Not built yet: incremental style/layout invalidation, GPU raster, the multi-process model and
+sandboxing, a macOS port, DevTools, extensions, Web Workers, IndexedDB, and a cycle-collecting
+garbage collector (designed in `docs/lanes/js-gc-design.md`, first step in review).
+
 ## Why "Amazing"?
 
 The name is a nod to [Andreas Kling's tweet](https://x.com/awesomekling/status/2090508736380936288)
@@ -25,8 +50,8 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
   Everything is hand-written against the relevant specs:
   - WHATWG HTML Standard (tokenizer §13.2.5, tree construction §13.2.6)
   - CSS Syntax Module Level 3
-  - ECMA-262 (tree-walking interpreter, no JIT)
-  - HTTP/1.1 over plain `std::net::TcpStream`
+  - ECMA-262 (bytecode VM with a tree-walking fallback, no JIT)
+  - HTTP/1.1 and HTTP/2 over `std::net::TcpStream`, TLS through the isolated adapter
 - First-party `unsafe` only at platform boundaries (Phase 8+), isolated and
   justified per-block. The documented vetted TLS exception may contain
   dependency-internal unsafe; its first-party adapter forbids unsafe.
